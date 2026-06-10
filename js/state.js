@@ -2,6 +2,12 @@ import {
   buildings,
   callsigns,
   characterClasses,
+  contractBriefFragments,
+  contractHiddenTwists,
+  contractIntelFields,
+  contractIntelPool,
+  contractIssuers,
+  contractTypes,
   creeds,
   equipmentSlots,
   fears,
@@ -9,6 +15,7 @@ import {
   lastWords,
   missionTemplates,
   names,
+  otherContractIssuers,
   origins,
   personalities,
   sampleItems,
@@ -158,12 +165,28 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
 }
 
 function createInitialMission() {
-  const template = randomItem(missionTemplates);
+  const type = randomItem(contractTypes);
+  const issuer = randomIssuer();
+  const difficulty = randomNumber(2, 5);
+  const duration = randomNumber(1, 3 + Math.floor(difficulty / 2));
   return {
     id: createId(),
-    ...template,
-    tags: [...template.tags],
-    remaining: template.duration,
+    name: `${type.name}契约：${randomContractSubject(type)}`,
+    issuer,
+    type: type.name,
+    typeCode: type.code,
+    acquisition: "广撒网",
+    difficulty,
+    duration,
+    reward: { gold: 35 + difficulty * randomNumber(16, 24), reputation: Math.max(5, difficulty * 3 + randomNumber(0, 5)) },
+    description: `${randomItem(type.verbs)}目标。${randomItem(contractBriefFragments)}`,
+    intel: createContractIntel(),
+    revealedIntel: [],
+    hidden: { twist: randomItem(contractHiddenTwists) },
+    tags: [...new Set(type.tags)],
+    refreshCost: 12 + difficulty * 4,
+    investigateCost: 14 + difficulty * 5,
+    remaining: duration,
     assigned: [],
     status: "available",
   };
@@ -190,6 +213,7 @@ function normalizeCharacterState(character) {
 }
 
 function normalizeMissionState(mission) {
+  upgradeMissionToContract(mission);
   mission.remaining ??= mission.duration;
   mission.assigned ??= [];
   mission.status ??= "available";
@@ -231,4 +255,50 @@ function calculateRank(character) {
 
 function addVariance(stats) {
   return Object.fromEntries(Object.entries(stats).map(([key, value]) => [key, Math.max(1, value + randomNumber(-1, 1))]));
+}
+
+function randomIssuer() {
+  if (randomNumber(1, 100) <= 35) return randomItem(contractIssuers);
+  return randomItem(otherContractIssuers);
+}
+
+function randomContractSubject(type) {
+  const subjects = {
+    护送: ["补给车队", "边境医师", "失联证人", "净水芯片"],
+    运输: ["封存货箱", "机兵零件", "加密药剂", "旧联邦账册"],
+    侦察: ["坠落带", "敌方前哨", "异常信号", "空港残骸"],
+    搜索: ["失踪信使", "地下档案", "污染源头", "遗迹入口"],
+    回收: ["黑匣子", "样本罐", "无人机残骸", "债务芯片"],
+    歼灭: ["异源兽巢", "劫掠队", "叛逃安保组", "失控机兵"],
+    突袭: ["走私仓库", "临时据点", "火控节点", "黑市拍卖场"],
+    破坏: ["中继塔", "采矿钻机", "追踪网络", "军火流水线"],
+    营救: ["被困工程师", "欠债线人", "伤员小队", "劫持目标"],
+    防御: ["边境诊所", "补给站", "临时营地", "净水设施"],
+    占领: ["转运站", "通讯楼", "矿区闸门", "列车站台"],
+    特殊: ["无名委托", "未知信号", "旧神经接口", "异常遗物"],
+  };
+  return randomItem(subjects[type.name] ?? ["未分类目标"]);
+}
+
+function createContractIntel() {
+  return Object.fromEntries(contractIntelFields.map((field) => [field.key, randomItem(contractIntelPool[field.key])]));
+}
+
+function upgradeMissionToContract(mission) {
+  if (mission.issuer && mission.type && mission.intel && mission.hidden) return mission;
+
+  const fallbackTemplate = missionTemplates.find((template) => template.name === mission.name) ?? randomItem(missionTemplates);
+  const fallbackTags = mission.tags ?? fallbackTemplate.tags;
+  const fallbackType = contractTypes.find((type) => type.tags.some((tag) => fallbackTags.includes(tag))) ?? randomItem(contractTypes);
+  mission.issuer ??= randomIssuer();
+  mission.type ??= fallbackType.name;
+  mission.typeCode ??= fallbackType.code;
+  mission.acquisition ??= "旧合同转录";
+  mission.description ??= `${randomItem(fallbackType.verbs)}目标。${randomItem(contractBriefFragments)}`;
+  mission.intel ??= createContractIntel();
+  mission.revealedIntel ??= [];
+  mission.hidden ??= { twist: randomItem(contractHiddenTwists) };
+  mission.refreshCost ??= 12 + (mission.difficulty ?? fallbackTemplate.difficulty ?? 2) * 4;
+  mission.investigateCost ??= 14 + (mission.difficulty ?? fallbackTemplate.difficulty ?? 2) * 5 + mission.revealedIntel.length * 6;
+  return mission;
 }

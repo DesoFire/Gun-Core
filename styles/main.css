@@ -233,6 +233,11 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
+.contract-toolbar {
+  margin: -4px 0 12px;
+  max-width: 760px;
+}
+
 .placeholder-grid {
   display: grid;
   gap: 10px;
@@ -293,6 +298,72 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
+}
+
+.contract-card {
+  display: grid;
+  gap: 10px;
+}
+
+.contract-brief {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.contract-public {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.contract-public span {
+  background: #171a1f;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  min-width: 0;
+  padding: 7px 8px;
+  text-align: center;
+}
+
+.intel-list {
+  display: grid;
+  gap: 6px;
+}
+
+.intel-row {
+  align-items: center;
+  background: #171a1f;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 82px minmax(0, 1fr);
+  min-height: 34px;
+  padding: 7px 8px;
+}
+
+.intel-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.intel-row strong {
+  color: #777d87;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.intel-row.revealed {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.intel-row.revealed strong {
+  color: var(--text);
 }
 
 .card.selected {

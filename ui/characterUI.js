@@ -190,14 +190,15 @@ function renderActiveSheetTab(character) {
 }
 
 function renderAttributesTab(character) {
-  const assignedMission = character.status.startsWith("执行") ? character.status : "无";
+  const assignedMission =
+    character.status.startsWith("履行") || character.status.startsWith("执行") ? character.status : "无";
   return `
     <div class="dossier-grid">
       <section class="dossier-section">
         <h3>基本状态</h3>
         <div class="field-list">
           <div class="field"><span>生命值</span><strong>${character.hp}/${character.maxHp}</strong></div>
-          <div class="field"><span>当前任务</span><strong>${assignedMission}</strong></div>
+          <div class="field"><span>当前契约</span><strong>${assignedMission}</strong></div>
           <div class="field"><span>等级</span><strong>Lv.${character.level} / ${character.rank} 级</strong></div>
           <div class="field"><span>经验</span><strong>${character.xp}/100</strong></div>
           <div class="field"><span>压力</span><strong>${character.stress}</strong></div>

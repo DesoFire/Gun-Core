@@ -16,7 +16,7 @@ export function renderAppShell(root) {
       <button class="tab-button active" data-tab-target="personnel" type="button">人员</button>
       <button class="tab-button" data-tab-target="mechs" type="button">机甲</button>
       <button class="tab-button" data-tab-target="warehouse" type="button">仓库</button>
-      <button class="tab-button" data-tab-target="missions" type="button">任务</button>
+      <button class="tab-button" data-tab-target="missions" type="button">契约</button>
       <button class="tab-button" data-tab-target="facilities" type="button">基础设施</button>
     </nav>
 
@@ -58,8 +58,11 @@ export function renderAppShell(root) {
       <section class="tab-page" data-tab-page="missions">
         <section class="panel mission-panel">
           <div class="section-heading">
-            <h2>任务</h2>
+            <h2>契约</h2>
             <span id="selected-count" class="badge">未选择队伍</span>
+          </div>
+          <div class="contract-toolbar">
+            <p class="muted">公开情报只显示发布方、报酬和简报；可花费资金调查更多细节，或刷新不合适的契约。</p>
           </div>
           <div id="mission-list" class="mission-grid"></div>
         </section>
