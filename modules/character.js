@@ -65,6 +65,7 @@ export function createMercenary(classId = randomItem(Object.keys(characterClasse
 export function createCharacter(data) {
   const character = createMercenary(data.classId, Boolean(data.isPlayer), data.name);
   updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
     draft.roster.unshift(character);
     draft.log.push(`第 ${draft.day} 天：${character.name} 成为了你的代表角色。`);
   });
@@ -81,6 +82,7 @@ export function updateCharacter(id, data) {
 export function hireRecruit(id) {
   let hired = null;
   updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
     const recruit = draft.recruitPool.find((character) => character.id === id);
     if (!recruit) return;
     const cost = recruitCost(recruit);
@@ -97,6 +99,7 @@ export function hireRecruit(id) {
 
 export function refreshRecruits() {
   updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
     const cost = 15;
     if (draft.gold < cost) {
       draft.log.push(`第 ${draft.day} 天：资金不足，无法刷新招募名单。`);
@@ -111,6 +114,7 @@ export function refreshRecruits() {
 
 export function equipItem(characterId, slot, itemId) {
   updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
     const character = draft.roster.find((item) => item.id === characterId);
     const item = draft.inventory.find((entry) => entry.id === itemId);
     if (!character || !item || !canEquipItemToSlot(item, slot)) return;
@@ -125,6 +129,7 @@ export function equipItem(characterId, slot, itemId) {
 
 export function unequipItem(characterId, slot) {
   updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
     const character = draft.roster.find((item) => item.id === characterId);
     if (!character || !character.equipment[slot]) return;
     const item = character.equipment[slot];

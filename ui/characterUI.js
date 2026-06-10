@@ -16,7 +16,7 @@ import {
 } from "../modules/character.js";
 import { getInventory } from "../modules/inventory.js";
 import { getWeaponTagNames } from "../modules/weaponGenerator.js";
-import { addLog } from "../js/state.js";
+import { addLog, getState } from "../js/state.js";
 import { identityFee } from "../modules/faction.js";
 
 let selectedCharacters = new Set();
@@ -35,6 +35,9 @@ export function initCharacterUI({ onRenderNeeded }) {
 }
 
 export function renderCharacterUI() {
+  const isActive = getState().gameStatus === "active";
+  document.querySelector("#refresh-recruits").disabled = !isActive;
+  document.querySelector("#create-player").disabled = !isActive || hasPlayerCharacter();
   renderRoster();
   renderRecruits();
   if (openDossierCharacterId && document.querySelector("#mercenary-dialog")?.open) {
@@ -78,6 +81,7 @@ function renderRoster() {
 
 function renderCharacterCard(character) {
   const selected = selectedCharacters.has(character.id);
+  const canAct = getState().gameStatus === "active";
   return `
     <article class="card ${selected ? "selected" : ""}" data-open-character="${character.id}">
       <div class="card-header">
@@ -85,7 +89,7 @@ function renderCharacterCard(character) {
           <p class="card-title">${character.name}</p>
           <p class="muted">${character.isPlayer ? "玩家角色 · " : ""}${character.className} · ${character.rank} 级 · Lv.${character.level}</p>
         </div>
-        <button class="ghost-button" data-select-character="${character.id}" ${character.status !== "待命" ? "disabled" : ""}>
+        <button class="ghost-button" data-select-character="${character.id}" ${!canAct || character.status !== "待命" ? "disabled" : ""}>
           ${selected ? "取消" : "入队"}
         </button>
       </div>
@@ -106,6 +110,7 @@ function renderCharacterCard(character) {
 
 function renderRecruits() {
   const container = document.querySelector("#recruit-list");
+  const state = getState();
   container.innerHTML = getRecruitPool()
     .map((character) => {
       const cost = recruitCost(character);
@@ -116,7 +121,7 @@ function renderRecruits() {
               <p class="card-title">${character.name}</p>
               <p class="muted">${character.className} · 知名度 ${character.notoriety} · 身份费 ${identityFee(character)}/天 · 雇佣费 ${cost} 金</p>
             </div>
-            <button class="primary-button" data-recruit="${character.id}" type="button">招募</button>
+            <button class="primary-button" data-recruit="${character.id}" ${state.gameStatus !== "active" || state.gold < cost ? "disabled" : ""} type="button">招募</button>
           </div>
           <div class="badge-row">${character.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
         </article>
@@ -225,6 +230,7 @@ function renderAttributesTab(character) {
 function renderEquipmentTab(character) {
   const slots = getEquipmentSlots();
   const candidates = getCandidateItems(selectedEquipmentSlot);
+  const canAct = getState().gameStatus === "active";
   return `
     <div class="body-equipment-layout">
       <section class="body-panel">
@@ -246,7 +252,7 @@ function renderEquipmentTab(character) {
             <h3>${slots[selectedEquipmentSlot]} 可用装备</h3>
             <p class="muted">${selectedEquipmentSlot === "back" ? "背包槽可以装所有类型的装备。" : "点击左侧槽位切换候选列表，拖动装备到槽位可快速换装。"}</p>
           </div>
-          <button class="ghost-button" data-unequip-slot="${selectedEquipmentSlot}" ${character.equipment[selectedEquipmentSlot] ? "" : "disabled"} type="button">卸下当前</button>
+          <button class="ghost-button" data-unequip-slot="${selectedEquipmentSlot}" ${canAct && character.equipment[selectedEquipmentSlot] ? "" : "disabled"} type="button">卸下当前</button>
         </div>
         <div class="equipment-pool">${renderEquipmentCandidates(candidates)}</div>
       </section>
@@ -268,6 +274,7 @@ function renderBodySlot(character, slot, label) {
 }
 
 function renderEquipmentCandidates(candidates) {
+  const canAct = getState().gameStatus === "active";
   if (candidates.length === 0) return `<p class="muted">仓库中没有适合该槽位的装备。</p>`;
   return candidates
     .map(
@@ -277,7 +284,7 @@ function renderEquipmentCandidates(candidates) {
             <strong>${item.name}</strong>
             <p class="muted">${item.type} · ${getWeaponTagNames(item).join(" / ") || "无标签"} · ${item.note}</p>
           </div>
-          <button class="primary-button" data-equip-item="${item.id}" type="button">装备</button>
+          <button class="primary-button" data-equip-item="${item.id}" ${canAct ? "" : "disabled"} type="button">装备</button>
         </article>
       `
     )

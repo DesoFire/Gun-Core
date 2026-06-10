@@ -62,9 +62,15 @@ export function resetState() {
 
 export function createInitialState() {
   return {
+    gameStatus: "active",
+    objective: {
+      title: "21天打响名号",
+      targetReputation: 60,
+      deadline: 21,
+    },
     day: 1,
-    gold: 160,
-    supplies: 28,
+    gold: 180,
+    supplies: 24,
     reputation: 0,
     stealth: 78,
     roster: [createInitialMercenary("vanguard"), createInitialMercenary("scout")],
@@ -75,7 +81,7 @@ export function createInitialState() {
     inventory: sampleItems.map((item) => ({ ...item })),
     inventorySeeded: true,
     factions: [],
-    log: ["事务所挂牌营业。第一批合同已经送达。"],
+    log: ["事务所挂牌营业。目标：在第 21 天结束前把声望提升到 60，同时别让隐秘值归零。"],
   };
 }
 
@@ -104,6 +110,11 @@ function getStorage() {
 }
 
 function normalizeState(savedState) {
+  savedState.gameStatus ??= "active";
+  savedState.objective ??= { title: "21天打响名号", targetReputation: 60, deadline: 21 };
+  savedState.objective.title ??= "21天打响名号";
+  savedState.objective.targetReputation ??= 60;
+  savedState.objective.deadline ??= 21;
   savedState.day ??= 1;
   savedState.gold ??= 160;
   savedState.supplies ??= 28;

@@ -14,7 +14,8 @@ export function renderMissionUI() {
   const selectedIds = getSelectedCharacterIds();
   document.querySelector("#selected-count").textContent = selectedIds.length > 0 ? `已选 ${selectedIds.length} 人` : "未选择队伍";
 
-  const roster = getState().roster;
+  const state = getState();
+  const roster = state.roster;
   const container = document.querySelector("#mission-list");
   container.innerHTML = getMissions()
     .map((mission) => {
@@ -26,7 +27,8 @@ export function renderMissionUI() {
         .join("、");
       const revealedIntel = mission.revealedIntel ?? [];
       const lockedIntelCount = contractIntelFields.filter((field) => !revealedIntel.includes(field.key)).length;
-      const canInvestigate = !isActive && lockedIntelCount > 0;
+      const canAct = state.gameStatus === "active";
+      const canInvestigate = canAct && !isActive && lockedIntelCount > 0;
       return `
         <article class="card contract-card">
           <div class="card-header">
@@ -59,9 +61,9 @@ export function renderMissionUI() {
           </div>
           <p class="muted">${isActive ? `执行中：${assignedNames}` : `选择佣兵后可以派遣。最多 4 人。剩余 ${lockedIntelCount} 项情报可调查。`}</p>
           <div class="button-row">
-            <button class="primary-button" data-start-mission="${mission.id}" ${isActive || selectedIds.length === 0 ? "disabled" : ""}>接取</button>
+            <button class="primary-button" data-start-mission="${mission.id}" ${!canAct || isActive || selectedIds.length === 0 ? "disabled" : ""}>接取</button>
             <button class="ghost-button" data-investigate-mission="${mission.id}" ${canInvestigate ? "" : "disabled"}>调查 ${mission.investigateCost ?? 0} 金</button>
-            <button class="ghost-button" data-refresh-mission="${mission.id}" ${isActive ? "disabled" : ""}>刷新 ${mission.refreshCost ?? 0} 金</button>
+            <button class="ghost-button" data-refresh-mission="${mission.id}" ${!canAct || isActive ? "disabled" : ""}>刷新 ${mission.refreshCost ?? 0} 金</button>
           </div>
         </article>
       `;

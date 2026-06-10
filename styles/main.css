@@ -166,6 +166,50 @@ button:disabled {
   margin-top: 16px;
 }
 
+.command-panel {
+  margin-bottom: 16px;
+}
+
+.command-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.command-stat {
+  background: #14171b;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.command-stat span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+}
+
+.command-stat strong {
+  display: block;
+  font-size: 20px;
+  margin-top: 3px;
+}
+
+.status-active {
+  border-color: var(--info);
+  color: #a8cce4;
+}
+
+.status-won {
+  border-color: var(--good);
+  color: #9de0a5;
+}
+
+.status-lost {
+  border-color: var(--danger);
+  color: #e89a93;
+}
+
 .section-heading {
   align-items: center;
   display: flex;
@@ -799,6 +843,10 @@ select {
 
   .top-actions button {
     flex: 1 1 110px;
+  }
+
+  .command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .dossier-grid {

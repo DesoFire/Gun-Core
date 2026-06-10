@@ -2,7 +2,7 @@ export function renderAppShell(root) {
   root.innerHTML = `
     <header class="topbar">
       <div>
-        <p class="eyebrow">佣兵管理原型</p>
+        <p class="eyebrow">佣兵事务所短局 Demo</p>
         <h1>Gun Core</h1>
       </div>
       <div class="top-actions">
@@ -21,6 +21,22 @@ export function renderAppShell(root) {
     </nav>
 
     <main class="dashboard">
+      <section class="panel command-panel">
+        <div class="section-heading">
+          <div>
+            <h2>局势指挥台</h2>
+            <p id="objective-text" class="muted">读取目标中...</p>
+          </div>
+          <span id="game-status" class="badge">进行中</span>
+        </div>
+        <div id="command-grid" class="command-grid"></div>
+        <div class="button-row">
+          <button id="buy-supplies" class="ghost-button" type="button">黑市补给 36 金</button>
+          <button id="treat-wounds" class="ghost-button" type="button">地下医疗 28 金</button>
+          <button id="reduce-heat" class="ghost-button" type="button">清理痕迹 42 金</button>
+        </div>
+      </section>
+
       <section class="tab-page active" data-tab-page="personnel">
         <div class="tab-layout two-column">
           <section class="panel roster-panel">

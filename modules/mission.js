@@ -10,6 +10,7 @@ import {
 } from "../data/sampleData.js";
 import { getState, updateState } from "../js/state.js";
 import { calculateRank, payDailyUpkeep, resolveRestAttack } from "./faction.js";
+import { evaluateGameOverDraft } from "./game.js";
 import { getWeaponTagNames } from "./weaponGenerator.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
 
@@ -65,6 +66,7 @@ export function normalizeMission(mission) {
 
 export function refreshMission(id) {
   updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
     const index = draft.missions.findIndex((item) => item.id === id);
     const mission = draft.missions[index];
     if (!mission || mission.status !== "available") return;
@@ -83,6 +85,7 @@ export function refreshMission(id) {
 
 export function investigateMission(id) {
   updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
     const mission = draft.missions.find((item) => item.id === id);
     if (!mission || mission.status !== "available") return;
 
@@ -106,6 +109,7 @@ export function investigateMission(id) {
 
 export function startMission(id, memberIds) {
   updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
     const mission = draft.missions.find((item) => item.id === id);
     if (!mission || memberIds.length === 0) return;
 
@@ -121,6 +125,7 @@ export function startMission(id, memberIds) {
 
 export function advanceDay() {
   updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
     draft.day += 1;
     payDailyUpkeep(draft);
     draft.supplies = Math.max(0, draft.supplies - Math.ceil(draft.roster.length / 3));
@@ -153,9 +158,7 @@ export function advanceDay() {
 
     resolveRestAttack(draft);
 
-    if (draft.reputation >= 100) {
-      draft.log.push(`第 ${draft.day} 天：声望达到 100。这个原型的胜利目标已经完成。`);
-    }
+    evaluateGameOverDraft(draft);
   });
 }
 
@@ -168,6 +171,7 @@ function resolveMissionDraft(draft, mission) {
   const chance = calculateMissionChanceFromRoster(draft.roster, draft.buildings, mission.assigned, mission);
   const success = randomNumber(1, 100) <= chance;
   const team = draft.roster.filter((character) => mission.assigned.includes(character.id));
+  const outcome = applyHiddenTwistDraft(draft, mission, team, success);
 
   team.forEach((character) => {
     character.status = "待命";
@@ -193,15 +197,19 @@ function resolveMissionDraft(draft, mission) {
   });
 
   if (success) {
-    draft.gold += mission.reward.gold;
-    draft.reputation += mission.reward.reputation;
-    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」成功。获得 ${mission.reward.gold} 金与 ${mission.reward.reputation} 声望。`);
+    const gold = Math.max(0, mission.reward.gold + outcome.goldDelta);
+    const reputation = Math.max(0, mission.reward.reputation + outcome.reputationDelta);
+    draft.gold += gold;
+    draft.reputation += reputation;
+    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」成功。获得 ${gold} 金与 ${reputation} 声望。${outcome.text}`);
   } else {
-    draft.reputation = Math.max(0, draft.reputation - 3);
-    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍带着伤势和坏消息回来了。`);
+    draft.reputation = Math.max(0, draft.reputation - 3 + outcome.reputationDelta);
+    draft.gold = Math.max(0, draft.gold + outcome.goldDelta);
+    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍带着伤势和坏消息回来了。${outcome.text}`);
   }
 
   draft.missions = draft.missions.filter((item) => item.id !== mission.id);
+  evaluateGameOverDraft(draft);
 }
 
 function calculateMissionChanceFromRoster(roster, buildings, memberIds, mission) {
@@ -262,6 +270,52 @@ function calculateRefreshCost(difficulty = 2) {
 
 function calculateInvestigateCost(difficulty = 2, revealedCount = 0) {
   return 14 + difficulty * 5 + revealedCount * 6;
+}
+
+function applyHiddenTwistDraft(draft, mission, team, success) {
+  const twist = mission.hidden?.twist ?? "";
+  const revealedCount = mission.revealedIntel?.length ?? 0;
+  const mitigated = revealedCount >= 3;
+  const result = { goldDelta: 0, reputationDelta: 0, text: `隐藏情报：${twist}` };
+
+  if (twist.includes("情报错误")) {
+    const stress = mitigated ? 1 : 3;
+    team.forEach((character) => {
+      character.stress += stress;
+    });
+    result.text += mitigated ? " 事前调查降低了混乱。" : " 错误情报让队伍压力上升。";
+  } else if (twist.includes("第三方介入")) {
+    const loss = mitigated ? 6 : 16;
+    result.goldDelta -= loss;
+    draft.stealth = clamp(draft.stealth - (mitigated ? 1 : 4), 0, 100);
+    result.text += mitigated ? " 第三方被提前识别，只损失少量收益。" : " 第三方截走部分收益并留下追踪痕迹。";
+  } else if (twist.includes("伏击")) {
+    const target = randomItem(team);
+    if (target && !mitigated) {
+      target.wound += 1;
+      target.hp = Math.max(1, target.hp - randomNumber(4, 9));
+      target.stress += 4;
+      result.text += ` ${target.name} 在伏击中受伤。`;
+    } else {
+      result.text += " 伏击被提前规避。";
+    }
+  } else if (twist.includes("客户欺骗")) {
+    result.reputationDelta -= success ? 2 : 0;
+    draft.stealth = clamp(draft.stealth - (mitigated ? 2 : 6), 0, 100);
+    result.text += mitigated ? " 欺骗被留档，影响有限。" : " 客户留下麻烦尾巴，隐秘值下降。";
+  } else if (twist.includes("隐藏奖励")) {
+    const bonus = mitigated ? 24 : 14;
+    result.goldDelta += bonus;
+    result.text += ` 现场额外回收物资，追加 ${bonus} 金。`;
+  } else if (twist.includes("目标背叛")) {
+    result.reputationDelta += success && mitigated ? 2 : -1;
+    team.forEach((character) => {
+      character.stress += mitigated ? 1 : 2;
+    });
+    result.text += mitigated ? " 背叛被控制，反而提高了业内评价。" : " 目标背叛让委托评价受损。";
+  }
+
+  return result;
 }
 
 function upgradeMissionToContract(mission) {
