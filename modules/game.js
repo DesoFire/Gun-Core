@@ -1,5 +1,5 @@
 import { getState, updateState } from "../js/state.js";
-import { clamp } from "../js/utils.js";
+import { clamp, createId } from "../js/utils.js";
 
 export function getGameSummary() {
   const state = getState();
@@ -17,6 +17,14 @@ export function buySupplies() {
     draft.gold -= cost;
     draft.supplies += 8;
     draft.stealth = clamp(draft.stealth - 2, 0, 100);
+    draft.timeline.push({
+      id: createId(),
+      day: draft.day,
+      type: "base",
+      title: "黑市补给",
+      status: "done",
+      detail: "购入 8 份补给。",
+    });
     draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金购入 8 份黑市补给，隐秘值下降 2。`);
   });
 }
@@ -40,6 +48,14 @@ export function treatWounds() {
       character.stress = Math.max(0, character.stress - 6);
       character.hp = Math.min(character.maxHp, character.hp + 8);
     });
+    draft.timeline.push({
+      id: createId(),
+      day: draft.day,
+      type: "base",
+      title: "地下医疗",
+      status: "done",
+      detail: `${wounded.length} 名佣兵恢复。`,
+    });
     draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金安排地下医疗，${wounded.length} 名佣兵恢复。`);
   });
 }
@@ -54,6 +70,14 @@ export function reduceHeat() {
     }
     draft.gold -= cost;
     draft.stealth = clamp(draft.stealth + 12, 0, 100);
+    draft.timeline.push({
+      id: createId(),
+      day: draft.day,
+      type: "base",
+      title: "清理痕迹",
+      status: "done",
+      detail: "隐秘值恢复 12。",
+    });
     draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金清理身份链路，隐秘值恢复 12。`);
   });
 }

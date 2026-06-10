@@ -82,12 +82,13 @@ function renderRoster() {
 function renderCharacterCard(character) {
   const selected = selectedCharacters.has(character.id);
   const canAct = getState().gameStatus === "active";
+  const rankLabel = formatRank(character.rank);
   return `
     <article class="card ${selected ? "selected" : ""}" data-open-character="${character.id}">
       <div class="card-header">
         <div>
           <p class="card-title">${character.name}</p>
-          <p class="muted">${character.isPlayer ? "玩家角色 · " : ""}${character.className} · ${character.rank} 级 · Lv.${character.level}</p>
+          <p class="muted">${character.isPlayer ? "玩家角色 · " : ""}${character.className} · ${rankLabel}</p>
         </div>
         <button class="ghost-button" data-select-character="${character.id}" ${!canAct || character.status !== "待命" ? "disabled" : ""}>
           ${selected ? "取消" : "入队"}
@@ -102,7 +103,7 @@ function renderCharacterCard(character) {
         <span>身份费 ${identityFee(character)}/天</span>
         <span>状态 ${character.status}</span>
       </div>
-      <p class="muted">经验 ${character.xp}/100</p>
+      <p class="muted">正面特性 ${character.traits?.length ?? 0} 项</p>
       <button class="link-button" data-open-character-button="${character.id}" type="button">查看人物卡</button>
     </article>
   `;
@@ -156,6 +157,7 @@ function openCharacterSheet(id) {
 function renderCharacterSheet(id) {
   const character = getCharacter(id);
   if (!character) return;
+  const rankLabel = formatRank(character.rank);
 
   const dossier = document.querySelector("#mercenary-dossier");
   dossier.innerHTML = `
@@ -163,7 +165,7 @@ function renderCharacterSheet(id) {
       <div>
         <div class="dossier-code">SSS-GUILD DOSSIER / FIELD SHEET</div>
         <h2 class="dossier-title">${character.name}</h2>
-        <p class="muted">${character.className} · ${character.rank} 级佣兵 · ${character.status}</p>
+        <p class="muted">${character.className} · ${rankLabel} · ${character.status}</p>
       </div>
       <button class="ghost-button" data-close-dossier type="button">关闭</button>
     </div>
@@ -204,8 +206,8 @@ function renderAttributesTab(character) {
         <div class="field-list">
           <div class="field"><span>生命值</span><strong>${character.hp}/${character.maxHp}</strong></div>
           <div class="field"><span>当前契约</span><strong>${assignedMission}</strong></div>
-          <div class="field"><span>等级</span><strong>Lv.${character.level} / ${character.rank} 级</strong></div>
-          <div class="field"><span>经验</span><strong>${character.xp}/100</strong></div>
+          <div class="field"><span>评级</span><strong>${formatRank(character.rank)}</strong></div>
+          <div class="field"><span>晋升序号</span><strong>${character.level}/7</strong></div>
           <div class="field"><span>压力</span><strong>${character.stress}</strong></div>
           <div class="field"><span>伤势</span><strong>${character.wound}</strong></div>
         </div>
@@ -223,6 +225,32 @@ function renderAttributesTab(character) {
         <h3>技能</h3>
         <div class="badge-row">${character.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
       </section>
+      <section class="dossier-section wide">
+        <h3>正面特性</h3>
+        ${renderTraitList(character)}
+      </section>
+    </div>
+  `;
+}
+
+function renderTraitList(character) {
+  const traits = character.traits ?? [];
+  if (traits.length === 0) return `<p class="muted">还没有通过行动晋升获得特性。</p>`;
+  return `
+    <div class="trait-list">
+      ${traits
+        .map(
+          (trait) => `
+            <article class="trait-item">
+              <div>
+                <strong>${trait.name}</strong>
+                <p class="muted">${trait.description}</p>
+              </div>
+              <span class="badge">${trait.source === "combat" ? "战斗" : "后勤"}</span>
+            </article>
+          `
+        )
+        .join("")}
     </div>
   `;
 }
@@ -356,4 +384,8 @@ function setupClassOptions() {
   select.innerHTML = Object.entries(getCharacterClasses())
     .map(([id, item]) => `<option value="${id}">${item.name}</option>`)
     .join("");
+}
+
+function formatRank(rank) {
+  return rank === "无" ? "无等级" : `${rank} 级佣兵`;
 }

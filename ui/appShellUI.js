@@ -13,7 +13,8 @@ export function renderAppShell(root) {
     </header>
 
     <nav class="tabbar" aria-label="主功能切换">
-      <button class="tab-button active" data-tab-target="personnel" type="button">人员</button>
+      <button class="tab-button active" data-tab-target="overview" type="button">总览</button>
+      <button class="tab-button" data-tab-target="personnel" type="button">人员</button>
       <button class="tab-button" data-tab-target="mechs" type="button">机甲</button>
       <button class="tab-button" data-tab-target="warehouse" type="button">仓库</button>
       <button class="tab-button" data-tab-target="missions" type="button">契约</button>
@@ -21,23 +22,59 @@ export function renderAppShell(root) {
     </nav>
 
     <main class="dashboard">
-      <section class="panel command-panel">
-        <div class="section-heading">
-          <div>
-            <h2>局势指挥台</h2>
-            <p id="objective-text" class="muted">读取目标中...</p>
-          </div>
-          <span id="game-status" class="badge">进行中</span>
-        </div>
-        <div id="command-grid" class="command-grid"></div>
-        <div class="button-row">
-          <button id="buy-supplies" class="ghost-button" type="button">黑市补给 36 金</button>
-          <button id="treat-wounds" class="ghost-button" type="button">地下医疗 28 金</button>
-          <button id="reduce-heat" class="ghost-button" type="button">清理痕迹 42 金</button>
+      <section class="tab-page active" data-tab-page="overview">
+        <div class="overview-layout">
+          <section class="panel command-panel">
+            <div class="section-heading">
+              <div>
+                <h2>局势指挥台</h2>
+                <p id="objective-text" class="muted">读取目标中...</p>
+              </div>
+              <span id="game-status" class="badge">进行中</span>
+            </div>
+            <div id="command-grid" class="command-grid"></div>
+            <div class="button-row">
+              <button id="buy-supplies" class="ghost-button" type="button">黑市补给 36 金</button>
+              <button id="treat-wounds" class="ghost-button" type="button">地下医疗 28 金</button>
+              <button id="reduce-heat" class="ghost-button" type="button">清理痕迹 42 金</button>
+            </div>
+          </section>
+
+          <section class="panel overview-panel">
+            <div class="section-heading">
+              <h2>基地运营</h2>
+              <span id="current-day" class="badge">第 1 天</span>
+            </div>
+            <div id="resource-grid" class="resource-grid"></div>
+          </section>
+
+          <section class="panel overview-panel">
+            <div class="section-heading">
+              <h2>契约执行</h2>
+              <span id="contract-overview-badge" class="badge">读取中</span>
+            </div>
+            <div id="contract-overview" class="overview-list"></div>
+          </section>
+
+          <section class="panel overview-panel">
+            <div class="section-heading">
+              <h2>人员状态</h2>
+              <span id="personnel-overview-badge" class="badge">读取中</span>
+            </div>
+            <div id="personnel-overview" class="overview-list"></div>
+          </section>
+
+          <section class="panel calendar-panel">
+            <div class="section-heading">
+              <h2>行动日历</h2>
+              <span class="badge">按天</span>
+            </div>
+            <div id="calendar-list" class="calendar-list"></div>
+          </section>
         </div>
       </section>
 
-      <section class="tab-page active" data-tab-page="personnel">
+      <section class="tab-page" data-tab-page="personnel">
         <div class="tab-layout two-column">
           <section class="panel roster-panel">
             <div class="section-heading">
@@ -89,9 +126,9 @@ export function renderAppShell(root) {
           <section class="panel base-panel">
             <div class="section-heading">
               <h2>基地总览</h2>
-              <span id="current-day" class="badge">第 1 天</span>
+              <span id="facility-current-day" class="badge">第 1 天</span>
             </div>
-            <div id="resource-grid" class="resource-grid"></div>
+            <div id="facility-resource-grid" class="resource-grid"></div>
           </section>
 
           <section class="panel facility-panel">
@@ -137,6 +174,10 @@ export function renderAppShell(root) {
 
     <dialog id="weapon-dialog" class="dialog weapon-dialog">
       <div class="dossier" id="weapon-dossier"></div>
+    </dialog>
+
+    <dialog id="contract-dialog" class="dialog contract-dialog">
+      <div class="dossier" id="contract-dossier"></div>
     </dialog>
   `;
 }

@@ -13,6 +13,7 @@ import {
   fears,
   genders,
   lastWords,
+  mercenaryRanks,
   missionTemplates,
   names,
   otherContractIssuers,
@@ -76,6 +77,9 @@ export function createInitialState() {
     roster: [createInitialMercenary("vanguard"), createInitialMercenary("scout")],
     recruitPool: [createInitialMercenary(), createInitialMercenary(), createInitialMercenary()],
     missions: Array.from({ length: 4 }, () => createInitialMission()),
+    timeline: [
+      { id: createId(), day: 1, type: "system", title: "事务所挂牌", status: "done", detail: "第一批契约送达。短局开始。" },
+    ],
     buildings: { tavern: 1, infirmary: 0, intel: 0 },
     mechs: [],
     inventory: sampleItems.map((item) => ({ ...item })),
@@ -124,6 +128,7 @@ function normalizeState(savedState) {
   savedState.roster ??= [];
   savedState.recruitPool ??= [];
   savedState.missions ??= Array.from({ length: 4 }, () => createInitialMission());
+  savedState.timeline ??= [];
   savedState.mechs ??= [];
   savedState.inventory ??= sampleItems.map((item) => ({ ...item }));
   if (!savedState.inventorySeeded) {
@@ -143,6 +148,7 @@ function normalizeState(savedState) {
   savedState.roster = savedState.roster.map(normalizeCharacterState);
   savedState.recruitPool = savedState.recruitPool.map(normalizeCharacterState);
   savedState.missions = savedState.missions.map(normalizeMissionState);
+  savedState.timeline = savedState.timeline.map(normalizeTimelineEntry);
   savedState.inventory = savedState.inventory.map(normalizeItemState);
   return savedState;
 }
@@ -155,12 +161,13 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
     name: customName || `${randomItem(names)} · ${randomItem(callsigns)}`,
     classId,
     className: baseClass.name,
-    level: 1,
+    level: 0,
     xp: 0,
     hp: maxHp,
     maxHp,
     notoriety: isPlayer ? 3 : randomNumber(0, 2),
-    rank: "F",
+    rank: "无",
+    traits: [],
     dossier: createDossier(),
     contractRecord: { completed: 0, failed: 0, survived: 0 },
     bounty: randomNumber(0, 24) * 10,
@@ -180,15 +187,20 @@ function createInitialMission() {
   const issuer = randomIssuer();
   const difficulty = randomNumber(2, 5);
   const duration = randomNumber(1, 3 + Math.floor(difficulty / 2));
+  const issueDay = 1;
+  const expiresDay = issueDay + randomNumber(2, 4) + Math.floor(difficulty / 2);
   return {
     id: createId(),
     name: `${type.name}契约：${randomContractSubject(type)}`,
     issuer,
     type: type.name,
     typeCode: type.code,
+    actionType: type.actionType,
     acquisition: "广撒网",
     difficulty,
     duration,
+    issueDay,
+    expiresDay,
     reward: { gold: 35 + difficulty * randomNumber(16, 24), reputation: Math.max(5, difficulty * 3 + randomNumber(0, 5)) },
     description: `${randomItem(type.verbs)}目标。${randomItem(contractBriefFragments)}`,
     intel: createContractIntel(),
@@ -205,7 +217,10 @@ function createInitialMission() {
 
 function normalizeCharacterState(character) {
   character.notoriety ??= character.isPlayer ? 3 : 1;
-  character.rank ??= calculateRank(character);
+  character.rank = normalizeRank(character);
+  character.level = Math.max(0, mercenaryRanks.indexOf(character.rank));
+  character.xp ??= 0;
+  character.traits ??= [];
   character.dossier ??= createDossier();
   character.dossier.personality ??= randomItem(personalities);
   character.contractRecord ??= { completed: 0, failed: 0, survived: 0 };
@@ -219,7 +234,6 @@ function normalizeCharacterState(character) {
   character.maxHp ??= 24 + character.stats.resolve;
   character.hp ??= Math.max(1, character.maxHp - character.wound * 4);
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
-  character.rank = calculateRank(character);
   return character;
 }
 
@@ -229,7 +243,19 @@ function normalizeMissionState(mission) {
   mission.assigned ??= [];
   mission.status ??= "available";
   mission.tags ??= [];
+  mission.issueDay ??= 1;
+  mission.expiresDay ??= mission.issueDay + 4;
   return mission;
+}
+
+function normalizeTimelineEntry(entry) {
+  entry.id ??= createId();
+  entry.day ??= 1;
+  entry.type ??= "system";
+  entry.title ??= "未命名记录";
+  entry.status ??= "done";
+  entry.detail ??= "";
+  return entry;
 }
 
 function normalizeItemState(item) {
@@ -256,12 +282,13 @@ function createDossier() {
 }
 
 function calculateRank(character) {
-  if (character.level >= 8) return "S";
-  if (character.level >= 6) return "A";
-  if (character.level >= 4) return "B";
-  if (character.level >= 3) return "C";
-  if (character.level >= 2) return "D";
-  return "F";
+  return mercenaryRanks.includes(character.rank) ? character.rank : "无";
+}
+
+function normalizeRank(character) {
+  if (mercenaryRanks.includes(character.rank)) return character.rank;
+  if (typeof character.level === "number") return mercenaryRanks[Math.min(character.level, mercenaryRanks.length - 1)] ?? "无";
+  return calculateRank(character);
 }
 
 function addVariance(stats) {
@@ -304,6 +331,7 @@ function upgradeMissionToContract(mission) {
   mission.issuer ??= randomIssuer();
   mission.type ??= fallbackType.name;
   mission.typeCode ??= fallbackType.code;
+  mission.actionType ??= fallbackType.actionType ?? "logistics";
   mission.acquisition ??= "旧合同转录";
   mission.description ??= `${randomItem(fallbackType.verbs)}目标。${randomItem(contractBriefFragments)}`;
   mission.intel ??= createContractIntel();
@@ -311,5 +339,7 @@ function upgradeMissionToContract(mission) {
   mission.hidden ??= { twist: randomItem(contractHiddenTwists) };
   mission.refreshCost ??= 12 + (mission.difficulty ?? fallbackTemplate.difficulty ?? 2) * 4;
   mission.investigateCost ??= 14 + (mission.difficulty ?? fallbackTemplate.difficulty ?? 2) * 5 + mission.revealedIntel.length * 6;
+  mission.issueDay ??= 1;
+  mission.expiresDay ??= mission.issueDay + 4;
   return mission;
 }

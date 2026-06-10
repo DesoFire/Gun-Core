@@ -1,6 +1,6 @@
-import { buildings } from "../data/sampleData.js";
+import { buildings, mercenaryRanks } from "../data/sampleData.js";
 import { getState, updateState } from "../js/state.js";
-import { clamp, randomNumber } from "../js/utils.js";
+import { clamp, createId, randomNumber } from "../js/utils.js";
 
 export function calculateDailyUpkeep() {
   const state = getState();
@@ -13,7 +13,8 @@ export function calculateBaseUpkeep() {
 }
 
 export function identityFee(character) {
-  return 3 + character.level * 2 + character.notoriety * 2 + (character.isPlayer ? 2 : 0);
+  const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
+  return 3 + rankIndex * 2 + character.notoriety * 2 + (character.isPlayer ? 2 : 0);
 }
 
 export function calculateRestAttackChance() {
@@ -30,6 +31,14 @@ export function upgradeBuilding(id) {
     if (draft.gold < cost) return;
     draft.gold -= cost;
     draft.buildings[id] = level + 1;
+    draft.timeline.push({
+      id: createId(),
+      day: draft.day,
+      type: "facility",
+      title: `${building.name} Lv.${draft.buildings[id]}`,
+      status: "done",
+      detail: "基地建设完成。",
+    });
     draft.log.push(`第 ${draft.day} 天：${building.name} 升到了 Lv.${draft.buildings[id]}。`);
   });
 }
@@ -77,12 +86,7 @@ export function resolveRestAttack(draft) {
 }
 
 export function calculateRank(character) {
-  if (character.level >= 8) return "S";
-  if (character.level >= 6) return "A";
-  if (character.level >= 4) return "B";
-  if (character.level >= 3) return "C";
-  if (character.level >= 2) return "D";
-  return "F";
+  return mercenaryRanks.includes(character.rank) ? character.rank : "无";
 }
 
 export function addVariance(stats) {

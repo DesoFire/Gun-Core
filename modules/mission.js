@@ -5,11 +5,14 @@ import {
   contractIntelPool,
   contractIssuers,
   contractTypes,
+  mercenaryRanks,
   missionTemplates,
   otherContractIssuers,
+  positiveTraits,
+  promotionChances,
 } from "../data/sampleData.js";
 import { getState, updateState } from "../js/state.js";
-import { calculateRank, payDailyUpkeep, resolveRestAttack } from "./faction.js";
+import { payDailyUpkeep, resolveRestAttack } from "./faction.js";
 import { evaluateGameOverDraft } from "./game.js";
 import { getWeaponTagNames } from "./weaponGenerator.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
@@ -27,6 +30,8 @@ export function createContract(options = {}) {
   const issuer = options.issuer ?? randomIssuer();
   const difficulty = options.difficulty ?? randomNumber(2, 5);
   const duration = options.duration ?? randomNumber(1, 3 + Math.floor(difficulty / 2));
+  const issueDay = options.issueDay ?? getState().day ?? 1;
+  const expiresDay = options.expiresDay ?? issueDay + randomNumber(2, 4) + Math.floor(difficulty / 2);
   const rewardGold = Math.round((35 + difficulty * randomNumber(16, 24)) * (options.rewardMultiplier ?? 1));
   const rewardReputation = Math.max(5, Math.round(difficulty * 3 + randomNumber(0, 5)));
   const tags = [...new Set(type.tags)];
@@ -38,9 +43,12 @@ export function createContract(options = {}) {
     issuer,
     type: type.name,
     typeCode: type.code,
+    actionType: type.actionType,
     acquisition: options.acquisition ?? "广撒网",
     difficulty,
     duration,
+    issueDay,
+    expiresDay,
     reward: { gold: rewardGold, reputation: rewardReputation },
     description: `${randomItem(type.verbs)}目标。${randomItem(contractBriefFragments)}`,
     intel: createContractIntel(),
@@ -116,8 +124,20 @@ export function startMission(id, memberIds) {
     mission.status = "active";
     mission.assigned = [...memberIds];
     mission.remaining = mission.duration;
+    mission.startDay = draft.day;
+    mission.endDay = draft.day + mission.duration;
     draft.roster.forEach((character) => {
       if (memberIds.includes(character.id)) character.status = `履行「${mission.name}」`;
+    });
+    draft.timeline.push({
+      id: createId(),
+      day: draft.day,
+      endDay: mission.endDay,
+      type: "contract",
+      title: mission.name,
+      status: "active",
+      detail: `执行 ${mission.duration} 天。队伍：${memberIds.length} 人。`,
+      missionId: mission.id,
     });
     draft.log.push(`第 ${draft.day} 天：小队已出发履行契约「${mission.name}」。`);
   });
@@ -145,8 +165,23 @@ export function advanceDay() {
         if (mission.remaining <= 0) resolveMissionDraft(draft, mission);
       });
 
+    const expiredMissions = draft.missions.filter((mission) => mission.status === "available" && mission.expiresDay < draft.day);
+    expiredMissions.forEach((mission) => {
+      draft.timeline.push({
+        id: createId(),
+        day: draft.day,
+        type: "contract",
+        title: mission.name,
+        status: "missed",
+        detail: "契约截止，发布方撤回委托。",
+        missionId: mission.id,
+      });
+      draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」超过截止日，已从列表撤下。`);
+    });
+    draft.missions = draft.missions.filter((mission) => mission.status !== "available" || mission.expiresDay >= draft.day);
+
     while (draft.missions.filter((mission) => mission.status === "available").length < 4) {
-      draft.missions.push(createMission());
+      draft.missions.push(createContract({ issueDay: draft.day }));
     }
 
     if (draft.supplies === 0) {
@@ -175,7 +210,6 @@ function resolveMissionDraft(draft, mission) {
 
   team.forEach((character) => {
     character.status = "待命";
-    character.xp += success ? 35 : 18;
     character.notoriety += success ? 1 : 0;
     character.contractRecord.survived += 1;
     if (success) character.contractRecord.completed += 1;
@@ -185,15 +219,7 @@ function resolveMissionDraft(draft, mission) {
       character.wound += 1;
       character.hp = Math.max(1, character.hp - randomNumber(3, 8));
     }
-    if (character.xp >= 100) {
-      character.level += 1;
-      character.xp -= 100;
-      character.stats.resolve += 1;
-      character.stats.wits += 1;
-      character.maxHp += 2;
-      character.hp = Math.min(character.maxHp, character.hp + 2);
-      character.rank = calculateRank(character);
-    }
+    resolvePromotionDraft(draft, character, mission.actionType ?? "logistics", success);
   });
 
   if (success) {
@@ -208,6 +234,13 @@ function resolveMissionDraft(draft, mission) {
     draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍带着伤势和坏消息回来了。${outcome.text}`);
   }
 
+  const timelineEntry = draft.timeline.find((entry) => entry.missionId === mission.id && entry.status === "active");
+  if (timelineEntry) {
+    timelineEntry.status = success ? "done" : "failed";
+    timelineEntry.day = mission.startDay ?? timelineEntry.day;
+    timelineEntry.endDay = draft.day;
+    timelineEntry.detail = success ? "契约完成并结算。" : "契约失败，队伍返回。";
+  }
   draft.missions = draft.missions.filter((item) => item.id !== mission.id);
   evaluateGameOverDraft(draft);
 }
@@ -272,6 +305,33 @@ function calculateInvestigateCost(difficulty = 2, revealedCount = 0) {
   return 14 + difficulty * 5 + revealedCount * 6;
 }
 
+function resolvePromotionDraft(draft, character, actionType, success) {
+  const currentRank = mercenaryRanks.includes(character.rank) ? character.rank : "无";
+  const currentIndex = mercenaryRanks.indexOf(currentRank);
+  if (currentIndex < 0 || currentIndex >= mercenaryRanks.length - 1) return;
+
+  const chance = success ? promotionChances[currentRank] ?? 0 : 1;
+  if (randomNumber(1, 100) > chance) return;
+
+  const nextRank = mercenaryRanks[currentIndex + 1];
+  const trait = drawPositiveTrait(character, actionType);
+  character.rank = nextRank;
+  character.level = currentIndex + 1;
+  character.traits ??= [];
+  if (trait) character.traits.push(trait);
+
+  const traitText = trait ? `，获得特性「${trait.name}」` : "";
+  draft.log.push(`第 ${draft.day} 天：${character.name} 晋升为 ${nextRank} 级佣兵${traitText}。`);
+}
+
+function drawPositiveTrait(character, actionType) {
+  const pool = positiveTraits[actionType] ?? positiveTraits.logistics;
+  const owned = new Set((character.traits ?? []).map((trait) => trait.name));
+  const candidates = pool.filter((trait) => !owned.has(trait.name));
+  const trait = randomItem(candidates.length > 0 ? candidates : pool);
+  return { ...trait, source: actionType };
+}
+
 function applyHiddenTwistDraft(draft, mission, team, success) {
   const twist = mission.hidden?.twist ?? "";
   const revealedCount = mission.revealedIntel?.length ?? 0;
@@ -326,6 +386,7 @@ function upgradeMissionToContract(mission) {
   mission.issuer ??= randomIssuer();
   mission.type ??= fallbackType.name;
   mission.typeCode ??= fallbackType.code;
+  mission.actionType ??= fallbackType.actionType ?? "logistics";
   mission.acquisition ??= "旧合同转录";
   mission.description ??= `${randomItem(fallbackType.verbs)}目标。${randomItem(contractBriefFragments)}`;
   mission.intel ??= createContractIntel();
@@ -333,5 +394,7 @@ function upgradeMissionToContract(mission) {
   mission.hidden ??= { twist: randomItem(contractHiddenTwists) };
   mission.refreshCost ??= calculateRefreshCost(mission.difficulty ?? fallbackTemplate.difficulty ?? 2);
   mission.investigateCost ??= calculateInvestigateCost(mission.difficulty ?? fallbackTemplate.difficulty ?? 2, mission.revealedIntel.length);
+  mission.issueDay ??= 1;
+  mission.expiresDay ??= mission.issueDay + 4;
   return mission;
 }

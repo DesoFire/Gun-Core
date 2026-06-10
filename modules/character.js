@@ -6,6 +6,7 @@ import {
   fears,
   genders,
   lastWords,
+  mercenaryRanks,
   names,
   origins,
   personalities,
@@ -42,12 +43,13 @@ export function createMercenary(classId = randomItem(Object.keys(characterClasse
     name: customName || `${randomItem(names)} · ${randomItem(callsigns)}`,
     classId,
     className: baseClass.name,
-    level: 1,
+    level: 0,
     xp: 0,
     hp: maxHp,
     maxHp,
     notoriety: isPlayer ? 3 : randomNumber(0, 2),
-    rank: "F",
+    rank: "无",
+    traits: [],
     dossier: createDossier(),
     contractRecord: { completed: 0, failed: 0, survived: 0 },
     bounty: randomNumber(0, 24) * 10,
@@ -144,7 +146,8 @@ export function canEquipItemToSlot(item, slot) {
 }
 
 export function recruitCost(character) {
-  return 42 + character.level * 10 + character.tags.length * 4;
+  const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
+  return 42 + rankIndex * 10 + character.tags.length * 4;
 }
 
 export function getEquipmentSlots() {
@@ -153,7 +156,10 @@ export function getEquipmentSlots() {
 
 export function normalizeCharacter(character) {
   character.notoriety ??= character.isPlayer ? 3 : 1;
-  character.rank ??= calculateRank(character);
+  character.rank = normalizeRank(character);
+  character.level = Math.max(0, mercenaryRanks.indexOf(character.rank));
+  character.xp ??= 0;
+  character.traits ??= [];
   character.dossier ??= createDossier();
   character.dossier.personality ??= randomItem(personalities);
   character.contractRecord ??= { completed: 0, failed: 0, survived: 0 };
@@ -167,7 +173,6 @@ export function normalizeCharacter(character) {
   character.maxHp ??= 24 + character.stats.resolve;
   character.hp ??= Math.max(1, character.maxHp - character.wound * 4);
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
-  character.rank = calculateRank(character);
   return character;
 }
 
@@ -220,4 +225,10 @@ function createDossier() {
 
 function createEmptyEquipment() {
   return Object.fromEntries(Object.keys(equipmentSlots).map((slot) => [slot, null]));
+}
+
+function normalizeRank(character) {
+  if (mercenaryRanks.includes(character.rank)) return character.rank;
+  if (typeof character.level === "number") return mercenaryRanks[Math.min(character.level, mercenaryRanks.length - 1)] ?? "无";
+  return calculateRank(character);
 }

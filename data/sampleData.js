@@ -74,19 +74,49 @@ export const otherContractIssuers = [
 ];
 
 export const contractTypes = [
-  { name: "护送", code: "Escort", tags: ["守卫", "生存"], verbs: ["护送", "掩护"] },
-  { name: "运输", code: "Transport", tags: ["守卫", "支援"], verbs: ["转运", "押运"] },
-  { name: "侦察", code: "Recon", tags: ["侦察", "潜入"], verbs: ["侦察", "标记"] },
-  { name: "搜索", code: "Search", tags: ["调查", "侦察"], verbs: ["搜索", "定位"] },
-  { name: "回收", code: "Recovery", tags: ["调查", "生存"], verbs: ["回收", "封存"] },
-  { name: "歼灭", code: "Hunt", tags: ["战斗", "守卫"], verbs: ["清剿", "猎杀"] },
-  { name: "突袭", code: "Raid", tags: ["战斗", "潜入"], verbs: ["突袭", "夺取"] },
-  { name: "破坏", code: "Sabotage", tags: ["潜入", "调查"], verbs: ["破坏", "瘫痪"] },
-  { name: "营救", code: "Extraction", tags: ["医疗", "支援"], verbs: ["营救", "撤离"] },
-  { name: "防御", code: "Defense", tags: ["战斗", "守卫"], verbs: ["防御", "固守"] },
-  { name: "占领", code: "Occupation", tags: ["战斗", "支援"], verbs: ["占领", "接管"] },
-  { name: "特殊", code: "Special", tags: ["神秘", "调查"], verbs: ["接触", "处理"] },
+  { name: "护送", code: "Escort", actionType: "combat", tags: ["守卫", "生存"], verbs: ["护送", "掩护"] },
+  { name: "运输", code: "Transport", actionType: "logistics", tags: ["守卫", "支援"], verbs: ["转运", "押运"] },
+  { name: "侦察", code: "Recon", actionType: "logistics", tags: ["侦察", "潜入"], verbs: ["侦察", "标记"] },
+  { name: "搜索", code: "Search", actionType: "logistics", tags: ["调查", "侦察"], verbs: ["搜索", "定位"] },
+  { name: "回收", code: "Recovery", actionType: "logistics", tags: ["调查", "生存"], verbs: ["回收", "封存"] },
+  { name: "歼灭", code: "Hunt", actionType: "combat", tags: ["战斗", "守卫"], verbs: ["清剿", "猎杀"] },
+  { name: "突袭", code: "Raid", actionType: "combat", tags: ["战斗", "潜入"], verbs: ["突袭", "夺取"] },
+  { name: "破坏", code: "Sabotage", actionType: "combat", tags: ["潜入", "调查"], verbs: ["破坏", "瘫痪"] },
+  { name: "营救", code: "Extraction", actionType: "logistics", tags: ["医疗", "支援"], verbs: ["营救", "撤离"] },
+  { name: "防御", code: "Defense", actionType: "combat", tags: ["战斗", "守卫"], verbs: ["防御", "固守"] },
+  { name: "占领", code: "Occupation", actionType: "combat", tags: ["战斗", "支援"], verbs: ["占领", "接管"] },
+  { name: "特殊", code: "Special", actionType: "logistics", tags: ["神秘", "调查"], verbs: ["接触", "处理"] },
 ];
+
+export const mercenaryRanks = ["无", "F", "E", "D", "C", "B", "A", "S"];
+
+export const promotionChances = {
+  "无": 60,
+  F: 50,
+  E: 40,
+  D: 30,
+  C: 20,
+  B: 10,
+  A: 5,
+  S: 0,
+};
+
+export const positiveTraits = {
+  combat: [
+    { name: "交叉火力", description: "更擅长在混战中寻找射界。", tags: ["战斗"] },
+    { name: "近距压制", description: "贴近目标时更稳定。", tags: ["战斗", "守卫"] },
+    { name: "撤离本能", description: "知道什么时候该拖着队友离开火线。", tags: ["生存"] },
+    { name: "破门专家", description: "对突袭、破坏类行动更有经验。", tags: ["战斗", "潜入"] },
+    { name: "战地胆识", description: "枪声越近，手越稳。", tags: ["守卫"] },
+  ],
+  logistics: [
+    { name: "路线规划", description: "能提前发现更省补给的行进路线。", tags: ["支援"] },
+    { name: "情报洁癖", description: "会反复核对来源和时间戳。", tags: ["调查"] },
+    { name: "灰市谈判", description: "懂得如何让中间人多吐出一点真话。", tags: ["支援"] },
+    { name: "静默行动", description: "擅长让行动少留下可追踪痕迹。", tags: ["潜入"] },
+    { name: "现场分拣", description: "知道哪些物资值得带回基地。", tags: ["生存"] },
+  ],
+};
 
 export const contractIntelFields = [
   { key: "enemy", label: "预计敌人" },
