@@ -1,0 +1,123 @@
+export function renderAppShell(root) {
+  root.innerHTML = `
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">佣兵管理原型</p>
+        <h1>Gun Core</h1>
+      </div>
+      <div class="top-actions">
+        <button id="save-game" class="ghost-button" type="button">保存</button>
+        <button id="reset-game" class="danger-button" type="button">重开</button>
+        <button id="advance-day" class="primary-button" type="button">推进一天</button>
+      </div>
+    </header>
+
+    <nav class="tabbar" aria-label="主功能切换">
+      <button class="tab-button active" data-tab-target="personnel" type="button">人员</button>
+      <button class="tab-button" data-tab-target="mechs" type="button">机甲</button>
+      <button class="tab-button" data-tab-target="warehouse" type="button">仓库</button>
+      <button class="tab-button" data-tab-target="missions" type="button">任务</button>
+      <button class="tab-button" data-tab-target="facilities" type="button">基础设施</button>
+    </nav>
+
+    <main class="dashboard">
+      <section class="tab-page active" data-tab-page="personnel">
+        <div class="tab-layout two-column">
+          <section class="panel roster-panel">
+            <div class="section-heading">
+              <h2>佣兵名册</h2>
+              <button id="create-player" class="ghost-button" type="button">创建玩家角色</button>
+            </div>
+            <div id="roster-list" class="card-grid"></div>
+          </section>
+
+          <section class="panel recruit-panel">
+            <div class="section-heading">
+              <h2>招募</h2>
+              <button id="refresh-recruits" class="ghost-button" type="button">刷新</button>
+            </div>
+            <div id="recruit-list" class="stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-page" data-tab-page="mechs">
+        <section class="panel">
+          <div class="section-heading">
+            <h2>机甲</h2>
+            <span class="badge">待设计</span>
+          </div>
+          <div id="mech-list" class="placeholder-grid"></div>
+        </section>
+      </section>
+
+      <section class="tab-page" data-tab-page="warehouse">
+        <div id="warehouse-list" class="stack"></div>
+      </section>
+
+      <section class="tab-page" data-tab-page="missions">
+        <section class="panel mission-panel">
+          <div class="section-heading">
+            <h2>任务</h2>
+            <span id="selected-count" class="badge">未选择队伍</span>
+          </div>
+          <div id="mission-list" class="mission-grid"></div>
+        </section>
+      </section>
+
+      <section class="tab-page" data-tab-page="facilities">
+        <div class="tab-layout two-column">
+          <section class="panel base-panel">
+            <div class="section-heading">
+              <h2>基地总览</h2>
+              <span id="current-day" class="badge">第 1 天</span>
+            </div>
+            <div id="resource-grid" class="resource-grid"></div>
+          </section>
+
+          <section class="panel facility-panel">
+            <div class="section-heading">
+              <h2>基础设施</h2>
+              <span class="badge">维护费计入每日支出</span>
+            </div>
+            <div id="building-list" class="stack"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="section-heading">
+          <h2>行动记录</h2>
+          <button id="clear-log" class="ghost-button" type="button">清空</button>
+        </div>
+        <div id="event-log" class="event-log"></div>
+      </section>
+    </main>
+
+    <dialog id="player-dialog" class="dialog">
+      <form method="dialog" id="player-form">
+        <h2>创建你的代表角色</h2>
+        <label>
+          名字
+          <input id="player-name" name="name" maxlength="16" placeholder="输入角色名" required />
+        </label>
+        <label>
+          职业
+          <select id="player-class" name="class"></select>
+        </label>
+        <div class="dialog-actions">
+          <button class="ghost-button" value="cancel" type="submit">取消</button>
+          <button class="primary-button" value="confirm" type="submit">创建</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="mercenary-dialog" class="dialog dossier-dialog">
+      <div class="dossier" id="mercenary-dossier"></div>
+    </dialog>
+
+    <dialog id="weapon-dialog" class="dialog weapon-dialog">
+      <div class="dossier" id="weapon-dossier"></div>
+    </dialog>
+  `;
+}
