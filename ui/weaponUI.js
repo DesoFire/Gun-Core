@@ -1,18 +1,10 @@
 import { attributeLabels, attributeScaleLabels } from "../data/weaponData.js";
-import { addInventoryItem, getInventoryItem } from "../modules/inventory.js";
-import { generateWeaponItem } from "../modules/weaponGenerator.js";
+import { getInventoryItem } from "../modules/inventory.js";
 
 let lastWeapon = null;
 
 export function initWeaponUI() {
   document.addEventListener("click", (event) => {
-    const generateButton = event.target.closest("[data-generate-weapon]");
-    if (generateButton) {
-      lastWeapon = generateWeaponItem();
-      addInventoryItem(lastWeapon, "随机武器生成模块");
-      return;
-    }
-
     const openButton = event.target.closest("[data-open-weapon]");
     if (openButton) {
       openWeaponDialog(openButton.dataset.openWeapon);
@@ -24,18 +16,6 @@ export function initWeaponUI() {
       document.querySelector("#weapon-dialog").close();
     }
   });
-}
-
-export function renderWeaponGeneratorUI() {
-  return `
-    <section class="panel weapon-generator-panel">
-      <div class="section-heading">
-        <h2>随机武器生成</h2>
-        <button class="primary-button" data-generate-weapon type="button">生成武器</button>
-      </div>
-      ${lastWeapon ? renderWeaponCard(lastWeapon) : `<p class="muted">点击生成武器。结果会显示在这里，并加入仓库。</p>`}
-    </section>
-  `;
 }
 
 export function renderWeaponCard(weapon) {

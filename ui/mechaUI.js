@@ -16,5 +16,23 @@ export function renderMechaUI() {
         <p class="muted">当前任务结算暂未要求机甲。下一阶段可以先做“机甲提供任务标签与维护压力”。</p>
       </article>
     `;
+    return;
   }
+  container.innerHTML = mechs
+    .map(
+      (mech) => `
+        <article class="card">
+          <div class="card-header">
+            <div>
+              <p class="card-title">${mech.name}</p>
+              <p class="muted">${mech.rarity ?? "未知"}级 · ${mech.role ?? "通用"} · 维护费 ${mech.maintenance ?? 0} 金/天</p>
+            </div>
+            <span class="badge">${mech.condition ?? 100}%</span>
+          </div>
+          <p class="muted">${(mech.tags ?? []).join(" / ") || "无标签"}</p>
+          <p class="muted">${mech.note ?? "暂无机体备注。"}</p>
+        </article>
+      `
+    )
+    .join("");
 }

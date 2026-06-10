@@ -1,5 +1,5 @@
 import { getInventory } from "../modules/inventory.js";
-import { renderWeaponCard, renderWeaponGeneratorUI, renderWeaponSummaryLine } from "./weaponUI.js";
+import { renderWeaponCard, renderWeaponSummaryLine } from "./weaponUI.js";
 
 export function initInventoryUI() {}
 
@@ -7,7 +7,6 @@ export function renderInventoryUI() {
   const container = document.querySelector("#warehouse-list");
   const inventory = getInventory();
   container.innerHTML = `
-    ${renderWeaponGeneratorUI()}
     <section class="panel">
       <div class="section-heading">
         <h2>库存清单</h2>
@@ -31,12 +30,15 @@ function renderInventoryItems(inventory) {
   return inventory
     .map((item) => {
       if (item.itemCategory === "weapon" || item.damageDice) return renderWeaponCard(item);
+      const tags = (item.tags ?? []).join(" / ") || "无标签";
+      const rarity = item.rarity ? `${item.rarity}级 · ` : "";
+      const quantity = item.quantity ? ` · 数量 ${item.quantity}` : "";
       return `
         <article class="card">
           <div class="card-header">
             <div>
               <p class="card-title">${item.name}</p>
-              <p class="muted">${item.type} · ${(item.tags ?? []).join(" / ") || "无标签"}</p>
+              <p class="muted">${rarity}${item.type ?? item.itemCategory}${quantity} · ${tags}</p>
             </div>
           </div>
           <p class="muted">${item.note}</p>
@@ -48,5 +50,7 @@ function renderInventoryItems(inventory) {
 
 export function renderInventoryItemSummary(item) {
   if (item.itemCategory === "weapon" || item.damageDice) return renderWeaponSummaryLine(item);
-  return `${item.type} · ${(item.tags ?? []).join(" / ") || "无标签"}`;
+  const rarity = item.rarity ? `${item.rarity}级 · ` : "";
+  const quantity = item.quantity ? ` · 数量 ${item.quantity}` : "";
+  return `${rarity}${item.type ?? item.itemCategory}${quantity} · ${(item.tags ?? []).join(" / ") || "无标签"}`;
 }

@@ -19,7 +19,6 @@ import { getWeaponTagNames } from "../modules/weaponGenerator.js";
 import { addLog, getState } from "../js/state.js";
 import { identityFee } from "../modules/faction.js";
 
-let selectedCharacters = new Set();
 let requestRender = () => {};
 let openDossierCharacterId = null;
 let activeDossierTab = "attributes";
@@ -45,14 +44,6 @@ export function renderCharacterUI() {
   }
 }
 
-export function getSelectedCharacterIds() {
-  return [...selectedCharacters];
-}
-
-export function clearSelectedCharacters() {
-  selectedCharacters.clear();
-}
-
 function renderRoster() {
   const container = document.querySelector("#roster-list");
   const roster = getCharacters();
@@ -62,12 +53,6 @@ function renderRoster() {
   }
 
   container.innerHTML = roster.map(renderCharacterCard).join("");
-  container.querySelectorAll("[data-select-character]").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      toggleCharacter(button.dataset.selectCharacter);
-    });
-  });
   container.querySelectorAll("[data-open-character]").forEach((card) => {
     card.addEventListener("click", () => openCharacterSheet(card.dataset.openCharacter));
   });
@@ -80,19 +65,15 @@ function renderRoster() {
 }
 
 function renderCharacterCard(character) {
-  const selected = selectedCharacters.has(character.id);
-  const canAct = getState().gameStatus === "active";
   const rankLabel = formatRank(character.rank);
   return `
-    <article class="card ${selected ? "selected" : ""}" data-open-character="${character.id}">
+    <article class="card" data-open-character="${character.id}">
       <div class="card-header">
         <div>
           <p class="card-title">${character.name}</p>
           <p class="muted">${character.isPlayer ? "玩家角色 · " : ""}${character.className} · ${rankLabel}</p>
         </div>
-        <button class="ghost-button" data-select-character="${character.id}" ${!canAct || character.status !== "待命" ? "disabled" : ""}>
-          ${selected ? "取消" : "入队"}
-        </button>
+        <span class="badge">${character.status}</span>
       </div>
       <div class="badge-row">${character.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
       <div class="stat-line">
@@ -104,7 +85,7 @@ function renderCharacterCard(character) {
         <span>状态 ${character.status}</span>
       </div>
       <p class="muted">正面特性 ${character.traits?.length ?? 0} 项</p>
-      <button class="link-button" data-open-character-button="${character.id}" type="button">查看人物卡</button>
+      <button class="link-button" data-open-character-button="${character.id}" type="button">查看人物卡 / 更换装备</button>
     </article>
   `;
 }
@@ -135,20 +116,9 @@ function renderRecruits() {
   });
 }
 
-function toggleCharacter(id) {
-  if (selectedCharacters.has(id)) {
-    selectedCharacters.delete(id);
-  } else if (selectedCharacters.size < 4) {
-    selectedCharacters.add(id);
-  } else {
-    addLog("一支小队最多 4 人。");
-  }
-  requestRender();
-}
-
-function openCharacterSheet(id) {
+export function openCharacterSheet(id, options = {}) {
   openDossierCharacterId = id;
-  activeDossierTab = "attributes";
+  activeDossierTab = options.tab ?? "attributes";
   selectedEquipmentSlot = "head";
   renderCharacterSheet(id);
   document.querySelector("#mercenary-dialog").showModal();

@@ -35,10 +35,47 @@ export const characterClasses = {
 };
 
 export const buildings = {
-  tavern: { name: "酒馆", description: "提高招募池规模。", cost: 70, upkeep: 5 },
-  infirmary: { name: "医务室", description: "每日降低受伤佣兵的压力。", cost: 80, upkeep: 7 },
-  intel: { name: "情报室", description: "提高任务成功率。", cost: 90, upkeep: 8 },
+  tavern: { name: "酒馆", description: "提高招募池规模。", cost: 70, upkeep: 5, unlockCost: 70 },
+  blackMarket: { name: "黑市", description: "花钱购买当前评级的补给、武器、防具和机甲。", cost: 95, upkeep: 6, unlockCost: 95 },
+  hospital: { name: "医院", description: "花钱治疗受伤或高压佣兵。", cost: 110, upkeep: 9, unlockCost: 110 },
+  infirmary: { name: "医务室", description: "每日降低受伤佣兵的压力。", cost: 80, upkeep: 7, unlockCost: 80 },
+  intel: { name: "情报室", description: "提高契约成功率。", cost: 90, upkeep: 8, unlockCost: 90 },
 };
+
+export const facilityRanks = ["F", "E", "D", "C", "B", "A", "S"];
+
+export const facilityUpgradeRequirements = [
+  { rank: "F", reputation: 0, day: 1 },
+  { rank: "E", reputation: 5, day: 2 },
+  { rank: "D", reputation: 12, day: 4 },
+  { rank: "C", reputation: 22, day: 7 },
+  { rank: "B", reputation: 34, day: 10 },
+  { rank: "A", reputation: 48, day: 14 },
+  { rank: "S", reputation: 60, day: 18 },
+];
+
+export const blackMarketSupplyPool = [
+  { name: "压缩饮水包", type: "水", tags: ["补给", "生存"], note: "口感像塑料管道里的雨，但至少能喝。" },
+  { name: "高热量糊砖", type: "食物", tags: ["补给", "生存"], note: "三口一顿，五顿开始怀疑人生。" },
+  { name: "旧式战术背包", type: "背包", tags: ["支援", "生存"], note: "带血迹的地方已经礼貌性洗过。" },
+  { name: "战利品封装箱", type: "战利品", tags: ["交易", "黑市"], note: "内容不保证合法，但保证有人愿意收。" },
+  { name: "一次性滤水芯", type: "杂物", tags: ["补给"], note: "能过滤水，也能过滤一部分乐观。" },
+];
+
+export const armorPool = [
+  { name: "拼接防弹胸甲", slot: "chest", type: "护具", tags: ["守卫"], note: "由三种标准和一种误会拼成。" },
+  { name: "陶瓷插板背心", slot: "chest", type: "护具", tags: ["战斗"], note: "正面抗得住，侧面看运气。" },
+  { name: "封闭式防暴头盔", slot: "head", type: "护具", tags: ["守卫"], note: "视野变窄，胆子变大。" },
+  { name: "轻型外骨骼腰挂", slot: "waist", type: "装备", tags: ["支援"], note: "降低搬运时骂人的频率。" },
+  { name: "折叠复合盾", slot: "leftHand", type: "装备", tags: ["守卫"], note: "展开速度取决于使用者的求生欲。" },
+];
+
+export const mechaFrames = [
+  { name: "矿区搬运改机", role: "工程", tags: ["支援", "生存"], note: "原本用于搬矿，现在偶尔搬敌人。" },
+  { name: "轻型侦察机体", role: "侦察", tags: ["侦察", "潜入"], note: "跑得快，装甲薄，账单很诚实。" },
+  { name: "旧军规突击骨架", role: "突击", tags: ["战斗", "守卫"], note: "退役原因被黑市卖家略过了。" },
+  { name: "移动医疗舱", role: "医疗", tags: ["医疗", "支援"], note: "能救命，也能制造非常昂贵的安慰。" },
+];
 
 export const missionTemplates = [
   { name: "护送补给车", tags: ["战斗", "守卫"], difficulty: 2, duration: 2, reward: { gold: 55, reputation: 8 } },

@@ -415,6 +415,28 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+.facility-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.facility-card {
+  cursor: pointer;
+  display: grid;
+  gap: 10px;
+  min-height: 150px;
+}
+
+.facility-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.facility-card.locked {
+  background: #171a1f;
+  border-style: dashed;
+}
+
 .placeholder-card {
   background: #14171b;
   border: 1px dashed var(--line);
@@ -543,6 +565,47 @@ h3 {
 
 .intel-row.revealed strong {
   color: var(--text);
+}
+
+.dispatch-summary {
+  margin-top: 10px;
+}
+
+.dispatch-panel {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.dispatch-status {
+  align-items: center;
+  background: #171a1f;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  padding: 10px;
+}
+
+.dispatch-roster {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.dispatch-character {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.dispatch-character.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .card.selected {
@@ -1012,6 +1075,10 @@ select {
 
   .command-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dispatch-status {
+    grid-template-columns: 1fr;
   }
 
   .dossier-grid {

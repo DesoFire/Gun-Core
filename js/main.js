@@ -2,9 +2,20 @@ import { buildings } from "../data/sampleData.js";
 import { initRouter } from "./router.js";
 import { getState, resetState, saveState, subscribe, updateState } from "./state.js";
 import { advanceDay } from "../modules/mission.js";
-import { calculateDailyUpkeep, calculateRestAttackChance, upgradeBuilding } from "../modules/faction.js";
-import { buySupplies, getGameSummary, reduceHeat, treatWounds } from "../modules/game.js";
-import { clearSelectedCharacters, getSelectedCharacterIds, initCharacterUI, renderCharacterUI } from "../ui/characterUI.js";
+import {
+  buyBlackMarketItem,
+  calculateDailyUpkeep,
+  calculateRestAttackChance,
+  canUpgradeFacility,
+  getBlackMarketItemCost,
+  getFacilityRankLabel,
+  getFacilityRequirement,
+  getFacilityUpgradeCost,
+  hospitalTreatMercenaries,
+  upgradeBuilding,
+} from "../modules/faction.js";
+import { buySupplies, getGameSummary, reduceHeat } from "../modules/game.js";
+import { initCharacterUI, renderCharacterUI } from "../ui/characterUI.js";
 import { initInventoryUI, renderInventoryUI } from "../ui/inventoryUI.js";
 import { initMechaUI, renderMechaUI } from "../ui/mechaUI.js";
 import { initMissionUI, renderMissionUI } from "../ui/missionUI.js";
@@ -15,7 +26,7 @@ function init() {
   renderAppShell(document.querySelector("#root"));
   initRouter();
   initCharacterUI({ onRenderNeeded: renderApp });
-  initMissionUI({ getSelectedIds: getSelectedCharacterIds, clearSelected: clearSelectedCharacters });
+  initMissionUI();
   initMechaUI();
   initInventoryUI();
   initWeaponUI();
@@ -27,7 +38,6 @@ function init() {
 function bindGlobalActions() {
   document.querySelector("#advance-day").addEventListener("click", advanceDay);
   document.querySelector("#buy-supplies").addEventListener("click", buySupplies);
-  document.querySelector("#treat-wounds").addEventListener("click", treatWounds);
   document.querySelector("#reduce-heat").addEventListener("click", reduceHeat);
   document.querySelector("#save-game").addEventListener("click", () => {
     saveState();
@@ -36,7 +46,6 @@ function bindGlobalActions() {
     });
   });
   document.querySelector("#reset-game").addEventListener("click", () => {
-    clearSelectedCharacters();
     resetState();
   });
   document.querySelector("#clear-log").addEventListener("click", () => {
@@ -73,7 +82,6 @@ function renderCommandPanel() {
   status.className = `badge status-${summary.status}`;
   document.querySelector("#advance-day").disabled = summary.status !== "active";
   document.querySelector("#buy-supplies").disabled = summary.status !== "active" || state.gold < 36;
-  document.querySelector("#treat-wounds").disabled = summary.status !== "active" || state.gold < 28;
   document.querySelector("#reduce-heat").disabled = summary.status !== "active" || state.gold < 42;
   document.querySelector("#command-grid").innerHTML = [
     ["剩余天数", summary.daysLeft],
@@ -88,7 +96,6 @@ function renderCommandPanel() {
 function renderResources() {
   const state = getState();
   document.querySelector("#current-day").textContent = `第 ${state.day} 天`;
-  document.querySelector("#facility-current-day").textContent = `第 ${state.day} 天`;
   const resources = [
     ["资金", state.gold],
     ["补给", state.supplies],
@@ -102,7 +109,6 @@ function renderResources() {
     .map(([label, value]) => `<div class="resource"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
   document.querySelector("#resource-grid").innerHTML = resourceHtml;
-  document.querySelector("#facility-resource-grid").innerHTML = resourceHtml;
 }
 
 function renderOverview() {
@@ -218,24 +224,164 @@ function renderBuildings() {
   container.innerHTML = Object.entries(buildings)
     .map(([id, building]) => {
       const level = state.buildings[id] ?? 0;
-      const cost = building.cost + level * 45;
-      const disabled = state.gold < cost || state.gameStatus !== "active" ? "disabled" : "";
+      const isUnlocked = level > 0;
+      const rank = getFacilityRankLabel(level);
+      const cost = getFacilityUpgradeCost(id, level);
+      const requirement = getFacilityRequirement(Math.min(level + 1, 7));
+      const canUpgrade = level < 7 && canUpgradeFacility(id);
+      const disabled = state.gold < cost || state.gameStatus !== "active" || !canUpgrade ? "disabled" : "";
       return `
-        <article class="card">
+        <article class="card facility-card ${isUnlocked ? "" : "locked"}" data-open-facility="${id}">
           <div class="card-header">
             <div>
-              <p class="card-title">${building.name} Lv.${level}</p>
-              <p class="muted">${building.description} 维护费：${building.upkeep * level}/天</p>
+              <p class="card-title">${building.name}</p>
+              <p class="muted">${isUnlocked ? `${rank}级 · 维护费 ${building.upkeep * level}/天` : "未解锁"}</p>
             </div>
-            <button class="ghost-button" data-upgrade="${id}" ${disabled}>${cost} 金</button>
+            <span class="badge">${isUnlocked ? rank : "未解锁"}</span>
+          </div>
+          <p class="muted">${building.description}</p>
+          ${
+            level < 7
+              ? `<p class="muted">下一阶段：${requirement.rank}级 · 需要 ${requirement.reputation} 声望 / 第 ${requirement.day} 天</p>`
+              : `<p class="muted">已达到最高 S 级。</p>`
+          }
+          <div class="button-row">
+            ${renderFacilityAction(id, level, cost, disabled)}
           </div>
         </article>
       `;
     })
     .join("");
 
+  container.querySelectorAll("[data-open-facility]").forEach((card) => {
+    card.addEventListener("click", () => openFacilityDialog(card.dataset.openFacility));
+  });
   container.querySelectorAll("[data-upgrade]").forEach((button) => {
-    button.addEventListener("click", () => upgradeBuilding(button.dataset.upgrade));
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      upgradeBuilding(button.dataset.upgrade);
+    });
+  });
+  container.querySelectorAll("[data-buy-black-market-item]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      buyBlackMarketItem(button.dataset.buyBlackMarketItem);
+    });
+  });
+  container.querySelectorAll("[data-hospital-treat]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      hospitalTreatMercenaries();
+    });
+  });
+}
+
+function renderFacilityAction(id, level, cost, disabled) {
+  const state = getState();
+  if (level <= 0) return `<button class="primary-button" data-upgrade="${id}" ${disabled}>解锁 F级 · ${cost} 金</button>`;
+  const upgradeButton = renderFacilityUpgradeButton(id, level, cost, disabled);
+  if (id === "blackMarket") {
+    const rank = getFacilityRankLabel(level);
+    const actions = [
+      ["supplies", "购买补给/杂物"],
+      ["weapon", "购买武器"],
+      ["armor", "购买防具"],
+      ["mecha", "购买机甲"],
+    ];
+    return actions
+      .map(([kind, label]) => {
+        const itemCost = getBlackMarketItemCost(kind, rank);
+        const isDisabled = state.gameStatus !== "active" || state.gold < itemCost ? "disabled" : "";
+        return `<button class="${kind === "mecha" ? "primary-button" : "ghost-button"}" data-buy-black-market-item="${kind}" ${isDisabled}>${label} · ${rank}级 ${itemCost} 金</button>`;
+      })
+      .join("");
+    return `${actions}${upgradeButton}`;
+  }
+  if (id === "hospital") {
+    return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" || state.gold < 32 ? "disabled" : ""}>治疗佣兵 32 金</button>${upgradeButton}`;
+  }
+  return upgradeButton;
+}
+
+function renderFacilityUpgradeButton(id, level, cost, disabled) {
+  if (level >= 7) return `<button class="ghost-button" disabled>最高 S级</button>`;
+  return `<button class="ghost-button" data-upgrade="${id}" ${disabled}>升级到 ${getFacilityRankLabel(level + 1)}级 · ${cost} 金</button>`;
+}
+
+function openFacilityDialog(id) {
+  const state = getState();
+  const building = buildings[id];
+  if (!building) return;
+
+  const level = state.buildings[id] ?? 0;
+  const isUnlocked = level > 0;
+  const rank = getFacilityRankLabel(level);
+  const nextCost = getFacilityUpgradeCost(id, level);
+  const nextRequirement = getFacilityRequirement(Math.min(level + 1, 7));
+  const canUpgrade = level < 7 && canUpgradeFacility(id);
+  const specialText = {
+    blackMarket: `只能买到当前黑市评级的商品。当前可购买 ${rank}级补给、武器、防具与机甲。`,
+    hospital: "解锁后可花费 32 金治疗所有受伤或高压佣兵。",
+    tavern: "提高招募池规模，便于寻找更多候选佣兵。",
+    infirmary: "每日推进时自动降低受伤或高压佣兵的压力。",
+    intel: "每级为契约成功率提供额外情报加成。",
+  }[id] ?? "基础设施效果待扩展。";
+
+  document.querySelector("#facility-dossier").innerHTML = `
+    <div class="dossier-top">
+      <div>
+        <div class="dossier-code">BASE FACILITY / ${id.toUpperCase()}</div>
+        <h2 class="dossier-title">${building.name}</h2>
+        <p class="muted">${isUnlocked ? `${rank}级` : "未解锁"} · 维护费 ${building.upkeep * level}/天</p>
+      </div>
+      <button class="ghost-button" data-close-facility type="button">关闭</button>
+    </div>
+    <div class="dossier-grid">
+      <section class="dossier-section">
+        <h3>状态</h3>
+        <div class="field-list">
+          <div class="field"><span>当前状态</span><strong>${isUnlocked ? "已解锁" : "未解锁"}</strong></div>
+          <div class="field"><span>评级</span><strong>${rank}</strong></div>
+          <div class="field"><span>维护费</span><strong>${building.upkeep * level} 金/天</strong></div>
+          <div class="field"><span>${isUnlocked ? "升级费用" : "解锁费用"}</span><strong>${level >= 7 ? "已满级" : `${nextCost} 金`}</strong></div>
+          <div class="field"><span>下一评级</span><strong>${level >= 7 ? "S级" : `${nextRequirement.rank}级`}</strong></div>
+          <div class="field"><span>升级条件</span><strong>${level >= 7 ? "已完成" : `${nextRequirement.reputation} 声望 / 第 ${nextRequirement.day} 天`}</strong></div>
+        </div>
+      </section>
+      <section class="dossier-section">
+        <h3>用途</h3>
+        <p class="muted">${building.description}</p>
+        <p class="muted">${specialText}</p>
+      </section>
+      <section class="dossier-section wide">
+        <h3>可用操作</h3>
+        <div class="button-row">
+          ${renderFacilityAction(id, level, nextCost, state.gold < nextCost || state.gameStatus !== "active" || !canUpgrade)}
+        </div>
+      </section>
+    </div>
+  `;
+
+  const dialog = document.querySelector("#facility-dialog");
+  dialog.showModal();
+  dialog.querySelector("[data-close-facility]").addEventListener("click", () => dialog.close());
+  dialog.querySelectorAll("[data-upgrade]").forEach((button) => {
+    button.addEventListener("click", () => {
+      upgradeBuilding(button.dataset.upgrade);
+      dialog.close();
+    });
+  });
+  dialog.querySelectorAll("[data-buy-black-market-item]").forEach((button) => {
+    button.addEventListener("click", () => {
+      buyBlackMarketItem(button.dataset.buyBlackMarketItem);
+      dialog.close();
+    });
+  });
+  dialog.querySelectorAll("[data-hospital-treat]").forEach((button) => {
+    button.addEventListener("click", () => {
+      hospitalTreatMercenaries();
+      dialog.close();
+    });
   });
 }
 

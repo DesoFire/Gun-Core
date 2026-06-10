@@ -119,15 +119,23 @@ export function startMission(id, memberIds) {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     const mission = draft.missions.find((item) => item.id === id);
-    if (!mission || memberIds.length === 0) return;
+    if (!mission || mission.status !== "available") return;
+    const validMemberIds = [...new Set(memberIds)].filter((memberId) =>
+      draft.roster.some((character) => character.id === memberId && character.status === "待命")
+    );
+    if (validMemberIds.length === 0) return;
+    if (validMemberIds.length > 4) {
+      draft.log.push(`第 ${draft.day} 天：一支派遣小队最多 4 人。`);
+      return;
+    }
 
     mission.status = "active";
-    mission.assigned = [...memberIds];
+    mission.assigned = [...validMemberIds];
     mission.remaining = mission.duration;
     mission.startDay = draft.day;
     mission.endDay = draft.day + mission.duration;
     draft.roster.forEach((character) => {
-      if (memberIds.includes(character.id)) character.status = `履行「${mission.name}」`;
+      if (validMemberIds.includes(character.id)) character.status = `履行「${mission.name}」`;
     });
     draft.timeline.push({
       id: createId(),
@@ -136,7 +144,7 @@ export function startMission(id, memberIds) {
       type: "contract",
       title: mission.name,
       status: "active",
-      detail: `执行 ${mission.duration} 天。队伍：${memberIds.length} 人。`,
+      detail: `执行 ${mission.duration} 天。队伍：${validMemberIds.length} 人。`,
       missionId: mission.id,
     });
     draft.log.push(`第 ${draft.day} 天：小队已出发履行契约「${mission.name}」。`);

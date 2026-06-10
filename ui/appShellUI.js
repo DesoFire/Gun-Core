@@ -35,7 +35,6 @@ export function renderAppShell(root) {
             <div id="command-grid" class="command-grid"></div>
             <div class="button-row">
               <button id="buy-supplies" class="ghost-button" type="button">黑市补给 36 金</button>
-              <button id="treat-wounds" class="ghost-button" type="button">地下医疗 28 金</button>
               <button id="reduce-heat" class="ghost-button" type="button">清理痕迹 42 金</button>
             </div>
           </section>
@@ -122,23 +121,13 @@ export function renderAppShell(root) {
       </section>
 
       <section class="tab-page" data-tab-page="facilities">
-        <div class="tab-layout two-column">
-          <section class="panel base-panel">
-            <div class="section-heading">
-              <h2>基地总览</h2>
-              <span id="facility-current-day" class="badge">第 1 天</span>
-            </div>
-            <div id="facility-resource-grid" class="resource-grid"></div>
-          </section>
-
-          <section class="panel facility-panel">
-            <div class="section-heading">
-              <h2>基础设施</h2>
-              <span class="badge">维护费计入每日支出</span>
-            </div>
-            <div id="building-list" class="stack"></div>
-          </section>
-        </div>
+        <section class="panel facility-panel">
+          <div class="section-heading">
+            <h2>基础设施</h2>
+            <span class="badge">点开查看详情</span>
+          </div>
+          <div id="building-list" class="facility-grid"></div>
+        </section>
       </section>
 
       <section class="panel log-panel">
@@ -178,6 +167,10 @@ export function renderAppShell(root) {
 
     <dialog id="contract-dialog" class="dialog contract-dialog">
       <div class="dossier" id="contract-dossier"></div>
+    </dialog>
+
+    <dialog id="facility-dialog" class="dialog dossier-dialog">
+      <div class="dossier" id="facility-dossier"></div>
     </dialog>
   `;
 }
