@@ -1,6 +1,14 @@
 import { getState } from "../js/state.js";
 import { contractIntelFields } from "../data/sampleData.js";
-import { calculateMissionChance, getMissions, investigateMission, refreshMission, startMission } from "../modules/mission.js";
+import {
+  calculateMissionChance,
+  getMissionPowerRange,
+  getMissions,
+  getTeamCombatPower,
+  investigateMission,
+  refreshMission,
+  startMission,
+} from "../modules/mission.js";
 import { openCharacterSheet } from "./characterUI.js";
 
 let openContractId = null;
@@ -24,8 +32,9 @@ export function renderMissionUI() {
         .join("、");
       const revealedIntel = mission.revealedIntel ?? [];
       const lockedIntelCount = contractIntelFields.filter((field) => !revealedIntel.includes(field.key)).length;
+      const powerRange = getMissionPowerRange(mission);
       const canAct = state.gameStatus === "active";
-      const canInvestigate = canAct && !isActive && lockedIntelCount > 0;
+      const canInvestigate = canAct && !isActive && (lockedIntelCount > 0 || powerRange.level < 3);
       return `
         <article class="card contract-card contract-summary-card" data-open-contract="${mission.id}">
           <div class="card-header">
@@ -37,6 +46,7 @@ export function renderMissionUI() {
           </div>
           <div class="contract-public">
             <span>难度 ${mission.difficulty}</span>
+            <span>战力 ${powerRange.low}-${powerRange.high}</span>
             <span>${mission.duration} 天</span>
             <span>${mission.reward.gold} 金</span>
             <span>${mission.reward.reputation} 声望</span>
@@ -113,6 +123,8 @@ function renderContractCard(id) {
   const selectedIds = [...dispatchSelection].filter((memberId) => roster.some((character) => character.id === memberId));
   if (selectedIds.length !== dispatchSelection.size) dispatchSelection = new Set(selectedIds);
   const chance = isActive ? null : calculateMissionChance(selectedIds, mission);
+  const teamPower = getTeamCombatPower(selectedIds);
+  const powerRange = getMissionPowerRange(mission);
   const isDispatching = dispatchMissionId === mission.id && !isActive;
 
   const dossier = document.querySelector("#contract-dossier");
@@ -133,14 +145,17 @@ function renderContractCard(id) {
           <div class="field"><span>截止日</span><strong>第 ${mission.expiresDay} 天</strong></div>
           <div class="field"><span>执行时间</span><strong>${mission.duration} 天</strong></div>
           <div class="field"><span>难度</span><strong>${mission.difficulty}</strong></div>
+          <div class="field"><span>战力需求</span><strong>${powerRange.low}-${powerRange.high}</strong></div>
+          <div class="field"><span>情报精度</span><strong>${powerRange.level}/3</strong></div>
           <div class="field"><span>报酬</span><strong>${mission.reward.gold} 金 / ${mission.reward.reputation} 声望</strong></div>
           <div class="field"><span>当前估算</span><strong>${isActive ? `剩余 ${mission.remaining} 天` : `${chance}%`}</strong></div>
+          <div class="field"><span>已选战力</span><strong>${teamPower}</strong></div>
         </div>
       </section>
       <section class="dossier-section">
         <h3>行动标签</h3>
         <div class="badge-row">${mission.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
-        <p class="muted">${isActive ? `执行队伍：${assignedNames || "未知"}` : "在本契约卡内点击派遣，然后选择待命队员。"}</p>
+        <p class="muted">${isActive ? `执行队伍：${assignedNames || "未知"}` : "战力需求是隐藏定值，当前仅显示估算区间；调查可收窄区间。"}</p>
       </section>
       <section class="dossier-section wide">
         <h3>简报</h3>
@@ -184,10 +199,14 @@ function renderContractCard(id) {
 
 function renderDispatchSummary(mission, selectedIds) {
   if (mission.status === "active") return "";
+  const range = getMissionPowerRange(mission);
+  const teamPower = getTeamCombatPower(selectedIds);
   return `
     <div class="dispatch-summary">
       <div class="field-list">
         <div class="field"><span>已选队员</span><strong>${selectedIds.length > 0 ? `${selectedIds.length} 人` : "未选择"}</strong></div>
+        <div class="field"><span>队伍战力</span><strong>${teamPower}</strong></div>
+        <div class="field"><span>需求区间</span><strong>${range.low}-${range.high}</strong></div>
         <div class="field"><span>预估成功率</span><strong>${calculateMissionChance(selectedIds, mission)}%</strong></div>
       </div>
     </div>
@@ -198,10 +217,14 @@ function renderDispatchPanel(mission, selectedIds) {
   const state = getState();
   const availableRoster = state.roster.filter((character) => character.status === "待命");
   const chance = calculateMissionChance(selectedIds, mission);
+  const teamPower = getTeamCombatPower(selectedIds);
+  const range = getMissionPowerRange(mission);
   return `
     <div class="dispatch-panel">
       <div class="dispatch-status">
         <div class="field"><span>已选</span><strong>${selectedIds.length}/4 人</strong></div>
+        <div class="field"><span>队伍战力</span><strong>${teamPower}</strong></div>
+        <div class="field"><span>需求区间</span><strong>${range.low}-${range.high}</strong></div>
         <div class="field"><span>预估成功率</span><strong>${chance}%</strong></div>
         <button class="primary-button" data-confirm-dispatch="${mission.id}" ${state.gameStatus !== "active" || selectedIds.length === 0 ? "disabled" : ""} type="button">确认派遣</button>
       </div>
@@ -229,6 +252,7 @@ function renderDispatchCharacter(character, selected) {
         </div>
         <div class="stat-line">
           <span>生命 ${character.hp}/${character.maxHp}</span>
+          <span>战力 ${character.combatPower ?? 0}</span>
           <span>压力 ${character.stress}</span>
           <span>伤势 ${character.wound}</span>
           <span>特性 ${character.traits?.length ?? 0}</span>

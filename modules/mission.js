@@ -12,9 +12,9 @@ import {
   promotionChances,
 } from "../data/sampleData.js";
 import { getState, updateState } from "../js/state.js";
-import { payDailyUpkeep, resolveRestAttack } from "./faction.js";
+import { identityFee, payDailyUpkeep, resolveRestAttack } from "./faction.js";
 import { evaluateGameOverDraft } from "./game.js";
-import { getWeaponTagNames } from "./weaponGenerator.js";
+import { calculateTeamCombatPower, getPromotionCombatPowerGain } from "./combatPower.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
 
 export function getMissions() {
@@ -26,16 +26,19 @@ export function createMission() {
 }
 
 export function createContract(options = {}) {
+  const state = getState();
   const type = options.type ?? randomItem(contractTypes);
   const issuer = options.issuer ?? randomIssuer();
-  const difficulty = options.difficulty ?? randomNumber(2, 5);
+  const reputationTier = Math.floor((state.reputation ?? 0) / 15);
+  const difficulty = options.difficulty ?? clamp(randomNumber(1, 3) + reputationTier, 1, 8);
   const duration = options.duration ?? randomNumber(1, 3 + Math.floor(difficulty / 2));
-  const issueDay = options.issueDay ?? getState().day ?? 1;
+  const issueDay = options.issueDay ?? state.day ?? 1;
   const expiresDay = options.expiresDay ?? issueDay + randomNumber(2, 4) + Math.floor(difficulty / 2);
   const rewardGold = Math.round((35 + difficulty * randomNumber(16, 24)) * (options.rewardMultiplier ?? 1));
   const rewardReputation = Math.max(5, Math.round(difficulty * 3 + randomNumber(0, 5)));
   const tags = [...new Set(type.tags)];
   const name = `${type.name}契约：${randomContractSubject(type)}`;
+  const powerRequirement = options.powerRequirement ?? calculateContractPowerRequirement(difficulty, state.reputation ?? 0);
 
   return {
     id: createId(),
@@ -46,6 +49,8 @@ export function createContract(options = {}) {
     actionType: type.actionType,
     acquisition: options.acquisition ?? "广撒网",
     difficulty,
+    powerRequirement,
+    powerIntelLevel: options.powerIntelLevel ?? 0,
     duration,
     issueDay,
     expiresDay,
@@ -97,9 +102,11 @@ export function investigateMission(id) {
     const mission = draft.missions.find((item) => item.id === id);
     if (!mission || mission.status !== "available") return;
 
+    normalizeContractPowerFields(mission, draft.reputation ?? 0);
     upgradeMissionToContract(mission);
     const lockedFields = contractIntelFields.filter((field) => !mission.revealedIntel.includes(field.key));
-    if (lockedFields.length === 0) return;
+    const canRefinePowerIntel = (mission.powerIntelLevel ?? 0) < 3;
+    if (lockedFields.length === 0 && !canRefinePowerIntel) return;
 
     const cost = mission.investigateCost ?? calculateInvestigateCost(mission.difficulty ?? 2);
     if (draft.gold < cost) {
@@ -107,11 +114,17 @@ export function investigateMission(id) {
       return;
     }
 
-    const field = randomItem(lockedFields);
     draft.gold -= cost;
-    mission.revealedIntel.push(field.key);
-    mission.investigateCost = calculateInvestigateCost(mission.difficulty ?? 2, mission.revealedIntel.length);
-    draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金调查「${mission.name}」，解锁：${field.label}。`);
+    let detail = "战斗力需求区间";
+    if (canRefinePowerIntel) {
+      mission.powerIntelLevel += 1;
+    } else if (lockedFields.length > 0) {
+      const field = randomItem(lockedFields);
+      mission.revealedIntel.push(field.key);
+      detail = field.label;
+    }
+    mission.investigateCost = calculateInvestigateCost(mission.difficulty ?? 2, mission.revealedIntel.length + (mission.powerIntelLevel ?? 0));
+    draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金调查「${mission.name}」，更新：${detail}。`);
   });
 }
 
@@ -134,6 +147,13 @@ export function startMission(id, memberIds) {
     mission.remaining = mission.duration;
     mission.startDay = draft.day;
     mission.endDay = draft.day + mission.duration;
+    mission.deferredWages = Object.fromEntries(
+      validMemberIds.map((memberId) => {
+        const character = draft.roster.find((item) => item.id === memberId);
+        return [memberId, character ? identityFee(character) : 0];
+      })
+    );
+    mission.deferredWageDays = mission.duration;
     draft.roster.forEach((character) => {
       if (validMemberIds.includes(character.id)) character.status = `履行「${mission.name}」`;
     });
@@ -159,7 +179,7 @@ export function advanceDay() {
     draft.supplies = Math.max(0, draft.supplies - Math.ceil(draft.roster.length / 3));
 
     if (draft.buildings.infirmary > 0) {
-      draft.roster.forEach((character) => {
+      draft.roster.filter((character) => character.status !== "阵亡").forEach((character) => {
         if (character.wound > 0 || character.stress > 0) {
           character.stress = Math.max(0, character.stress - draft.buildings.infirmary);
         }
@@ -193,7 +213,7 @@ export function advanceDay() {
     }
 
     if (draft.supplies === 0) {
-      draft.roster.forEach((character) => {
+      draft.roster.filter((character) => character.status !== "阵亡").forEach((character) => {
         character.stress += 2;
       });
       draft.log.push(`第 ${draft.day} 天：补给耗尽，所有佣兵压力上升。`);
@@ -210,22 +230,48 @@ export function calculateMissionChance(memberIds, mission) {
   return calculateMissionChanceFromRoster(state.roster, state.buildings, memberIds, mission);
 }
 
+export function getMissionPowerRange(mission) {
+  normalizeContractPowerFields(mission, getState().reputation ?? 0);
+  const level = mission.powerIntelLevel ?? 0;
+  const spread = [28, 18, 10, 4][Math.min(level, 3)];
+  const low = Math.max(1, mission.powerRequirement - spread);
+  const high = mission.powerRequirement + spread;
+  return { low, high, level };
+}
+
+export function getTeamCombatPower(memberIds) {
+  const state = getState();
+  return calculateTeamCombatPower(state.roster, memberIds);
+}
+
 function resolveMissionDraft(draft, mission) {
-  const chance = calculateMissionChanceFromRoster(draft.roster, draft.buildings, mission.assigned, mission);
+  normalizeContractPowerFields(mission, draft.reputation ?? 0);
+  const teamPower = calculateTeamCombatPower(draft.roster, mission.assigned);
+  const gap = teamPower - mission.powerRequirement;
+  const chance = calculateMissionChanceFromPower(gap);
   const success = randomNumber(1, 100) <= chance;
   const team = draft.roster.filter((character) => mission.assigned.includes(character.id));
   const outcome = applyHiddenTwistDraft(draft, mission, team, success);
 
   team.forEach((character) => {
-    character.status = "待命";
     character.notoriety += success ? 1 : 0;
     character.contractRecord.survived += 1;
     if (success) character.contractRecord.completed += 1;
     if (!success) character.contractRecord.failed += 1;
     character.stress += success ? randomNumber(1, 4) : randomNumber(5, 12);
-    if (!success || randomNumber(1, 100) < 18 + mission.difficulty * 4) {
+    const deathRisk = calculateDeathRisk(gap, mission.difficulty);
+    const woundRisk = calculateWoundRisk(gap, mission.difficulty, success);
+    if (randomNumber(1, 100) <= deathRisk) {
+      character.status = "阵亡";
+      character.hp = 0;
+      character.wound += 3;
+      draft.log.push(`第 ${draft.day} 天：${character.name} 在「${mission.name}」中阵亡。`);
+      return;
+    }
+    character.status = "待命";
+    if (randomNumber(1, 100) <= woundRisk) {
       character.wound += 1;
-      character.hp = Math.max(1, character.hp - randomNumber(3, 8));
+      character.hp = Math.max(1, character.hp - randomNumber(4, 10));
     }
     resolvePromotionDraft(draft, character, mission.actionType ?? "logistics", success);
   });
@@ -235,12 +281,14 @@ function resolveMissionDraft(draft, mission) {
     const reputation = Math.max(0, mission.reward.reputation + outcome.reputationDelta);
     draft.gold += gold;
     draft.reputation += reputation;
-    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」成功。获得 ${gold} 金与 ${reputation} 声望。${outcome.text}`);
+    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」成功。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，获得 ${gold} 金与 ${reputation} 声望。${outcome.text}`);
   } else {
     draft.reputation = Math.max(0, draft.reputation - 3 + outcome.reputationDelta);
     draft.gold = Math.max(0, draft.gold + outcome.goldDelta);
-    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍带着伤势和坏消息回来了。${outcome.text}`);
+    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，伤亡风险上升。${outcome.text}`);
   }
+
+  settleReturningWagesDraft(draft, mission, team.filter((character) => character.status !== "阵亡"));
 
   const timelineEntry = draft.timeline.find((entry) => entry.missionId === mission.id && entry.status === "active");
   if (timelineEntry) {
@@ -253,29 +301,41 @@ function resolveMissionDraft(draft, mission) {
   evaluateGameOverDraft(draft);
 }
 
-function calculateMissionChanceFromRoster(roster, buildings, memberIds, mission) {
-  const team = roster.filter((character) => memberIds.includes(character.id));
-  if (team.length === 0) return 0;
+function settleReturningWagesDraft(draft, mission, returningTeam) {
+  if (returningTeam.length === 0) return;
 
-  const totalStats = team.reduce(
-    (sum, character) => sum + character.stats.might + character.stats.agility + character.stats.wits + character.stats.resolve,
-    0
+  const serviceDays = Math.max(
+    1,
+    mission.deferredWageDays ?? ((draft.day ?? mission.endDay ?? 0) - (mission.startDay ?? draft.day ?? 0))
   );
-  const equipmentTags = team.flatMap((character) =>
-    Object.values(character.equipment ?? {})
-      .filter(Boolean)
-      .flatMap((item) => getWeaponTagNames(item))
-  );
-  const matchingTags = team.reduce(
-    (sum, character) => sum + character.tags.filter((tag) => mission.tags.includes(tag)).length,
-    0
-  );
-  const matchingEquipmentTags = equipmentTags.filter((tag) => mission.tags.includes(tag)).length;
-  const stressPenalty = Math.floor(team.reduce((sum, character) => sum + character.stress + character.wound * 8, 0) / 8);
+  const totalWages = returningTeam.reduce((sum, character) => {
+    const dailyWage = mission.deferredWages?.[character.id] ?? identityFee(character);
+    return sum + dailyWage * serviceDays;
+  }, 0);
+  if (totalWages <= 0) return;
+
+  if (draft.gold >= totalWages) {
+    draft.gold -= totalWages;
+    draft.log.push(`第 ${draft.day} 天：外勤队伍归来，结清 ${serviceDays} 天外勤薪资 ${totalWages} 金。`);
+    return;
+  }
+
+  const shortage = totalWages - draft.gold;
+  draft.gold = 0;
+  const stealthLoss = clamp(Math.ceil(shortage / 5) + 3, 3, 18);
+  draft.stealth = clamp(draft.stealth - stealthLoss, 0, 100);
+  returningTeam.forEach((character) => {
+    character.stress += 2;
+  });
+  draft.log.push(`第 ${draft.day} 天：外勤薪资需要 ${totalWages} 金，但资金缺口 ${shortage} 金。返队佣兵压力上升，隐秘值下降 ${stealthLoss}。`);
+}
+
+function calculateMissionChanceFromRoster(roster, buildings, memberIds, mission) {
+  if (memberIds.length === 0) return 0;
+  normalizeContractPowerFields(mission, getState().reputation ?? 0);
+  const teamPower = calculateTeamCombatPower(roster, memberIds);
   const intelBonus = (buildings.intel ?? 0) * 5;
-  const chance =
-    34 + totalStats * 1.2 + matchingTags * 11 + matchingEquipmentTags * 5 + intelBonus - mission.difficulty * 14 - stressPenalty;
-  return clamp(Math.round(chance), 12, 92);
+  return clamp(calculateMissionChanceFromPower(teamPower - mission.powerRequirement) + intelBonus, 5, 96);
 }
 
 function randomIssuer() {
@@ -305,6 +365,29 @@ function createContractIntel() {
   return Object.fromEntries(contractIntelFields.map((field) => [field.key, randomItem(contractIntelPool[field.key])]));
 }
 
+function calculateContractPowerRequirement(difficulty, reputation) {
+  const reputationPressure = Math.floor(reputation / 10) * 3;
+  return 18 + difficulty * randomNumber(8, 12) + reputationPressure + randomNumber(-5, 8);
+}
+
+function normalizeContractPowerFields(mission, reputation = 0) {
+  mission.powerRequirement ??= calculateContractPowerRequirement(mission.difficulty ?? 2, reputation);
+  mission.powerIntelLevel ??= Math.min(3, mission.revealedIntel?.length ?? 0);
+}
+
+function calculateMissionChanceFromPower(gap) {
+  return clamp(Math.round(55 + gap * 3), 5, 96);
+}
+
+function calculateWoundRisk(gap, difficulty, success) {
+  const base = success ? 18 : 34;
+  return clamp(Math.round(base + difficulty * 4 - gap * 1.4), 4, 88);
+}
+
+function calculateDeathRisk(gap, difficulty) {
+  return clamp(Math.round(2 + difficulty * 2 - gap * 0.6), 0, 55);
+}
+
 function calculateRefreshCost(difficulty = 2) {
   return 12 + difficulty * 4;
 }
@@ -323,13 +406,15 @@ function resolvePromotionDraft(draft, character, actionType, success) {
 
   const nextRank = mercenaryRanks[currentIndex + 1];
   const trait = drawPositiveTrait(character, actionType);
+  const powerGain = getPromotionCombatPowerGain(nextRank);
   character.rank = nextRank;
   character.level = currentIndex + 1;
+  character.combatPower = (character.combatPower ?? 0) + powerGain;
   character.traits ??= [];
   if (trait) character.traits.push(trait);
 
   const traitText = trait ? `，获得特性「${trait.name}」` : "";
-  draft.log.push(`第 ${draft.day} 天：${character.name} 晋升为 ${nextRank} 级佣兵${traitText}。`);
+  draft.log.push(`第 ${draft.day} 天：${character.name} 晋升为 ${nextRank} 级佣兵，战斗力 +${powerGain}${traitText}。`);
 }
 
 function drawPositiveTrait(character, actionType) {

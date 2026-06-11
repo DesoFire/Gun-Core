@@ -21,6 +21,7 @@ import {
   personalities,
   sampleItems,
 } from "../data/sampleData.js";
+import { estimateBaseCombatPower } from "../modules/combatPower.js";
 import { createId, randomItem, randomNumber } from "./utils.js";
 
 const STORAGE_KEY = "gun-core-demo-state";
@@ -156,7 +157,7 @@ function normalizeState(savedState) {
 function createInitialMercenary(classId = randomItem(Object.keys(characterClasses)), isPlayer = false, customName = "") {
   const baseClass = characterClasses[classId];
   const maxHp = baseClass.maxHp + randomNumber(-2, 3);
-  return {
+  const mercenary = {
     id: createId(),
     name: customName || `${randomItem(names)} · ${randomItem(callsigns)}`,
     classId,
@@ -178,17 +179,21 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
     tags: [...baseClass.tags],
     equipment: createEmptyEquipment(),
     stats: addVariance(baseClass.stats),
+    combatPower: 0,
     status: "待命",
   };
+  mercenary.combatPower = estimateBaseCombatPower(mercenary);
+  return mercenary;
 }
 
 function createInitialMission() {
   const type = randomItem(contractTypes);
   const issuer = randomIssuer();
-  const difficulty = randomNumber(2, 5);
+  const difficulty = randomNumber(1, 3);
   const duration = randomNumber(1, 3 + Math.floor(difficulty / 2));
   const issueDay = 1;
   const expiresDay = issueDay + randomNumber(2, 4) + Math.floor(difficulty / 2);
+  const powerRequirement = calculateInitialPowerRequirement(difficulty, 0);
   return {
     id: createId(),
     name: `${type.name}契约：${randomContractSubject(type)}`,
@@ -198,6 +203,8 @@ function createInitialMission() {
     actionType: type.actionType,
     acquisition: "广撒网",
     difficulty,
+    powerRequirement,
+    powerIntelLevel: 0,
     duration,
     issueDay,
     expiresDay,
@@ -231,8 +238,10 @@ function normalizeCharacterState(character) {
   character.status ??= "待命";
   character.tags ??= [];
   character.stats ??= { might: 1, agility: 1, wits: 1, resolve: 1 };
+  character.combatPower ??= estimateBaseCombatPower(character);
   character.maxHp ??= 24 + character.stats.resolve;
   character.hp ??= Math.max(1, character.maxHp - character.wound * 4);
+  if (character.hp <= 0) character.status = "阵亡";
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
   return character;
 }
@@ -245,6 +254,8 @@ function normalizeMissionState(mission) {
   mission.tags ??= [];
   mission.issueDay ??= 1;
   mission.expiresDay ??= mission.issueDay + 4;
+  mission.powerRequirement ??= calculateInitialPowerRequirement(mission.difficulty ?? 2, 0);
+  mission.powerIntelLevel ??= Math.min(3, mission.revealedIntel?.length ?? 0);
   return mission;
 }
 
@@ -320,6 +331,10 @@ function randomContractSubject(type) {
 
 function createContractIntel() {
   return Object.fromEntries(contractIntelFields.map((field) => [field.key, randomItem(contractIntelPool[field.key])]));
+}
+
+function calculateInitialPowerRequirement(difficulty, reputation = 0) {
+  return 18 + difficulty * randomNumber(8, 12) + Math.floor(reputation / 10) * 3 + randomNumber(-5, 8);
 }
 
 function upgradeMissionToContract(mission) {

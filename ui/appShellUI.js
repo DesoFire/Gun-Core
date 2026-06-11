@@ -15,11 +15,14 @@ export function renderAppShell(root) {
     <nav class="tabbar" aria-label="主功能切换">
       <button class="tab-button active" data-tab-target="overview" type="button">总览</button>
       <button class="tab-button" data-tab-target="personnel" type="button">人员</button>
-      <button class="tab-button" data-tab-target="mechs" type="button">机甲</button>
-      <button class="tab-button" data-tab-target="warehouse" type="button">仓库</button>
       <button class="tab-button" data-tab-target="missions" type="button">契约</button>
+      <button class="tab-button" data-tab-target="schedule" type="button">日程</button>
       <button class="tab-button" data-tab-target="facilities" type="button">基础设施</button>
+      <button class="tab-button temporary-hidden" data-tab-target="mechs" type="button" hidden>机甲</button>
+      <button class="tab-button temporary-hidden" data-tab-target="warehouse" type="button" hidden>仓库</button>
     </nav>
+
+    <aside id="global-resource-strip" class="global-resource-strip" aria-label="基地关键状态"></aside>
 
     <main class="dashboard">
       <section class="tab-page active" data-tab-page="overview">
@@ -63,13 +66,6 @@ export function renderAppShell(root) {
             <div id="personnel-overview" class="overview-list"></div>
           </section>
 
-          <section class="panel calendar-panel">
-            <div class="section-heading">
-              <h2>行动日历</h2>
-              <span class="badge">按天</span>
-            </div>
-            <div id="calendar-list" class="calendar-list"></div>
-          </section>
         </div>
       </section>
 
@@ -130,6 +126,16 @@ export function renderAppShell(root) {
         </section>
       </section>
 
+      <section class="tab-page" data-tab-page="schedule">
+        <section class="panel calendar-panel calendar-page-panel">
+          <div class="section-heading">
+            <h2>行动日程</h2>
+            <span class="badge">按天</span>
+          </div>
+          <div id="calendar-list" class="calendar-list calendar-list-large"></div>
+        </section>
+      </section>
+
       <section class="panel log-panel">
         <div class="section-heading">
           <h2>行动记录</h2>
@@ -163,6 +169,10 @@ export function renderAppShell(root) {
 
     <dialog id="weapon-dialog" class="dialog weapon-dialog">
       <div class="dossier" id="weapon-dossier"></div>
+    </dialog>
+
+    <dialog id="armor-dialog" class="dialog weapon-dialog">
+      <div class="dossier" id="armor-dossier"></div>
     </dialog>
 
     <dialog id="contract-dialog" class="dialog contract-dialog">

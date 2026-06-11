@@ -100,6 +100,40 @@ button:disabled {
   padding: 6px;
 }
 
+.global-resource-strip {
+  background: #15171b;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  margin: -6px 0 16px;
+  padding: 8px;
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+}
+
+.strip-resource {
+  background: #101317;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.strip-resource span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+}
+
+.strip-resource strong {
+  display: block;
+  font-size: 16px;
+  margin-top: 2px;
+}
+
 .tab-button {
   background: transparent;
   border-color: transparent;
@@ -254,6 +288,35 @@ button:disabled {
   gap: 10px;
   grid-template-columns: repeat(7, minmax(150px, 1fr));
   overflow-x: auto;
+}
+
+.calendar-page-panel {
+  min-height: 70vh;
+}
+
+.calendar-list-large {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.calendar-list-large .calendar-day {
+  min-height: 260px;
+  min-width: 220px;
+}
+
+.calendar-list-large .calendar-day-head strong {
+  font-size: 16px;
+}
+
+.calendar-list-large .calendar-event {
+  padding: 10px;
+}
+
+.calendar-list-large .calendar-event strong {
+  font-size: 14px;
+}
+
+.calendar-list-large .calendar-event p {
+  font-size: 12px;
 }
 
 .calendar-day {
@@ -516,7 +579,7 @@ h3 {
 .contract-public {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
 }
 
 .contract-public span {
@@ -584,7 +647,7 @@ h3 {
   border-radius: 8px;
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
   padding: 10px;
 }
 

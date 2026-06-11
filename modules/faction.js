@@ -1,5 +1,4 @@
 import {
-  armorPool,
   blackMarketSupplyPool,
   buildings,
   facilityRanks,
@@ -9,11 +8,14 @@ import {
 } from "../data/sampleData.js";
 import { getState, updateState } from "../js/state.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
+import { generateArmorItem } from "./armorGenerator.js";
 import { generateWeaponItem } from "./weaponGenerator.js";
 
 export function calculateDailyUpkeep() {
   const state = getState();
-  return calculateBaseUpkeep() + state.roster.reduce((sum, character) => sum + identityFee(character), 0);
+  return calculateBaseUpkeep() + state.roster
+    .filter((character) => character.status === "待命")
+    .reduce((sum, character) => sum + identityFee(character), 0);
 }
 
 export function calculateBaseUpkeep() {
@@ -97,7 +99,7 @@ export function buyBlackMarketWeapon() {
 export function hospitalTreatMercenaries() {
   updateState((draft) => {
     if (draft.gameStatus !== "active" || (draft.buildings.hospital ?? 0) <= 0) return;
-    const patients = draft.roster.filter((character) => character.wound > 0 || character.stress >= 8);
+    const patients = draft.roster.filter((character) => character.status !== "阵亡" && (character.wound > 0 || character.stress >= 8));
     const cost = 32;
     if (patients.length === 0) {
       draft.log.push(`第 ${draft.day} 天：医院没有找到需要处理的伤员。`);
@@ -139,7 +141,7 @@ export function payDailyUpkeep(draft) {
   draft.gold = 0;
   const stealthLoss = clamp(Math.ceil(shortage / 4) + 5, 5, 22);
   draft.stealth = clamp(draft.stealth - stealthLoss, 0, 100);
-  draft.roster.forEach((character) => {
+  draft.roster.filter((character) => character.status !== "阵亡").forEach((character) => {
     character.stress += 1;
   });
   draft.log.push(`第 ${draft.day} 天：维护费用缺口 ${shortage} 金，假身份链条开始漏风。隐秘值下降 ${stealthLoss}。`);
@@ -176,7 +178,9 @@ export function addVariance(stats) {
 }
 
 function calculateDailyUpkeepFromDraft(draft) {
-  return calculateBaseUpkeepFromDraft(draft) + draft.roster.reduce((sum, character) => sum + identityFee(character), 0);
+  return calculateBaseUpkeepFromDraft(draft) + draft.roster
+    .filter((character) => character.status === "待命")
+    .reduce((sum, character) => sum + identityFee(character), 0);
 }
 
 function calculateBaseUpkeepFromDraft(draft) {
@@ -227,7 +231,7 @@ function calculateFacilityUpkeep(id, level) {
 
 function createBlackMarketItem(kind, rank) {
   if (kind === "weapon") return generateWeaponItem({ rarity: rank });
-  if (kind === "armor") return createRankedArmor(rank);
+  if (kind === "armor") return generateArmorItem({ rarity: rank });
   if (kind === "mecha") return createRankedMecha(rank);
   return createRankedSupply(rank);
 }
@@ -242,17 +246,6 @@ function createRankedSupply(rank) {
     rarity: rank,
     quantity,
     itemCategory: "supply",
-  };
-}
-
-function createRankedArmor(rank) {
-  const item = randomItem(armorPool);
-  return {
-    id: createId(),
-    ...item,
-    name: `${rank}级 ${item.name}`,
-    rarity: rank,
-    itemCategory: "armor",
   };
 }
 

@@ -15,6 +15,7 @@ import {
   upgradeBuilding,
 } from "../modules/faction.js";
 import { buySupplies, getGameSummary, reduceHeat } from "../modules/game.js";
+import { initArmorUI } from "../ui/armorUI.js";
 import { initCharacterUI, renderCharacterUI } from "../ui/characterUI.js";
 import { initInventoryUI, renderInventoryUI } from "../ui/inventoryUI.js";
 import { initMechaUI, renderMechaUI } from "../ui/mechaUI.js";
@@ -29,6 +30,7 @@ function init() {
   initMissionUI();
   initMechaUI();
   initInventoryUI();
+  initArmorUI();
   initWeaponUI();
   bindGlobalActions();
   subscribe(renderApp);
@@ -109,6 +111,18 @@ function renderResources() {
     .map(([label, value]) => `<div class="resource"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
   document.querySelector("#resource-grid").innerHTML = resourceHtml;
+
+  document.querySelector("#global-resource-strip").innerHTML = [
+    ["第", `${state.day} 天`],
+    ["资金", state.gold],
+    ["补给", state.supplies],
+    ["声望", state.reputation],
+    ["隐秘", `${state.stealth}/100`],
+    ["日支出", calculateDailyUpkeep()],
+    ["遇袭", `${calculateRestAttackChance()}%`],
+  ]
+    .map(([label, value]) => `<div class="strip-resource"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
 }
 
 function renderOverview() {

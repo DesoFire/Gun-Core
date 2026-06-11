@@ -15,6 +15,7 @@ import {
   unequipItem,
 } from "../modules/character.js";
 import { getInventory } from "../modules/inventory.js";
+import { calculateCharacterCombatPower } from "../modules/combatPower.js";
 import { getWeaponTagNames } from "../modules/weaponGenerator.js";
 import { addLog, getState } from "../js/state.js";
 import { identityFee } from "../modules/faction.js";
@@ -66,6 +67,7 @@ function renderRoster() {
 
 function renderCharacterCard(character) {
   const rankLabel = formatRank(character.rank);
+  const combatPower = calculateCharacterCombatPower(character);
   return `
     <article class="card" data-open-character="${character.id}">
       <div class="card-header">
@@ -78,6 +80,7 @@ function renderCharacterCard(character) {
       <div class="badge-row">${character.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
       <div class="stat-line">
         <span>生命 ${character.hp}/${character.maxHp}</span>
+        <span>战力 ${combatPower}</span>
         <span>压力 ${character.stress}</span>
         <span>伤势 ${character.wound}</span>
         <span>知名度 ${character.notoriety}</span>
@@ -96,12 +99,13 @@ function renderRecruits() {
   container.innerHTML = getRecruitPool()
     .map((character) => {
       const cost = recruitCost(character);
+      const combatPower = calculateCharacterCombatPower(character);
       return `
         <article class="card">
           <div class="card-header">
             <div>
               <p class="card-title">${character.name}</p>
-              <p class="muted">${character.className} · 知名度 ${character.notoriety} · 身份费 ${identityFee(character)}/天 · 雇佣费 ${cost} 金</p>
+              <p class="muted">${character.className} · 战力 ${combatPower} · 知名度 ${character.notoriety} · 身份费 ${identityFee(character)}/天 · 雇佣费 ${cost} 金</p>
             </div>
             <button class="primary-button" data-recruit="${character.id}" ${state.gameStatus !== "active" || state.gold < cost ? "disabled" : ""} type="button">招募</button>
           </div>
@@ -169,12 +173,15 @@ function renderActiveSheetTab(character) {
 function renderAttributesTab(character) {
   const assignedMission =
     character.status.startsWith("履行") || character.status.startsWith("执行") ? character.status : "无";
+  const combatPower = calculateCharacterCombatPower(character);
   return `
     <div class="dossier-grid">
       <section class="dossier-section">
         <h3>基本状态</h3>
         <div class="field-list">
           <div class="field"><span>生命值</span><strong>${character.hp}/${character.maxHp}</strong></div>
+          <div class="field"><span>战斗力</span><strong>${combatPower}</strong></div>
+          <div class="field"><span>基础战力</span><strong>${character.combatPower ?? 0}</strong></div>
           <div class="field"><span>当前契约</span><strong>${assignedMission}</strong></div>
           <div class="field"><span>评级</span><strong>${formatRank(character.rank)}</strong></div>
           <div class="field"><span>晋升序号</span><strong>${character.level}/7</strong></div>
