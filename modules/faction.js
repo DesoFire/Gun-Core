@@ -173,10 +173,6 @@ export function calculateRank(character) {
   return mercenaryRanks.includes(character.rank) ? character.rank : "无";
 }
 
-export function addVariance(stats) {
-  return Object.fromEntries(Object.entries(stats).map(([key, value]) => [key, Math.max(1, value + randomNumber(-1, 1))]));
-}
-
 function calculateDailyUpkeepFromDraft(draft) {
   return calculateBaseUpkeepFromDraft(draft) + draft.roster
     .filter((character) => character.status === "待命")

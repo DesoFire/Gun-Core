@@ -1,35 +1,31 @@
 export const equipmentSlots = {
-  head: "头部",
-  chest: "胸部",
-  back: "背部",
-  leftHand: "左手",
-  rightHand: "右手",
-  waist: "腰挂",
+  weapon: "武器",
+  armor: "防具",
 };
 
 export const characterClasses = {
   vanguard: {
     name: "先锋",
     tags: ["战斗", "守卫"],
-    stats: { might: 7, agility: 4, wits: 3, resolve: 6 },
+    baseCombatPower: 28,
     maxHp: 34,
   },
   scout: {
     name: "斥候",
     tags: ["侦察", "潜入"],
-    stats: { might: 4, agility: 7, wits: 5, resolve: 4 },
+    baseCombatPower: 24,
     maxHp: 26,
   },
   medic: {
     name: "医师",
     tags: ["医疗", "支援"],
-    stats: { might: 3, agility: 4, wits: 7, resolve: 6 },
+    baseCombatPower: 20,
     maxHp: 24,
   },
   scholar: {
     name: "学者",
     tags: ["调查", "神秘"],
-    stats: { might: 2, agility: 4, wits: 8, resolve: 6 },
+    baseCombatPower: 18,
     maxHp: 22,
   },
 };
@@ -60,14 +56,6 @@ export const blackMarketSupplyPool = [
   { name: "旧式战术背包", type: "背包", tags: ["支援", "生存"], note: "带血迹的地方已经礼貌性洗过。" },
   { name: "战利品封装箱", type: "战利品", tags: ["交易", "黑市"], note: "内容不保证合法，但保证有人愿意收。" },
   { name: "一次性滤水芯", type: "杂物", tags: ["补给"], note: "能过滤水，也能过滤一部分乐观。" },
-];
-
-export const armorPool = [
-  { name: "拼接防弹胸甲", slot: "chest", type: "护具", tags: ["守卫"], note: "由三种标准和一种误会拼成。" },
-  { name: "陶瓷插板背心", slot: "chest", type: "护具", tags: ["战斗"], note: "正面抗得住，侧面看运气。" },
-  { name: "封闭式防暴头盔", slot: "head", type: "护具", tags: ["守卫"], note: "视野变窄，胆子变大。" },
-  { name: "轻型外骨骼腰挂", slot: "waist", type: "装备", tags: ["支援"], note: "降低搬运时骂人的频率。" },
-  { name: "折叠复合盾", slot: "leftHand", type: "装备", tags: ["守卫"], note: "展开速度取决于使用者的求生欲。" },
 ];
 
 export const mechaFrames = [
@@ -155,6 +143,21 @@ export const positiveTraits = {
   ],
 };
 
+export const negativeConditions = [
+  { name: "骨折", description: "行动不便，短期内很难保持标准战术动作。", tags: ["创伤", "肢体"], stress: 3, wound: 2, powerPenalty: 6 },
+  { name: "烧伤", description: "防具救了命，但皮肤和神经还在结算账单。", tags: ["创伤", "火焰"], stress: 4, wound: 1, powerPenalty: 4 },
+  { name: "大出血", description: "能回来已经算手续办理及时。", tags: ["创伤", "急救"], stress: 5, wound: 2, powerPenalty: 7 },
+  { name: "PTSD", description: "枪声停了，脑子里的枪声没有停。", tags: ["精神"], stress: 10, wound: 0, powerPenalty: 5 },
+  { name: "神经震荡", description: "反应慢半拍，但嘴硬得很准时。", tags: ["精神", "冲击"], stress: 6, wound: 1, powerPenalty: 5 },
+  { name: "感染", description: "伤口里的东西显然没有签署保密协议。", tags: ["医疗"], stress: 5, wound: 1, powerPenalty: 4 },
+  { name: "战术恐慌", description: "下一次进场前，他会多看几眼撤离路线。", tags: ["精神", "士气"], stress: 8, wound: 0, powerPenalty: 3 },
+];
+
+export const contractRequirementPool = {
+  weaponTypes: ["步枪", "霰弹", "手枪", "狙击", "近战", "爆破", "医疗器械", "电子战"],
+  damageTypes: ["动能", "腐蚀", "电磁", "爆风", "能量", "燃烧", "异源", "切割"],
+};
+
 export const contractIntelFields = [
   { key: "enemy", label: "预计敌人" },
   { key: "location", label: "行动区域" },
@@ -189,12 +192,8 @@ export const contractBriefFragments = [
 ];
 
 export const sampleItems = [
-  { id: "item-helmet-1", name: "过期防暴头盔", slot: "head", type: "护具", tags: ["守卫"], note: "生产批次已被召回，召回原因被重新分类。" },
-  { id: "item-vest-1", name: "复合胸甲", slot: "chest", type: "护具", tags: ["战斗"], note: "能挡住大多数合理报价以内的弹药。" },
-  { id: "item-pack-1", name: "战地背包", slot: "back", type: "支援", tags: ["生存"], note: "塞得下补给、赃物和一份不完整的撤离计划。" },
-  { id: "item-rifle-1", name: "短管自动步枪", slot: "rightHand", type: "武器", tags: ["战斗"], note: "序列号经过礼貌性擦除。" },
-  { id: "item-shield-1", name: "折叠防盾", slot: "leftHand", type: "装备", tags: ["守卫"], note: "折叠后像公文包，展开后像事故报告。" },
-  { id: "item-medkit-1", name: "灰市医疗包", slot: "waist", type: "消耗支援", tags: ["医疗"], note: "标签写着民用。里面没有任何民用内容。" },
+  { id: "item-rifle-1", name: "F级 短管自动步枪", slot: "weapon", itemCategory: "weapon", rarity: "F", type: "步枪", power: 8, damageType: "动能", tags: ["战斗"], note: "序列号经过礼貌性擦除。" },
+  { id: "item-vest-1", name: "F级 复合胸甲", slot: "armor", itemCategory: "armor", rarity: "F", deathRiskReduction: 1, protectionType: "动能", tags: ["守卫"], note: "能挡住大多数合理报价以内的弹药。" },
 ];
 
 export const names = ["林烬", "邵岚", "维克", "阿黛", "秦砾", "诺拉", "赫森", "陆鸦", "米娅", "石泉"];

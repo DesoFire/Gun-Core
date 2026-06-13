@@ -19,11 +19,12 @@ import { calculateCharacterCombatPower } from "../modules/combatPower.js";
 import { getWeaponTagNames } from "../modules/weaponGenerator.js";
 import { addLog, getState } from "../js/state.js";
 import { identityFee } from "../modules/faction.js";
+import { renderMercenaryAvatar } from "./mercenaryAvatarUI.js";
 
 let requestRender = () => {};
 let openDossierCharacterId = null;
 let activeDossierTab = "attributes";
-let selectedEquipmentSlot = "head";
+let selectedEquipmentSlot = "weapon";
 
 export function initCharacterUI({ onRenderNeeded }) {
   requestRender = onRenderNeeded;
@@ -71,9 +72,12 @@ function renderCharacterCard(character) {
   return `
     <article class="card" data-open-character="${character.id}">
       <div class="card-header">
-        <div>
-          <p class="card-title">${character.name}</p>
-          <p class="muted">${character.isPlayer ? "玩家角色 · " : ""}${character.className} · ${rankLabel}</p>
+        <div class="identity-line">
+          ${renderMercenaryAvatar(character)}
+          <div>
+            <p class="card-title">${character.name}</p>
+            <p class="muted">${character.isPlayer ? "玩家角色 · " : ""}${character.className} · ${rankLabel}</p>
+          </div>
         </div>
         <span class="badge">${character.status}</span>
       </div>
@@ -84,6 +88,8 @@ function renderCharacterCard(character) {
         <span>压力 ${character.stress}</span>
         <span>伤势 ${character.wound}</span>
         <span>知名度 ${character.notoriety}</span>
+        <span>强化点 ${character.enhancementPoints ?? 0}</span>
+        <span>负面 ${character.conditions?.length ?? 0}</span>
         <span>身份费 ${identityFee(character)}/天</span>
         <span>状态 ${character.status}</span>
       </div>
@@ -103,9 +109,12 @@ function renderRecruits() {
       return `
         <article class="card">
           <div class="card-header">
-            <div>
-              <p class="card-title">${character.name}</p>
-              <p class="muted">${character.className} · 战力 ${combatPower} · 知名度 ${character.notoriety} · 身份费 ${identityFee(character)}/天 · 雇佣费 ${cost} 金</p>
+            <div class="identity-line">
+              ${renderMercenaryAvatar(character)}
+              <div>
+                <p class="card-title">${character.name}</p>
+                <p class="muted">${character.className} · 战力 ${combatPower} · 知名度 ${character.notoriety} · 身份费 ${identityFee(character)}/天 · 雇佣费 ${cost} 金</p>
+              </div>
             </div>
             <button class="primary-button" data-recruit="${character.id}" ${state.gameStatus !== "active" || state.gold < cost ? "disabled" : ""} type="button">招募</button>
           </div>
@@ -123,7 +132,7 @@ function renderRecruits() {
 export function openCharacterSheet(id, options = {}) {
   openDossierCharacterId = id;
   activeDossierTab = options.tab ?? "attributes";
-  selectedEquipmentSlot = "head";
+  selectedEquipmentSlot = "weapon";
   renderCharacterSheet(id);
   document.querySelector("#mercenary-dialog").showModal();
 }
@@ -136,10 +145,13 @@ function renderCharacterSheet(id) {
   const dossier = document.querySelector("#mercenary-dossier");
   dossier.innerHTML = `
     <div class="dossier-top">
-      <div>
-        <div class="dossier-code">SSS-GUILD DOSSIER / FIELD SHEET</div>
-        <h2 class="dossier-title">${character.name}</h2>
-        <p class="muted">${character.className} · ${rankLabel} · ${character.status}</p>
+      <div class="identity-line identity-line-large">
+        ${renderMercenaryAvatar(character, { size: "large" })}
+        <div>
+          <div class="dossier-code">SSS-GUILD DOSSIER / FIELD SHEET</div>
+          <h2 class="dossier-title">${character.name}</h2>
+          <p class="muted">${character.className} · ${rankLabel} · ${character.status}</p>
+        </div>
       </div>
       <button class="ghost-button" data-close-dossier type="button">关闭</button>
     </div>
@@ -185,17 +197,9 @@ function renderAttributesTab(character) {
           <div class="field"><span>当前契约</span><strong>${assignedMission}</strong></div>
           <div class="field"><span>评级</span><strong>${formatRank(character.rank)}</strong></div>
           <div class="field"><span>晋升序号</span><strong>${character.level}/7</strong></div>
+          <div class="field"><span>强化点</span><strong>${character.enhancementPoints ?? 0}</strong></div>
           <div class="field"><span>压力</span><strong>${character.stress}</strong></div>
           <div class="field"><span>伤势</span><strong>${character.wound}</strong></div>
-        </div>
-      </section>
-      <section class="dossier-section">
-        <h3>属性</h3>
-        <div class="field-list">
-          <div class="field"><span>力量</span><strong>${character.stats.might}</strong></div>
-          <div class="field"><span>敏捷</span><strong>${character.stats.agility}</strong></div>
-          <div class="field"><span>智识</span><strong>${character.stats.wits}</strong></div>
-          <div class="field"><span>意志</span><strong>${character.stats.resolve}</strong></div>
         </div>
       </section>
       <section class="dossier-section wide">
@@ -205,6 +209,10 @@ function renderAttributesTab(character) {
       <section class="dossier-section wide">
         <h3>正面特性</h3>
         ${renderTraitList(character)}
+      </section>
+      <section class="dossier-section wide">
+        <h3>负面状态</h3>
+        ${renderConditionList(character)}
       </section>
     </div>
   `;
@@ -232,6 +240,28 @@ function renderTraitList(character) {
   `;
 }
 
+function renderConditionList(character) {
+  const conditions = character.conditions ?? [];
+  if (conditions.length === 0) return `<p class="muted">暂时没有被合同附赠人生体验。</p>`;
+  return `
+    <div class="trait-list">
+      ${conditions
+        .map(
+          (condition) => `
+            <article class="trait-item">
+              <div>
+                <strong>${condition.name}</strong>
+                <p class="muted">${condition.description}</p>
+              </div>
+              <span class="badge">-${condition.powerPenalty ?? 0} 战力</span>
+            </article>
+          `
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function renderEquipmentTab(character) {
   const slots = getEquipmentSlots();
   const candidates = getCandidateItems(selectedEquipmentSlot);
@@ -239,23 +269,15 @@ function renderEquipmentTab(character) {
   return `
     <div class="body-equipment-layout">
       <section class="body-panel">
-        <div class="body-map" aria-label="人物装备槽">
+        <div class="simple-equipment-map" aria-label="人物装备槽">
           ${Object.entries(slots).map(([slot, label]) => renderBodySlot(character, slot, label)).join("")}
-          <div class="body-silhouette" aria-hidden="true">
-            <div class="body-head"></div>
-            <div class="body-torso"></div>
-            <div class="body-arm left"></div>
-            <div class="body-arm right"></div>
-            <div class="body-leg left"></div>
-            <div class="body-leg right"></div>
-          </div>
         </div>
       </section>
       <section class="dossier-section equipment-browser">
         <div class="card-header">
           <div>
             <h3>${slots[selectedEquipmentSlot]} 可用装备</h3>
-            <p class="muted">${selectedEquipmentSlot === "back" ? "背包槽可以装所有类型的装备。" : "点击左侧槽位切换候选列表，拖动装备到槽位可快速换装。"}</p>
+            <p class="muted">当前只保留武器和防具两个槽位。</p>
           </div>
           <button class="ghost-button" data-unequip-slot="${selectedEquipmentSlot}" ${canAct && character.equipment[selectedEquipmentSlot] ? "" : "disabled"} type="button">卸下当前</button>
         </div>
@@ -288,6 +310,7 @@ function renderEquipmentCandidates(candidates) {
           <div>
             <strong>${item.name}</strong>
             <p class="muted">${item.type} · ${getWeaponTagNames(item).join(" / ") || "无标签"} · ${item.note}</p>
+            <p class="muted">${renderEquipmentSummary(item)}</p>
           </div>
           <button class="primary-button" data-equip-item="${item.id}" ${canAct ? "" : "disabled"} type="button">装备</button>
         </article>
@@ -361,6 +384,12 @@ function setupClassOptions() {
   select.innerHTML = Object.entries(getCharacterClasses())
     .map(([id, item]) => `<option value="${id}">${item.name}</option>`)
     .join("");
+}
+
+function renderEquipmentSummary(item) {
+  if (item.itemCategory === "weapon") return `等级 ${item.rarity} · 战斗力 +${item.power ?? 0} · 伤害 ${item.damageType ?? "未知"}`;
+  if (item.itemCategory === "armor") return `等级 ${item.rarity} · 死亡率 -${item.deathRiskReduction ?? 0}% · 防护 ${item.protectionType ?? "未知"}`;
+  return "未分类装备";
 }
 
 function formatRank(rank) {

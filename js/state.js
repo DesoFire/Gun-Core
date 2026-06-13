@@ -7,6 +7,7 @@ import {
   contractIntelFields,
   contractIntelPool,
   contractIssuers,
+  contractRequirementPool,
   contractTypes,
   creeds,
   equipmentSlots,
@@ -25,6 +26,20 @@ import { estimateBaseCombatPower } from "../modules/combatPower.js";
 import { createId, randomItem, randomNumber } from "./utils.js";
 
 const STORAGE_KEY = "gun-core-demo-state";
+const avatarPalettes = [
+  { bg: "#263a4f", fg: "#f3f7fb", ring: "#6da4c8" },
+  { bg: "#3d324f", fg: "#fbf7ff", ring: "#a88bd8" },
+  { bg: "#29463b", fg: "#f4fbf6", ring: "#79b892" },
+  { bg: "#4b3828", fg: "#fff8ef", ring: "#d49b63" },
+  { bg: "#4d2f37", fg: "#fff5f7", ring: "#d98293" },
+  { bg: "#2d4448", fg: "#eefbfc", ring: "#70bac2" },
+  { bg: "#4a4230", fg: "#fff9e8", ring: "#d6bd6f" },
+  { bg: "#2f334f", fg: "#f4f5ff", ring: "#8793dc" },
+  { bg: "#3b4630", fg: "#f7fbef", ring: "#9eba74" },
+  { bg: "#4a303f", fg: "#fff3fb", ring: "#cd7eb5" },
+  { bg: "#253f3a", fg: "#f0fffb", ring: "#67bea9" },
+  { bg: "#473333", fg: "#fff3f0", ring: "#c78376" },
+];
 
 let state = normalizeState(loadState() ?? createInitialState());
 const listeners = new Set();
@@ -60,6 +75,13 @@ export function resetState() {
   state = normalizeState(createInitialState());
   saveState();
   notify();
+}
+
+export function normalizeCharacterAvatars(draft = state) {
+  const usedAvatarKeys = new Set();
+  draft.roster = (draft.roster ?? []).map((character) => normalizeCharacterState(character, usedAvatarKeys));
+  draft.recruitPool = (draft.recruitPool ?? []).map((character) => normalizeCharacterState(character, usedAvatarKeys));
+  draft.reputation = calculateRosterReputation(draft.roster ?? []);
 }
 
 export function createInitialState() {
@@ -146,8 +168,10 @@ function normalizeState(savedState) {
     savedState.buildings[id] ??= 0;
   });
 
-  savedState.roster = savedState.roster.map(normalizeCharacterState);
-  savedState.recruitPool = savedState.recruitPool.map(normalizeCharacterState);
+  const usedAvatarKeys = new Set();
+  savedState.roster = savedState.roster.map((character) => normalizeCharacterState(character, usedAvatarKeys));
+  savedState.recruitPool = savedState.recruitPool.map((character) => normalizeCharacterState(character, usedAvatarKeys));
+  savedState.reputation = calculateRosterReputation(savedState.roster);
   savedState.missions = savedState.missions.map(normalizeMissionState);
   savedState.timeline = savedState.timeline.map(normalizeTimelineEntry);
   savedState.inventory = savedState.inventory.map(normalizeItemState);
@@ -178,11 +202,10 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
     isPlayer,
     tags: [...baseClass.tags],
     equipment: createEmptyEquipment(),
-    stats: addVariance(baseClass.stats),
-    combatPower: 0,
+    combatPower: baseClass.baseCombatPower + randomNumber(-3, 4),
     status: "待命",
   };
-  mercenary.combatPower = estimateBaseCombatPower(mercenary);
+  mercenary.avatar = createUniqueAvatar(mercenary);
   return mercenary;
 }
 
@@ -194,6 +217,8 @@ function createInitialMission() {
   const issueDay = 1;
   const expiresDay = issueDay + randomNumber(2, 4) + Math.floor(difficulty / 2);
   const powerRequirement = calculateInitialPowerRequirement(difficulty, 0);
+  const recommendedTeamSize = createInitialRecommendedTeamSize(difficulty);
+  const requirements = createInitialContractRequirements(type.tags);
   return {
     id: createId(),
     name: `${type.name}契约：${randomContractSubject(type)}`,
@@ -205,6 +230,8 @@ function createInitialMission() {
     difficulty,
     powerRequirement,
     powerIntelLevel: 0,
+    recommendedTeamSize,
+    requirements,
     duration,
     issueDay,
     expiresDay,
@@ -222,8 +249,10 @@ function createInitialMission() {
   };
 }
 
-function normalizeCharacterState(character) {
+function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   character.notoriety ??= character.isPlayer ? 3 : 1;
+  character.enhancementPoints ??= 0;
+  character.conditions ??= [];
   character.rank = normalizeRank(character);
   character.level = Math.max(0, mercenaryRanks.indexOf(character.rank));
   character.xp ??= 0;
@@ -237,12 +266,13 @@ function normalizeCharacterState(character) {
   character.stress ??= 0;
   character.status ??= "待命";
   character.tags ??= [];
-  character.stats ??= { might: 1, agility: 1, wits: 1, resolve: 1 };
   character.combatPower ??= estimateBaseCombatPower(character);
-  character.maxHp ??= 24 + character.stats.resolve;
+  character.maxHp ??= character.classId && characterClasses[character.classId] ? characterClasses[character.classId].maxHp : 24;
   character.hp ??= Math.max(1, character.maxHp - character.wound * 4);
   if (character.hp <= 0) character.status = "阵亡";
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
+  character.equipment = normalizeEquipmentSlots(character.equipment);
+  character.avatar = normalizeAvatar(character, usedAvatarKeys);
   return character;
 }
 
@@ -256,6 +286,11 @@ function normalizeMissionState(mission) {
   mission.expiresDay ??= mission.issueDay + 4;
   mission.powerRequirement ??= calculateInitialPowerRequirement(mission.difficulty ?? 2, 0);
   mission.powerIntelLevel ??= Math.min(3, mission.revealedIntel?.length ?? 0);
+  mission.recommendedTeamSize ??= createInitialRecommendedTeamSize(mission.difficulty ?? 2);
+  mission.requirements ??= createInitialContractRequirements(mission.tags ?? []);
+  mission.requirements.weaponTypes ??= [];
+  mission.requirements.damageTypes ??= [];
+  mission.requirements.tags ??= mission.tags?.slice(0, 2) ?? [];
   return mission;
 }
 
@@ -271,13 +306,20 @@ function normalizeTimelineEntry(entry) {
 
 function normalizeItemState(item) {
   item.id ??= createId();
-  item.tags ??= [];
   item.note ??= "";
+  item.tags ??= [];
   return item;
 }
 
 function createEmptyEquipment() {
   return Object.fromEntries(Object.keys(equipmentSlots).map((slot) => [slot, null]));
+}
+
+function normalizeEquipmentSlots(equipment) {
+  return {
+    weapon: equipment.weapon ?? null,
+    armor: equipment.armor ?? null,
+  };
 }
 
 function createDossier() {
@@ -300,10 +342,6 @@ function normalizeRank(character) {
   if (mercenaryRanks.includes(character.rank)) return character.rank;
   if (typeof character.level === "number") return mercenaryRanks[Math.min(character.level, mercenaryRanks.length - 1)] ?? "无";
   return calculateRank(character);
-}
-
-function addVariance(stats) {
-  return Object.fromEntries(Object.entries(stats).map(([key, value]) => [key, Math.max(1, value + randomNumber(-1, 1))]));
 }
 
 function randomIssuer() {
@@ -335,6 +373,75 @@ function createContractIntel() {
 
 function calculateInitialPowerRequirement(difficulty, reputation = 0) {
   return 18 + difficulty * randomNumber(8, 12) + Math.floor(reputation / 10) * 3 + randomNumber(-5, 8);
+}
+
+function createInitialRecommendedTeamSize(difficulty) {
+  if (difficulty <= 1) return { min: 1, max: 2 };
+  if (difficulty <= 3) return { min: 2, max: 3 };
+  return { min: 3, max: 4 };
+}
+
+function createInitialContractRequirements(tags = []) {
+  return {
+    weaponTypes: drawInitialRequirements(contractRequirementPool.weaponTypes, randomNumber(1, 2)),
+    damageTypes: drawInitialRequirements(contractRequirementPool.damageTypes, randomNumber(1, 2)),
+    tags: tags.slice(0, 2),
+  };
+}
+
+function drawInitialRequirements(pool, count) {
+  const result = [];
+  while (result.length < count && result.length < pool.length) {
+    const item = randomItem(pool);
+    if (!result.includes(item)) result.push(item);
+  }
+  return result;
+}
+
+function calculateRosterReputation(roster) {
+  return roster
+    .filter((character) => character.status !== "阵亡")
+    .reduce((sum, character) => sum + Math.max(0, character.notoriety ?? 0), 0);
+}
+
+function normalizeAvatar(character, usedKeys) {
+  const initial = getNameInitial(character.name);
+  const currentIndex = Number.isInteger(character.avatar?.paletteIndex) ? character.avatar.paletteIndex : null;
+  if (currentIndex !== null) {
+    const key = `${initial}-${currentIndex}`;
+    const palette = avatarPalettes[currentIndex % avatarPalettes.length];
+    if (!usedKeys.has(key)) {
+      usedKeys.add(key);
+      return { initial, paletteIndex: currentIndex, ...palette };
+    }
+  }
+  return createUniqueAvatar(character, usedKeys);
+}
+
+function createUniqueAvatar(character, usedKeys = new Set()) {
+  const initial = getNameInitial(character.name);
+  const seed = hashString(`${character.id ?? ""}-${character.name ?? ""}`);
+  for (let offset = 0; offset < avatarPalettes.length * 4; offset += 1) {
+    const paletteIndex = (seed + offset) % avatarPalettes.length;
+    const key = `${initial}-${paletteIndex}`;
+    if (!usedKeys.has(key)) {
+      usedKeys.add(key);
+      return { initial, paletteIndex, ...avatarPalettes[paletteIndex] };
+    }
+  }
+
+  const paletteIndex = (seed + usedKeys.size) % avatarPalettes.length;
+  usedKeys.add(`${initial}-${paletteIndex}-${character.id}`);
+  return { initial, paletteIndex, ...avatarPalettes[paletteIndex] };
+}
+
+function getNameInitial(name = "?") {
+  const compact = String(name).trim().replace(/\s+/g, "");
+  return compact.slice(0, 1) || "?";
+}
+
+function hashString(value) {
+  return [...String(value)].reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 7);
 }
 
 function upgradeMissionToContract(mission) {

@@ -11,8 +11,8 @@ import {
   origins,
   personalities,
 } from "../data/sampleData.js";
-import { getState, updateState } from "../js/state.js";
-import { addVariance, calculateRank, identityFee } from "./faction.js";
+import { getState, normalizeCharacterAvatars, updateState } from "../js/state.js";
+import { calculateRank, identityFee } from "./faction.js";
 import { createId, randomItem, randomNumber } from "../js/utils.js";
 
 export function getCharacters() {
@@ -59,7 +59,7 @@ export function createMercenary(classId = randomItem(Object.keys(characterClasse
     isPlayer,
     tags: [...baseClass.tags],
     equipment: createEmptyEquipment(),
-    stats: addVariance(baseClass.stats),
+    combatPower: baseClass.baseCombatPower + randomNumber(-3, 4),
     status: "待命",
   };
 }
@@ -69,6 +69,7 @@ export function createCharacter(data) {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     draft.roster.unshift(character);
+    normalizeCharacterAvatars(draft);
     draft.log.push(`第 ${draft.day} 天：${character.name} 成为了你的代表角色。`);
   });
   return character;
@@ -93,6 +94,7 @@ export function hireRecruit(id) {
     draft.gold -= cost;
     draft.roster.push(recruit);
     draft.recruitPool = draft.recruitPool.filter((character) => character.id !== id);
+    normalizeCharacterAvatars(draft);
     draft.log.push(`第 ${draft.day} 天：${recruit.name} 加入了事务所。`);
     hired = recruit;
   });
@@ -110,6 +112,7 @@ export function refreshRecruits() {
     const poolSize = 2 + (draft.buildings.tavern ?? 0);
     draft.gold -= cost;
     draft.recruitPool = Array.from({ length: poolSize }, () => createMercenary());
+    normalizeCharacterAvatars(draft);
     draft.log.push(`第 ${draft.day} 天：酒馆送来了一批新的候选人。`);
   });
 }
@@ -142,7 +145,9 @@ export function unequipItem(characterId, slot) {
 }
 
 export function canEquipItemToSlot(item, slot) {
-  return slot === "back" || item.slot === slot;
+  if (slot === "weapon") return item.itemCategory === "weapon" || item.slot === "weapon";
+  if (slot === "armor") return item.itemCategory === "armor" || item.slot === "armor";
+  return false;
 }
 
 export function recruitCost(character) {
@@ -169,10 +174,11 @@ export function normalizeCharacter(character) {
   character.stress ??= 0;
   character.status ??= "待命";
   character.tags ??= [];
-  character.stats ??= { might: 1, agility: 1, wits: 1, resolve: 1 };
-  character.maxHp ??= 24 + character.stats.resolve;
+  character.combatPower ??= character.classId && characterClasses[character.classId] ? characterClasses[character.classId].baseCombatPower : 20;
+  character.maxHp ??= character.classId && characterClasses[character.classId] ? characterClasses[character.classId].maxHp : 24;
   character.hp ??= Math.max(1, character.maxHp - character.wound * 4);
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
+  character.equipment = normalizeEquipmentSlots(character.equipment);
   return character;
 }
 
@@ -225,6 +231,13 @@ function createDossier() {
 
 function createEmptyEquipment() {
   return Object.fromEntries(Object.keys(equipmentSlots).map((slot) => [slot, null]));
+}
+
+function normalizeEquipmentSlots(equipment) {
+  return {
+    weapon: equipment.weapon ?? null,
+    armor: equipment.armor ?? null,
+  };
 }
 
 function normalizeRank(character) {

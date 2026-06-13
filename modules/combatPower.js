@@ -2,11 +2,10 @@ import { mercenaryRanks } from "../data/sampleData.js";
 import { clamp } from "../js/utils.js";
 
 export function estimateBaseCombatPower(character) {
-  const stats = character.stats ?? { might: 3, agility: 3, wits: 3, resolve: 3 };
-  const statPower = stats.might * 2.2 + stats.agility * 1.7 + stats.wits * 1.2 + stats.resolve * 1.5;
+  const basePower = character.combatPower ?? 20;
   const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
   const traitPower = (character.traits?.length ?? 0) * 2;
-  return Math.max(10, Math.round(statPower + rankIndex * 5 + traitPower));
+  return Math.max(10, Math.round(basePower + rankIndex * 3 + traitPower));
 }
 
 export function calculateEquipmentCombatPower(character) {
@@ -23,7 +22,8 @@ export function calculateCharacterCombatPower(character) {
 export function calculateEffectiveCharacterCombatPower(character) {
   const injuryPenalty = (character.wound ?? 0) * 4;
   const stressPenalty = Math.floor((character.stress ?? 0) / 5);
-  return Math.max(1, calculateCharacterCombatPower(character) - injuryPenalty - stressPenalty);
+  const conditionPenalty = (character.conditions ?? []).reduce((sum, condition) => sum + (condition.powerPenalty ?? 0), 0);
+  return Math.max(1, calculateCharacterCombatPower(character) - injuryPenalty - stressPenalty - conditionPenalty);
 }
 
 export function calculateTeamCombatPower(roster, memberIds) {
@@ -33,10 +33,7 @@ export function calculateTeamCombatPower(roster, memberIds) {
 }
 
 export function getItemCombatPower(item) {
-  if (item.itemCategory === "weapon" || item.damageDice) return clamp((item.power ?? 1) * 3 + rarityBonus(item.rarity), 1, 28);
-  if (item.itemCategory === "armor" && typeof item.armor === "number") {
-    return clamp((item.armor ?? 0) * 2 + (item.mobility ?? 0) + rarityBonus(item.rarity), 0, 24);
-  }
+  if (item.itemCategory === "weapon" || item.slot === "weapon") return clamp(item.power ?? 0, 0, 50);
   return 0;
 }
 

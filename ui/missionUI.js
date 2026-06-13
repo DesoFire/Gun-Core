@@ -1,8 +1,10 @@
 import { getState } from "../js/state.js";
 import { contractIntelFields } from "../data/sampleData.js";
 import {
-  calculateMissionChance,
+  evaluateMissionFit,
+  getContractRiskTag,
   getMissionPowerRange,
+  getMissionRisk,
   getMissions,
   getTeamCombatPower,
   investigateMission,
@@ -10,6 +12,7 @@ import {
   startMission,
 } from "../modules/mission.js";
 import { openCharacterSheet } from "./characterUI.js";
+import { renderMercenaryAvatar } from "./mercenaryAvatarUI.js";
 
 let openContractId = null;
 let dispatchMissionId = null;
@@ -26,13 +29,11 @@ export function renderMissionUI() {
   container.innerHTML = getMissions()
     .map((mission) => {
       const isActive = mission.status === "active";
-      const assignedNames = mission.assigned
-        .map((id) => roster.find((character) => character.id === id)?.name)
-        .filter(Boolean)
-        .join("、");
+      const assignedMembers = getMissionMembers(mission, roster);
       const revealedIntel = mission.revealedIntel ?? [];
       const lockedIntelCount = contractIntelFields.filter((field) => !revealedIntel.includes(field.key)).length;
       const powerRange = getMissionPowerRange(mission);
+      const risk = getContractRiskTag(mission);
       const canAct = state.gameStatus === "active";
       const canInvestigate = canAct && !isActive && (lockedIntelCount > 0 || powerRange.level < 3);
       return `
@@ -47,11 +48,16 @@ export function renderMissionUI() {
           <div class="contract-public">
             <span>难度 ${mission.difficulty}</span>
             <span>战力 ${powerRange.low}-${powerRange.high}</span>
+            <span>建议 ${mission.recommendedTeamSize?.min ?? 1}-${mission.recommendedTeamSize?.max ?? 4} 人</span>
+            <span>${risk.label}</span>
             <span>${mission.duration} 天</span>
             <span>${mission.reward.gold} 金</span>
-            <span>${mission.reward.reputation} 声望</span>
           </div>
-          <p class="muted">${isActive ? `执行中：${assignedNames}` : `剩余 ${lockedIntelCount} 项情报未调查。点开契约卡派遣队员。`}</p>
+          ${
+            isActive
+              ? `<div class="contract-team-strip">${assignedMembers.map((character) => renderMercenaryAvatar(character, { size: "small" })).join("")}<span>执行中</span></div>`
+              : `<p class="muted">剩余 ${lockedIntelCount} 项情报未调查。点开契约卡派遣队员。</p>`
+          }
           <div class="button-row">
             <button class="primary-button" data-view-contract="${mission.id}" type="button">${isActive ? "查看" : "打开契约卡"}</button>
             <button class="ghost-button" data-investigate-mission="${mission.id}" ${canInvestigate ? "" : "disabled"} type="button">调查 ${mission.investigateCost ?? 0} 金</button>
@@ -114,15 +120,14 @@ function renderContractCard(id) {
   }
 
   const roster = state.roster;
-  const assignedNames = mission.assigned
-    .map((memberId) => roster.find((character) => character.id === memberId)?.name)
-    .filter(Boolean)
-    .join("、");
+  const assignedMembers = getMissionMembers(mission, roster);
+  const assignedNames = assignedMembers.map((character) => character.name).join("、");
   const revealedIntel = mission.revealedIntel ?? [];
   const isActive = mission.status === "active";
   const selectedIds = [...dispatchSelection].filter((memberId) => roster.some((character) => character.id === memberId));
   if (selectedIds.length !== dispatchSelection.size) dispatchSelection = new Set(selectedIds);
-  const chance = isActive ? null : calculateMissionChance(selectedIds, mission);
+  const fit = isActive ? null : evaluateMissionFit(selectedIds, mission);
+  const risk = fit?.risk ?? getMissionRisk(selectedIds, mission);
   const teamPower = getTeamCombatPower(selectedIds);
   const powerRange = getMissionPowerRange(mission);
   const isDispatching = dispatchMissionId === mission.id && !isActive;
@@ -146,16 +151,25 @@ function renderContractCard(id) {
           <div class="field"><span>执行时间</span><strong>${mission.duration} 天</strong></div>
           <div class="field"><span>难度</span><strong>${mission.difficulty}</strong></div>
           <div class="field"><span>战力需求</span><strong>${powerRange.low}-${powerRange.high}</strong></div>
+          <div class="field"><span>推荐人数</span><strong>${mission.recommendedTeamSize?.min ?? 1}-${mission.recommendedTeamSize?.max ?? 4}</strong></div>
           <div class="field"><span>情报精度</span><strong>${powerRange.level}/3</strong></div>
-          <div class="field"><span>报酬</span><strong>${mission.reward.gold} 金 / ${mission.reward.reputation} 声望</strong></div>
-          <div class="field"><span>当前估算</span><strong>${isActive ? `剩余 ${mission.remaining} 天` : `${chance}%`}</strong></div>
+          <div class="field"><span>报酬</span><strong>${mission.reward.gold} 金 / ${mission.reward.reputation} 声望池</strong></div>
+          <div class="field"><span>当前风险</span><strong>${isActive ? `剩余 ${mission.remaining} 天` : risk.label}</strong></div>
           <div class="field"><span>已选战力</span><strong>${teamPower}</strong></div>
         </div>
       </section>
       <section class="dossier-section">
         <h3>行动标签</h3>
         <div class="badge-row">${mission.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
-        <p class="muted">${isActive ? `执行队伍：${assignedNames || "未知"}` : "战力需求是隐藏定值，当前仅显示估算区间；调查可收窄区间。"}</p>
+        <div class="field-list compact-field-list">
+          <div class="field"><span>推荐武器</span><strong>${mission.requirements?.weaponTypes?.join(" / ") || "未明"}</strong></div>
+          <div class="field"><span>推荐伤害</span><strong>${mission.requirements?.damageTypes?.join(" / ") || "未明"}</strong></div>
+        </div>
+        ${
+          isActive
+            ? `<div class="contract-team-strip contract-team-strip-large">${assignedMembers.map((character) => renderMercenaryAvatar(character)).join("")}<span>${assignedNames || "未知队伍"}</span></div>`
+            : `<p class="muted">战力需求是隐藏定值，当前仅显示估算区间；调查可收窄区间。</p>`
+        }
       </section>
       <section class="dossier-section wide">
         <h3>简报</h3>
@@ -201,14 +215,16 @@ function renderDispatchSummary(mission, selectedIds) {
   if (mission.status === "active") return "";
   const range = getMissionPowerRange(mission);
   const teamPower = getTeamCombatPower(selectedIds);
+  const fit = evaluateMissionFit(selectedIds, mission);
   return `
     <div class="dispatch-summary">
       <div class="field-list">
         <div class="field"><span>已选队员</span><strong>${selectedIds.length > 0 ? `${selectedIds.length} 人` : "未选择"}</strong></div>
         <div class="field"><span>队伍战力</span><strong>${teamPower}</strong></div>
         <div class="field"><span>需求区间</span><strong>${range.low}-${range.high}</strong></div>
-        <div class="field"><span>预估成功率</span><strong>${calculateMissionChance(selectedIds, mission)}%</strong></div>
+        <div class="field"><span>风险判断</span><strong>${fit.risk.label}</strong></div>
       </div>
+      <p class="muted">${fit.risk.description}</p>
     </div>
   `;
 }
@@ -216,7 +232,7 @@ function renderDispatchSummary(mission, selectedIds) {
 function renderDispatchPanel(mission, selectedIds) {
   const state = getState();
   const availableRoster = state.roster.filter((character) => character.status === "待命");
-  const chance = calculateMissionChance(selectedIds, mission);
+  const fit = evaluateMissionFit(selectedIds, mission);
   const teamPower = getTeamCombatPower(selectedIds);
   const range = getMissionPowerRange(mission);
   return `
@@ -225,8 +241,15 @@ function renderDispatchPanel(mission, selectedIds) {
         <div class="field"><span>已选</span><strong>${selectedIds.length}/4 人</strong></div>
         <div class="field"><span>队伍战力</span><strong>${teamPower}</strong></div>
         <div class="field"><span>需求区间</span><strong>${range.low}-${range.high}</strong></div>
-        <div class="field"><span>预估成功率</span><strong>${chance}%</strong></div>
+        <div class="field"><span>风险判断</span><strong>${fit.risk.label}</strong></div>
         <button class="primary-button" data-confirm-dispatch="${mission.id}" ${state.gameStatus !== "active" || selectedIds.length === 0 ? "disabled" : ""} type="button">确认派遣</button>
+      </div>
+      <div class="dispatch-fit-note">
+        <span>${fit.risk.description}</span>
+        <span>人数偏差惩罚 ${fit.teamSizePenalty}</span>
+        <span>标签匹配 ${fit.matchingTags}</span>
+        <span>武器匹配 ${fit.matchingWeapons}</span>
+        <span>伤害匹配 ${fit.matchingDamageTypes}</span>
       </div>
       <div class="dispatch-roster">
         ${
@@ -244,9 +267,12 @@ function renderDispatchCharacter(character, selected) {
     <article class="dispatch-character ${selected ? "selected" : ""}">
       <div>
         <div class="card-header">
-          <div>
-            <p class="card-title">${character.name}</p>
-            <p class="muted">${character.className} · ${formatRank(character.rank)} · ${character.status}</p>
+          <div class="identity-line">
+            ${renderMercenaryAvatar(character)}
+            <div>
+              <p class="card-title">${character.name}</p>
+              <p class="muted">${character.className} · ${formatRank(character.rank)} · ${character.status}</p>
+            </div>
           </div>
           <button class="${selected ? "ghost-button" : "primary-button"}" data-toggle-dispatch-member="${character.id}" type="button">${selected ? "移出" : "加入"}</button>
         </div>
@@ -318,6 +344,10 @@ function toggleDispatchMember(id) {
   }
   if (dispatchSelection.size >= 4) return;
   dispatchSelection.add(id);
+}
+
+function getMissionMembers(mission, roster) {
+  return mission.assigned.map((memberId) => roster.find((character) => character.id === memberId)).filter(Boolean);
 }
 
 function formatRank(rank) {

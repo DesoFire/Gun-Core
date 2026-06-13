@@ -30,8 +30,8 @@ function renderInventoryItems(inventory) {
 
   return inventory
     .map((item) => {
-      if (item.itemCategory === "weapon" || item.damageDice) return renderWeaponCard(item);
-      if (item.itemCategory === "armor" && typeof item.armor === "number") return renderArmorCard(item);
+      if (item.itemCategory === "weapon" || item.slot === "weapon") return renderWeaponCard(item);
+      if (item.itemCategory === "armor" || item.slot === "armor") return renderArmorCard(item);
       const tags = (item.tags ?? []).join(" / ") || "无标签";
       const rarity = item.rarity ? `${item.rarity}级 · ` : "";
       const quantity = item.quantity ? ` · 数量 ${item.quantity}` : "";
@@ -51,8 +51,8 @@ function renderInventoryItems(inventory) {
 }
 
 export function renderInventoryItemSummary(item) {
-  if (item.itemCategory === "weapon" || item.damageDice) return renderWeaponSummaryLine(item);
-  if (item.itemCategory === "armor" && typeof item.armor === "number") return renderArmorSummaryLine(item);
+  if (item.itemCategory === "weapon" || item.slot === "weapon") return renderWeaponSummaryLine(item);
+  if (item.itemCategory === "armor" || item.slot === "armor") return renderArmorSummaryLine(item);
   const rarity = item.rarity ? `${item.rarity}级 · ` : "";
   const quantity = item.quantity ? ` · 数量 ${item.quantity}` : "";
   return `${rarity}${item.type ?? item.itemCategory}${quantity} · ${(item.tags ?? []).join(" / ") || "无标签"}`;
