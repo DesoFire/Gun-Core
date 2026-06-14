@@ -6,9 +6,23 @@ import {
   investigateMission,
   startMission,
 } from "../modules/mission.js";
-import { calculateDailyExpenseBreakdown } from "../modules/faction.js";
-import { buyWealthItem, getWealthCollections, getWealthProgress } from "../modules/wealth.js";
-import { hireRecruit } from "../modules/character.js";
+import {
+  approveSecrecyExpenses,
+  buyBlackMarketItem,
+  calculateDailyExpenseBreakdown,
+  calculateHospitalTreatmentPlan,
+  calculateSecrecyExpenseItems,
+  calculateUnpaidSecrecyReputation,
+  canUpgradeFacility,
+  getBlackMarketItemCost,
+  getFacilityRankLabel,
+  getFacilityUpgradeCost,
+  hospitalTreatMercenaries,
+  isSecrecyBillingDay,
+  upgradeBuilding,
+} from "../modules/faction.js";
+import { getWealthProgress } from "../modules/wealth.js";
+import { equipItem, dismissMercenary, getMercenaryLimit, hireRecruit, recruitCost } from "../modules/character.js";
 import { calculateEffectiveCharacterCombatPower } from "../modules/combatPower.js";
 
 const RUNS = Number.parseInt(process.argv[2] ?? "250", 10);
@@ -25,7 +39,6 @@ const strategies = [
     prefer: "safe",
     reserveGold: 90,
     hireBelow: 3,
-    wealthReserve: 520,
   },
   {
     id: "aggressive",
@@ -35,7 +48,6 @@ const strategies = [
     prefer: "reward",
     reserveGold: 25,
     hireBelow: 3,
-    wealthReserve: 720,
   },
   {
     id: "growth",
@@ -45,7 +57,6 @@ const strategies = [
     prefer: "throughput",
     reserveGold: 65,
     hireBelow: 4,
-    wealthReserve: 640,
   },
   {
     id: "wealth",
@@ -55,7 +66,6 @@ const strategies = [
     prefer: "profit",
     reserveGold: 30,
     hireBelow: 3,
-    wealthReserve: 260,
   },
 ];
 
@@ -86,6 +96,7 @@ function simulateRun(strategy, runIndex) {
     conditionEvents: 0,
     mentalEvents: 0,
     recruitsHired: 0,
+    dismissed: 0,
     wealthBought: 0,
     wealthSpent: 0,
     totalInvestigations: 0,
@@ -95,6 +106,9 @@ function simulateRun(strategy, runIndex) {
     goldMin: getState().gold,
     goldMax: getState().gold,
     dailyExpensePeak: calculateDailyExpenseBreakdown().total,
+    facilityUpgrades: 0,
+    hospitalTreatments: 0,
+    marketPurchases: 0,
     firstGameOverDay: null,
     attemptedChances: [],
     startedRewards: [],
@@ -115,8 +129,10 @@ function simulateRun(strategy, runIndex) {
 
   for (let day = 1; day <= MAX_DAYS; day += 1) {
     const before = snapshot();
+    payMonthlySecrecyIfDue();
+    maybeUseFacilities(strategy, metrics);
+    maybeDismissLiabilities(strategy, metrics);
     maybeHire(strategy, metrics);
-    maybeBuyWealth(strategy, metrics);
     runDispatchPolicy(strategy, metrics);
 
     if (getState().gameStatus !== "active") break;
@@ -149,6 +165,7 @@ function runDispatchPolicy(strategy, metrics) {
         investigateForPolicy(strategy, mission, metrics);
         const team = chooseTeamForMission(mission, availableMercs, strategy);
         if (team.length === 0) return null;
+        autoEquipTeamForMission(team, mission);
         const fit = evaluateMissionFit(team.map((c) => c.id), mission);
         const reward = mission.reward?.gold ?? 0;
         const duration = mission.duration ?? 1;
@@ -166,6 +183,157 @@ function runDispatchPolicy(strategy, metrics) {
     metrics.startedRewards.push(pick.reward);
     startMission(pick.mission.id, pick.team.map((c) => c.id));
   }
+}
+
+function maybeUseFacilities(strategy, metrics) {
+  maybeTreatAtHospital(strategy, metrics);
+  maybeUpgradeFacilities(strategy, metrics);
+  maybeBuyBlackMarketGear(strategy, metrics);
+}
+
+function maybeTreatAtHospital(strategy, metrics) {
+  const state = getState();
+  if ((state.buildings.hospital ?? 0) <= 0) return;
+  const plan = calculateHospitalTreatmentPlan(state);
+  if (plan.entries.length === 0) return;
+  const burden = totalMedicalBurden(state);
+  if (state.gold - plan.cost < strategy.reserveGold + 60 || burden < 28) return;
+  const beforeGold = state.gold;
+  const beforeBurden = totalMedicalBurden(state);
+  hospitalTreatMercenaries();
+  const after = getState();
+  if (after.gold < beforeGold && totalMedicalBurden(after) < beforeBurden) metrics.hospitalTreatments += 1;
+}
+
+function maybeUpgradeFacilities(strategy, metrics) {
+  const state = getState();
+  const living = state.roster.filter((character) => !isDead(character)).length;
+  const atCap = living >= getMercenaryLimit(state);
+  const priorities = [
+    { id: "hospital", when: state.roster.some((character) => !isDead(character) && ((character.wound ?? 0) > 0 || (character.stress ?? 0) >= 35)) },
+    { id: "blackMarket", when: needBetterGear(state) },
+    { id: "defenses", when: state.stealth < 85 || calculateUnpaidSecrecyReputation(state) > 0 },
+    { id: "intel", when: strategy.maxInvestigations > 0 },
+    { id: "barracks", when: atCap || strategy.hireBelow > getMercenaryLimit(state) },
+    { id: "tavern", when: state.recruitPool.length < 3 && living < strategy.hireBelow },
+  ];
+
+  for (const entry of priorities) {
+    if (!entry.when || !canUpgradeFacility(entry.id)) continue;
+    const level = state.buildings[entry.id] ?? 0;
+    const targetLevel = getFacilityTargetLevel(entry.id, strategy);
+    if (level >= targetLevel) continue;
+    const cost = getFacilityUpgradeCost(entry.id, level);
+    const reserve = entry.id === "barracks" || entry.id === "hospital" ? strategy.reserveGold + 80 : strategy.reserveGold + 120;
+    if (getState().gold - cost < reserve) continue;
+    const beforeLevel = getState().buildings[entry.id] ?? 0;
+    upgradeBuilding(entry.id);
+    if ((getState().buildings[entry.id] ?? 0) > beforeLevel) metrics.facilityUpgrades += 1;
+    return;
+  }
+}
+
+function getFacilityTargetLevel(id, strategy) {
+  if (id === "barracks") return strategy.hireBelow > 4 ? 1 : 0;
+  if (id === "hospital") return 1;
+  if (id === "blackMarket") return 1;
+  if (id === "defenses") return 2;
+  if (id === "intel") return strategy.maxInvestigations > 1 ? 2 : 1;
+  if (id === "tavern") return 1;
+  return 1;
+}
+
+function maybeBuyBlackMarketGear(strategy, metrics) {
+  const state = getState();
+  if ((state.buildings.blackMarket ?? 0) <= 0) return;
+  if ((metrics.marketPurchases ?? 0) >= 4) return;
+  autoEquipIdleMercenaries();
+  const rank = getFacilityRankLabel(state.buildings.blackMarket ?? 0);
+  const weakest = state.roster.filter((character) => isIdle(character) && !isDead(character)).sort((a, b) => calculateEffectiveCharacterCombatPower(a) - calculateEffectiveCharacterCombatPower(b))[0];
+  if (!weakest) return;
+
+  const choices = [];
+  if (needMoreWeapons(state)) choices.push("weapon");
+  if (needMoreArmor(state)) choices.push("armor");
+  if ((state.supplies ?? 0) < state.roster.length * 3) choices.push("supplies");
+  if (choices.length === 0 && calculateEffectiveCharacterCombatPower(weakest) < 35) choices.push("weapon");
+  const kind = choices[0];
+  if (!kind) return;
+  const cost = getBlackMarketItemCost(kind, rank);
+  if (state.gold - cost < strategy.reserveGold + 100) return;
+  const beforeInventory = state.inventory.length + state.mechs.length;
+  const beforeSupplies = state.supplies ?? 0;
+  buyBlackMarketItem(kind);
+  const after = getState();
+  if (after.inventory.length + after.mechs.length > beforeInventory || (after.supplies ?? 0) > beforeSupplies) {
+    metrics.marketPurchases += 1;
+    autoEquipIdleMercenaries();
+  }
+}
+
+function autoEquipTeamForMission(team, mission) {
+  const wantedDamageTypes = mission.requirements?.damageTypes ?? [];
+  const wantedWeapons = mission.requirements?.weaponTypes ?? [];
+  for (const character of team) {
+    equipBestItem(character.id, "weapon", (item) => scoreWeaponForMission(item, wantedWeapons, wantedDamageTypes));
+    equipBestItem(character.id, "armor", (item) => scoreArmorForMission(item, wantedDamageTypes));
+  }
+}
+
+function autoEquipIdleMercenaries() {
+  getState()
+    .roster
+    .filter((character) => isIdle(character) && !isDead(character))
+    .forEach((character) => {
+      equipBestItem(character.id, "weapon", scoreWeaponForMission);
+      equipBestItem(character.id, "armor", scoreArmorForMission);
+    });
+}
+
+function equipBestItem(characterId, slot, scorer) {
+  const state = getState();
+  const character = state.roster.find((entry) => entry.id === characterId);
+  if (!character) return;
+  const current = character.equipment?.[slot];
+  const currentScore = current ? scorer(current) : -Infinity;
+  const candidate = state.inventory
+    .filter((item) => item.slot === slot || item.itemCategory === slot)
+    .map((item) => ({ item, score: scorer(item) }))
+    .sort((a, b) => b.score - a.score)[0];
+  if (!candidate || candidate.score <= currentScore) return;
+  equipItem(characterId, slot, candidate.item.id);
+}
+
+function scoreWeaponForMission(item, wantedWeapons = [], wantedDamageTypes = []) {
+  return (
+    (item.power ?? 0) +
+    (wantedWeapons.includes(item.type) ? 18 : 0) +
+    (wantedDamageTypes.includes(item.damageType) ? 10 : 0)
+  );
+}
+
+function scoreArmorForMission(item, wantedDamageTypes = []) {
+  return (item.deathRiskReduction ?? 0) * 10 + (wantedDamageTypes.includes(item.protectionType) ? 22 : 0);
+}
+
+function needBetterGear(state) {
+  return needMoreWeapons(state) || needMoreArmor(state);
+}
+
+function needMoreWeapons(state) {
+  const idle = state.roster.filter((character) => isIdle(character) && !isDead(character));
+  const weapons = idle.filter((character) => character.equipment?.weapon).length + state.inventory.filter((item) => item.itemCategory === "weapon" || item.slot === "weapon").length;
+  return weapons < Math.min(3, idle.length);
+}
+
+function needMoreArmor(state) {
+  const idle = state.roster.filter((character) => isIdle(character) && !isDead(character));
+  const armors = idle.filter((character) => character.equipment?.armor).length + state.inventory.filter((item) => item.itemCategory === "armor" || item.slot === "armor").length;
+  return armors < Math.min(3, idle.length);
+}
+
+function totalMedicalBurden(state) {
+  return state.roster.reduce((sum, character) => sum + (character.wound ?? 0) * 10 + Math.floor((character.stress ?? 0) / 4), 0);
 }
 
 function investigateForPolicy(strategy, mission, metrics) {
@@ -213,9 +381,10 @@ function scoreMission(strategy, fit, mission, reward, duration) {
 function maybeHire(strategy, metrics) {
   const state = getState();
   const alive = state.roster.filter((c) => !isDead(c)).length;
+  if (alive >= getMercenaryLimit(state)) return;
   if (alive >= strategy.hireBelow) return;
   const recruit = [...state.recruitPool]
-    .map((candidate) => ({ candidate, cost: 42 + Math.max(0, candidate.level ?? 0) * 10 + (candidate.tags?.length ?? 0) * 4 }))
+    .map((candidate) => ({ candidate, cost: recruitCost(candidate) }))
     .filter((entry) => state.gold - entry.cost >= strategy.reserveGold)
     .sort((a, b) => calculateEffectiveCharacterCombatPower(b.candidate) - calculateEffectiveCharacterCombatPower(a.candidate))[0];
   if (!recruit) return;
@@ -224,20 +393,38 @@ function maybeHire(strategy, metrics) {
   if (getState().roster.length > before) metrics.recruitsHired += 1;
 }
 
-function maybeBuyWealth(strategy, metrics) {
+function maybeDismissLiabilities(strategy, metrics) {
   const state = getState();
-  const owned = new Set(Object.keys(state.wealth?.owned ?? {}));
-  const item = getWealthCollections()
-    .flatMap((room) => room.items)
-    .filter((entry) => !owned.has(entry.id))
-    .sort((a, b) => a.cost - b.cost)[0];
-  if (!item) return;
-  if (state.gold - item.cost < strategy.wealthReserve) return;
-  buyWealthItem(item.id);
-  if (getState().wealth?.owned?.[item.id]) {
-    metrics.wealthBought += 1;
-    metrics.wealthSpent += item.cost;
+  const aliveIdle = state.roster.filter((character) => isIdle(character) && !isDead(character));
+  if (aliveIdle.length <= 3) return;
+  const candidates = aliveIdle
+    .filter((character) => !character.isPlayer)
+    .map((character) => ({
+      character,
+      power: calculateEffectiveCharacterCombatPower(character),
+      burden: (character.wound ?? 0) * 8 + (character.conditions?.length ?? 0) * 5 + Math.floor((character.stress ?? 0) / 10),
+    }))
+    .filter((entry) => entry.power <= 3 || entry.burden >= 40 || (entry.character.wound ?? 0) >= 5 || (entry.character.conditions?.length ?? 0) >= 5)
+    .sort((a, b) => b.burden - a.burden || a.power - b.power);
+  const target = candidates[0]?.character;
+  if (!target) return;
+  const before = getState().roster.length;
+  dismissMercenary(target.id);
+  if (getState().roster.length < before) metrics.dismissed = (metrics.dismissed ?? 0) + 1;
+}
+
+function payMonthlySecrecyIfDue() {
+  const state = getState();
+  if (!isSecrecyBillingDay(state.day)) return;
+  const items = calculateSecrecyExpenseItems(state);
+  let remainingGold = state.gold;
+  const paidIds = [];
+  for (const item of items.sort((a, b) => a.cost - b.cost)) {
+    if (remainingGold < item.cost) continue;
+    remainingGold -= item.cost;
+    paidIds.push(item.id);
   }
+  approveSecrecyExpenses(paidIds);
 }
 
 function collectDelta(metrics, before) {
@@ -344,7 +531,13 @@ function buildReport(raw) {
           dailyExpensePeak: round(avg(runs.map((run) => run.dailyExpensePeak)), 1),
           investigations: round(avg(runs.map((run) => run.totalInvestigations)), 1),
         },
+        facilities: {
+          upgrades: round(avg(runs.map((run) => run.facilityUpgrades ?? 0)), 2),
+          hospitalTreatments: round(avg(runs.map((run) => run.hospitalTreatments ?? 0)), 2),
+          marketPurchases: round(avg(runs.map((run) => run.marketPurchases ?? 0)), 2),
+        },
         roster: {
+          dismissed: round(avg(runs.map((run) => run.dismissed ?? 0)), 2),
           deaths: round(avg(runs.map((run) => run.deaths)), 2),
           endAlive: round(avg(runs.map((run) => run.endAlive)), 2),
           endAvgPower: round(avg(runs.map((run) => run.endAvgPower)), 1),

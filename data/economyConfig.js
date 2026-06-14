@@ -12,26 +12,52 @@
 export const economyConfig = {
   initialState: {
     // 新开局资金。过低会导致玩家无法承担前几天试错，过高会让支出压力变钝。
-    gold: 180,
+    gold: 300,
     // 新开局补给。补给为 0 时，所有未阵亡佣兵每天增加压力。
     supplies: 24,
     // 新开局隐秘值。隐秘值归零会直接失败。
-    stealth: 78,
-    // 短局目标期限。超过该天数仍未完成财富收藏则失败。
-    deadline: 60,
+    stealth: 100,
   },
 
   contracts: {
+    missionBoard: {
+      // 初始/常驻契约面板上限。可接契约过期后会被新契约替代，保持该数量。
+      availableLimit: 3,
+    },
+    advancePaymentRates: {
+      // 接取契约时立刻获得预付款。这里配置的是“占总金钱报酬的随机比例区间”。
+      // 预付款会从成功结算尾款中扣除，不额外放大总收益。
+      Escort: [0.25, 0.45],
+      Transport: [0.35, 0.6],
+      Recon: [0.15, 0.3],
+      Search: [0.15, 0.35],
+      Recovery: [0.2, 0.45],
+      Hunt: [0.1, 0.25],
+      Raid: [0.1, 0.3],
+      Sabotage: [0.2, 0.4],
+      Extraction: [0.25, 0.5],
+      Defense: [0.3, 0.55],
+      Occupation: [0.2, 0.4],
+      Special: [0.05, 0.25],
+      fallback: [0.2, 0.4],
+    },
     reward: {
       // 契约基础金钱奖励：baseGold + difficulty * random(goldPerDifficultyMin, goldPerDifficultyMax)。
-      baseGold: 35,
-      goldPerDifficultyMin: 16,
-      goldPerDifficultyMax: 24,
+      baseGold: 105,
+      goldPerDifficultyMin: 48,
+      goldPerDifficultyMax: 72,
       // 契约基础声望池：max(minReputation, difficulty * reputationPerDifficulty + random(reputationRandomMin, reputationRandomMax))。
       minReputation: 5,
       reputationPerDifficulty: 3,
       reputationRandomMin: 0,
       reputationRandomMax: 5,
+    },
+    reputationFailure: {
+      // 契约失败时每个实体扣除的声望：floor(successReputation * rate / (teamSize + 1))。
+      // 这里按“单体扣除 * (n+1) < 成功声望池”设计，避免一次失败扣掉超过成功收益的总声望。
+      // minLoss 让低级契约失败也有代价；maxRate 必须小于 1。
+      maxRate: 0.55,
+      minLoss: 1,
     },
     requirement: {
       // 契约真实战斗力需求：basePower + difficulty * random(powerPerDifficultyMin, powerPerDifficultyMax)
@@ -56,10 +82,11 @@ export const economyConfig = {
       // 刷新契约费用：refreshBase + difficulty * refreshPerDifficulty。
       refreshBase: 12,
       refreshPerDifficulty: 4,
-      // 调查费用：investigateBase + difficulty * investigatePerDifficulty + revealedCount * investigatePerIntel。
-      investigateBase: 14,
-      investigatePerDifficulty: 5,
-      investigatePerIntel: 6,
+      // 调查费用：每份契约生成时按契约总金钱报酬 * random(investigationRewardRateMin, investigationRewardRateMax) 固定。
+      investigationRewardRateMin: 0.1,
+      investigationRewardRateMax: 0.2,
+      // 每份情报的最低费用，避免低报酬契约调查费过低。
+      investigationMinCost: 8,
       // 随机调查更便宜；战力区间细化介于随机和定向之间。
       randomInvestigationMultiplier: 0.65,
       powerInvestigationMultiplier: 0.85,
@@ -106,11 +133,13 @@ export const economyConfig = {
     // 基地固定开销。无论有没有佣兵都会支付。
     baseUpkeep: 10,
     wages: {
+      // 佣兵基础日薪按评级走从 1, 2 开始的斐波那契：无=1，F=2，E=3，D=5，C=8，B=13，A=21，S=34。
+      rankDailyWage: [1, 2, 3, 5, 8, 13, 21, 34],
       // 佣兵日薪：base + rankIndex * perRank + notoriety * perNotoriety + playerBonus。
       base: 3,
       perRank: 2,
-      perNotoriety: 2,
-      playerBonus: 2,
+      perNotoriety: 0,
+      playerBonus: 0,
     },
     livingSupplies: {
       // 每名未阵亡佣兵的生活补给费：base + ceil(rankIndex / rankDivisor)。
@@ -134,20 +163,57 @@ export const economyConfig = {
     },
   },
 
+  secrecy: {
+    // 隐秘费用每 30 天结算一次。第 1 天不收，第 31/61/91...天触发。
+    billingCycleDays: 30,
+    firstBillingDay: 31,
+    // 佣兵每 1 点个人声望，每月需要支付 1 金隐秘费。
+    mercenaryMonthlyCostPerReputation: 1,
+    // 基地每 1 点基地声望，每月需要支付 2 金隐秘费。
+    baseMonthlyCostPerReputation: 2,
+    // 未支付隐秘费时，每 1 点未支付声望永久累计，并立即降低 1 点隐秘值。
+    stealthLossPerUnpaidReputation: 1,
+    // 在佣兵详情中“抹去黑历史”的价格：每 1 点个人声望 2 金，且必须一次付清清零。
+    eraseMercenaryReputationCostPerPoint: 2,
+  },
+
   recruitment: {
     // 刷新招募池费用。
     refreshCost: 15,
+    // 签字费 = 该佣兵当前日薪 * signingMultiplier。倍率在生成佣兵时固定，通常为 3-7 倍。
+    signingMultiplierMin: 3,
+    signingMultiplierMax: 7,
     // 招募费用：baseCost + rankIndex * perRank + tagCount * perTag。
-    baseCost: 42,
-    perRank: 10,
-    perTag: 4,
+    baseCost: 24,
+    perRank: 6,
+    perTag: 2,
   },
 
   facilities: {
     // 升级费用：建筑基础 cost + 当前等级 * upgradePerCurrentLevel。解锁 F 级使用建筑 unlockCost/cost。
     upgradePerCurrentLevel: 55,
-    // 医疗中心一次治疗所有伤病佣兵的费用。
-    hospitalTreatCost: 32,
+    // 基础设施日维护费全局倍率。用于整体压低设施维护压力。
+    upkeepMultiplier: 0.35,
+    // 初始佣兵上限。兵营每提升 1 级，上限 +1。
+    baseMercenaryLimit: 4,
+    barracksMercenaryLimitPerLevel: 1,
+    // 情报室每级降低调查费用的比例，最高不超过 contracts.costs.maxInvestigationDiscount。
+    intelInvestigationDiscountPerLevel: 0.08,
+    // 医疗中心按负面状态数量收费。轻/中/重状态分别使用不同基础费用。
+    hospitalConditionCost: {
+      light: 14,
+      medium: 32,
+      heavy: 72,
+    },
+    // 医疗中心每级治疗成功率；等级越高越稳定。
+    hospitalSuccessChanceByLevel: [65, 72, 78, 84, 89, 94, 98],
+    // 医疗中心能治疗的负面状态严重度。F-E 只能治轻度，D-C 可治中度，B-S 可尝试重度。
+    hospitalSeverityByLevel: ["light", "light", "medium", "medium", "heavy", "heavy", "heavy"],
+    // 医疗中心治疗成功后附带恢复的伤势/压力。
+    hospitalWoundRecoveryOnSuccess: 1,
+    hospitalStressRecoveryOnSuccess: 10,
+    // 防御设施在基地遇袭时提供固定基地战斗力。
+    defensePowerPerLevel: 18,
   },
 
   blackMarket: {
@@ -169,27 +235,10 @@ export const economyConfig = {
     // 黑市补给/杂物的数量。F 级较少，E-S 级较多。
     supplyQuantityLowRank: [2, 4],
     supplyQuantityHighRank: [4, 8],
-  },
-
-  baseActions: {
-    // 总览页的“黑市补给”快捷行动。花钱换补给，但会降低隐秘值。
-    buySupplies: {
-      cost: 36,
-      amount: 8,
-      stealthLoss: 2,
-    },
-    // 旧的地下医疗快捷行动。医疗中心建成后，主要使用 facilities.hospitalTreatCost。
-    treatWounds: {
-      cost: 28,
-      stressRecovery: 6,
-      woundRecovery: 1,
-      hpRecovery: 8,
-    },
-    // 清理痕迹：花钱恢复隐秘值。
-    reduceHeat: {
-      cost: 42,
-      stealthGain: 12,
-    },
+    // 黑市武器战斗力：参考同级佣兵战力，再乘 0.5-1.5。
+    weaponPowerReferenceByRank: { F: 22, E: 28, D: 36, C: 46, B: 60, A: 78, S: 100 },
+    weaponPowerMultiplierMin: 0.5,
+    weaponPowerMultiplierMax: 1.5,
   },
 
   restAttack: {
@@ -207,5 +256,16 @@ export const economyConfig = {
     woundStressMin: 4,
     woundStressMax: 8,
   },
-};
 
+  baseRaid: {
+    // 每日开始时遇袭率 = 100 - 隐秘值。隐秘值 100 时不会遇袭，隐秘值 0 时必定遇袭。
+    minUnpaidReputationForRaid: 1,
+    // 未支付声望换算袭击级别。未支付声望越高，袭击越接近高级契约。
+    unpaidReputationPerDifficulty: 10,
+    minDifficulty: 1,
+    maxDifficulty: 8,
+    // 基地防守失败时，损失金币约等于同级契约报酬。
+    facilityDamageChance: 35,
+    facilityDowngradeAmount: 1,
+  },
+};

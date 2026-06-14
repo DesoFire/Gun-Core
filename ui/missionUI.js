@@ -1,5 +1,6 @@
 import { getState } from "../js/state.js";
 import { careerCategories, contractIntelFields } from "../data/sampleData.js";
+import { economyConfig } from "../data/economyConfig.js";
 import {
   evaluateMissionFit,
   getContractRiskTag,
@@ -261,8 +262,11 @@ function getIntelHint(key) {
 
 function formatInvestigationCost(mission, mode) {
   const base = mission.investigateCost ?? 0;
-  const multiplier = mode === "random" ? 0.65 : mode === "power" ? 0.85 : 1;
-  return `${Math.max(1, Math.round(base * multiplier))} 金`;
+  const config = economyConfig.contracts.costs;
+  const multiplier = mode === "random" ? config.randomInvestigationMultiplier : mode === "power" ? config.powerInvestigationMultiplier : 1;
+  const facilityDiscount = (getState().buildings?.intel ?? 0) * economyConfig.facilities.intelInvestigationDiscountPerLevel;
+  const discount = Math.min(config.maxInvestigationDiscount, facilityDiscount);
+  return `${Math.max(1, Math.round(base * multiplier * (1 - discount)))} 金`;
 }
 
 function renderDispatchSummary(mission, selectedIds) {

@@ -11,15 +11,8 @@ import {
   contractTypes,
   creeds,
   equipmentSlots,
-  epithetAdjectives,
-  epithetContainers,
-  epithetForces,
-  epithetNumbers,
-  epithetObjects,
-  epithetPlaces,
-  epithetRoles,
-  epithetTemplates,
-  epithetVerbs,
+  shortEpithetAdjectives,
+  shortEpithetNouns,
   fears,
   genders,
   lastWords,
@@ -93,7 +86,6 @@ export function normalizeCharacterAvatars(draft = state) {
   const usedAvatarKeys = new Set();
   draft.roster = (draft.roster ?? []).map((character) => normalizeCharacterState(character, usedAvatarKeys));
   draft.recruitPool = (draft.recruitPool ?? []).map((character) => normalizeCharacterState(character, usedAvatarKeys));
-  draft.reputation = calculateRosterReputation(draft.roster ?? []);
 }
 
 export function createInitialState() {
@@ -102,21 +94,22 @@ export function createInitialState() {
     objective: {
       title: "收藏室完工",
       targetReputation: 60,
-      deadline: economyConfig.initialState.deadline,
     },
     day: 1,
+    organizationName: "Gun Core",
     gold: economyConfig.initialState.gold,
     supplies: economyConfig.initialState.supplies,
     enhancementPoints: 0,
     reputation: 0,
+    unpaidSecrecy: { base: 0, mercenaries: {} },
     stealth: economyConfig.initialState.stealth,
     roster: [createInitialMercenary("assault"), createInitialMercenary("scout")],
     recruitPool: [createInitialMercenary(), createInitialMercenary(), createInitialMercenary()],
-    missions: Array.from({ length: 4 }, () => createInitialMission()),
+    missions: Array.from({ length: economyConfig.contracts.missionBoard.availableLimit }, () => createInitialMission()),
     timeline: [
-      { id: createId(), day: 1, type: "system", title: "事务所挂牌", status: "done", detail: "第一批契约送达。短局开始。" },
+      { id: createId(), day: 1, type: "system", title: "事务所挂牌", status: "done", detail: "第一批契约送达。经营开始。" },
     ],
-    buildings: { tavern: 1, infirmary: 0, intel: 0 },
+    buildings: { tavern: 1, barracks: 0, defenses: 0, infirmary: 0, intel: 0 },
     mechs: [],
     inventory: sampleItems.map((item) => ({ ...item })),
     inventorySeeded: true,
@@ -152,20 +145,24 @@ function getStorage() {
 
 function normalizeState(savedState) {
   savedState.gameStatus ??= "active";
-  savedState.objective ??= { title: "收藏室完工", targetReputation: 60, deadline: 60 };
+  savedState.objective ??= { title: "收藏室完工", targetReputation: 60 };
   savedState.objective.title ??= "收藏室完工";
   savedState.objective.targetReputation ??= 60;
-  savedState.objective.deadline ??= economyConfig.initialState.deadline;
+  delete savedState.objective.deadline;
   savedState.day ??= 1;
+  savedState.organizationName ??= "Gun Core";
   savedState.gold ??= economyConfig.initialState.gold;
   savedState.supplies ??= economyConfig.initialState.supplies;
   savedState.enhancementPoints ??= 0;
   savedState.reputation ??= 0;
+  savedState.unpaidSecrecy ??= { base: 0, mercenaries: {} };
+  savedState.unpaidSecrecy.base ??= 0;
+  savedState.unpaidSecrecy.mercenaries ??= {};
   savedState.stealth ??= economyConfig.initialState.stealth;
-  savedState.buildings ??= { tavern: 1, infirmary: 0, intel: 0 };
+  savedState.buildings ??= { tavern: 1, barracks: 0, defenses: 0, infirmary: 0, intel: 0 };
   savedState.roster ??= [];
   savedState.recruitPool ??= [];
-  savedState.missions ??= Array.from({ length: 4 }, () => createInitialMission());
+  savedState.missions ??= Array.from({ length: economyConfig.contracts.missionBoard.availableLimit }, () => createInitialMission());
   savedState.timeline ??= [];
   savedState.mechs ??= [];
   savedState.inventory ??= sampleItems.map((item) => ({ ...item }));
@@ -191,7 +188,6 @@ function normalizeState(savedState) {
   savedState.recruitPool = savedState.recruitPool.map((character) => normalizeCharacterState(character, usedAvatarKeys));
   savedState.enhancementPoints += collectLegacyEnhancementPoints(savedState.roster);
   savedState.enhancementPoints += collectLegacyEnhancementPoints(savedState.recruitPool);
-  savedState.reputation = calculateRosterReputation(savedState.roster);
   savedState.missions = savedState.missions.map(normalizeMissionState);
   savedState.timeline = savedState.timeline.map(normalizeTimelineEntry);
   savedState.inventory = savedState.inventory.map(normalizeItemState);
@@ -223,6 +219,7 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
     contractRecord: { completed: 0, failed: 0, survived: 0 },
     bounty: randomNumber(0, 24) * 10,
     debt: randomNumber(0, 18) * 5,
+    signingMultiplier: randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax),
     stress: randomNumber(0, 8) + initialStressBonus,
     wound: 0,
     isPlayer,
@@ -245,6 +242,7 @@ function createInitialMission() {
   const powerRequirement = calculateInitialPowerRequirement(difficulty, 0);
   const recommendedTeamSize = createInitialRecommendedTeamSize(difficulty);
   const requirements = createInitialContractRequirements(type.tags);
+  const reward = createInitialContractReward(difficulty);
   return {
     id: createId(),
     name: `${type.name}契约：${randomContractSubject(type)}`,
@@ -261,14 +259,14 @@ function createInitialMission() {
     duration,
     issueDay,
     expiresDay,
-    reward: createInitialContractReward(difficulty),
+    reward,
     description: `${randomItem(type.verbs)}目标。${randomItem(contractBriefFragments)}`,
     intel: createContractIntel(),
     revealedIntel: [],
     hidden: { twist: randomItem(contractHiddenTwists) },
     tags: [...new Set(type.tags)],
     refreshCost: calculateInitialRefreshCost(difficulty),
-    investigateCost: calculateInitialInvestigateCost(difficulty),
+    investigateCost: calculateInitialInvestigateCost({ rewardGold: reward.gold, difficulty }),
     remaining: duration,
     assigned: [],
     status: "available",
@@ -280,6 +278,7 @@ function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   splitLegacyName(character);
   character.name = (character.name || createRandomName()).trim().slice(0, 32);
   character.callsign ??= createCallsign();
+  if (character.callsign.length > 12) character.callsign = createCallsign();
   character.callsign = character.callsign.trim().slice(0, 24);
   character.conditions ??= [];
   character.conditions = character.conditions.map(normalizeConditionState);
@@ -294,6 +293,7 @@ function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   character.contractRecord ??= { completed: 0, failed: 0, survived: 0 };
   character.bounty ??= randomNumber(0, 24) * 10;
   character.debt ??= randomNumber(0, 18) * 5;
+  character.signingMultiplier ??= randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax);
   character.wound ??= 0;
   character.stress ??= 0;
   character.status ??= "待命";
@@ -471,9 +471,14 @@ function calculateInitialRefreshCost(difficulty) {
   return config.refreshBase + difficulty * config.refreshPerDifficulty;
 }
 
-function calculateInitialInvestigateCost(difficulty, revealedCount = 0) {
+function calculateInitialInvestigateCost({ rewardGold = 0, difficulty = 2 } = {}) {
   const config = economyConfig.contracts.costs;
-  return config.investigateBase + difficulty * config.investigatePerDifficulty + revealedCount * config.investigatePerIntel;
+  const fallbackReward =
+    rewardGold > 0
+      ? rewardGold
+      : economyConfig.contracts.reward.baseGold + difficulty * economyConfig.contracts.reward.goldPerDifficultyMin;
+  const rate = config.investigationRewardRateMin + Math.random() * (config.investigationRewardRateMax - config.investigationRewardRateMin);
+  return Math.max(config.investigationMinCost, Math.round(fallbackReward * rate));
 }
 
 function createInitialRecommendedTeamSize(difficulty) {
@@ -507,15 +512,7 @@ function calculateRosterReputation(roster) {
 }
 
 function createCallsign() {
-  return randomItem(epithetTemplates)
-    .replace("{place}", randomItem(epithetPlaces))
-    .replace("{verb}", randomItem(epithetVerbs))
-    .replace("{role}", randomItem(epithetRoles))
-    .replace("{object}", randomItem(epithetObjects))
-    .replace("{container}", randomItem(epithetContainers))
-    .replace("{force}", randomItem(epithetForces))
-    .replace("{adjective}", randomItem(epithetAdjectives))
-    .replace("{number}", randomItem(epithetNumbers));
+  return `${randomItem(shortEpithetAdjectives)}${randomItem(shortEpithetNouns)}`;
 }
 
 function createRandomName() {
@@ -601,7 +598,7 @@ function upgradeMissionToContract(mission) {
   mission.hidden ??= { twist: randomItem(contractHiddenTwists) };
   const difficulty = mission.difficulty ?? fallbackTemplate.difficulty ?? 2;
   mission.refreshCost ??= calculateInitialRefreshCost(difficulty);
-  mission.investigateCost ??= calculateInitialInvestigateCost(difficulty, mission.revealedIntel.length);
+  mission.investigateCost ??= calculateInitialInvestigateCost({ rewardGold: mission.reward?.gold, difficulty });
   mission.issueDay ??= 1;
   mission.expiresDay ??= mission.issueDay + 4;
   return mission;

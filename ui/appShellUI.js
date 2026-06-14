@@ -1,11 +1,9 @@
-import { economyConfig } from "../data/economyConfig.js";
-
 export function renderAppShell(root) {
   root.innerHTML = `
     <header class="topbar">
       <div>
-        <p class="eyebrow">佣兵事务所短局 Demo</p>
-        <h1>Gun Core</h1>
+        <p class="eyebrow">佣兵事务所 Demo</p>
+        <button id="organization-name" class="organization-name" type="button">Gun Core</button>
       </div>
       <div class="top-actions">
         <button id="save-game" class="ghost-button" type="button">保存</button>
@@ -52,10 +50,6 @@ export function renderAppShell(root) {
               <span id="game-status" class="badge">进行中</span>
             </div>
             <div id="command-grid" class="command-grid"></div>
-            <div class="button-row">
-              <button id="buy-supplies" class="ghost-button" type="button">黑市补给 ${economyConfig.baseActions.buySupplies.cost} 金</button>
-              <button id="reduce-heat" class="ghost-button" type="button">清理痕迹 ${economyConfig.baseActions.reduceHeat.cost} 金</button>
-            </div>
           </section>
 
           <section class="panel overview-panel">
@@ -90,7 +84,6 @@ export function renderAppShell(root) {
           <section class="panel roster-panel">
             <div class="section-heading">
               <h2>佣兵名册</h2>
-              <button id="create-player" class="ghost-button" type="button">创建玩家角色</button>
             </div>
             <div id="roster-list" class="card-grid"></div>
           </section>
@@ -180,24 +173,6 @@ export function renderAppShell(root) {
       </section>
 
     </main>
-
-    <dialog id="player-dialog" class="dialog">
-      <form method="dialog" id="player-form">
-        <h2>创建你的代表角色</h2>
-        <label>
-          名字
-          <input id="player-name" name="name" maxlength="16" placeholder="输入角色名" required />
-        </label>
-        <label>
-          职业
-          <select id="player-class" name="class"></select>
-        </label>
-        <div class="dialog-actions">
-          <button class="ghost-button" value="cancel" type="submit">取消</button>
-          <button class="primary-button" value="confirm" type="submit">创建</button>
-        </div>
-      </form>
-    </dialog>
 
     <dialog id="mercenary-dialog" class="dialog dossier-dialog">
       <div class="dossier" id="mercenary-dossier"></div>

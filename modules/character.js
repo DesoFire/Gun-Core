@@ -11,15 +11,8 @@ import {
   nameProfiles,
   origins,
   personalities,
-  epithetAdjectives,
-  epithetContainers,
-  epithetForces,
-  epithetNumbers,
-  epithetObjects,
-  epithetPlaces,
-  epithetRoles,
-  epithetTemplates,
-  epithetVerbs,
+  shortEpithetAdjectives,
+  shortEpithetNouns,
   positiveConditions,
 } from "../data/sampleData.js";
 import { economyConfig } from "../data/economyConfig.js";
@@ -72,6 +65,7 @@ export function createMercenary(classId = randomItem(Object.keys(characterClasse
     contractRecord: { completed: 0, failed: 0, survived: 0 },
     bounty: randomNumber(0, 24) * 10,
     debt: randomNumber(0, 18) * 5,
+    signingMultiplier: randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax),
     stress: randomNumber(0, 8),
     wound: 0,
     isPlayer,
@@ -110,6 +104,7 @@ export function hireRecruit(id) {
     if (draft.gameStatus !== "active") return;
     const recruit = draft.recruitPool.find((character) => character.id === id);
     if (!recruit) return;
+    if (getLivingMercenaryCount(draft) >= getMercenaryLimit(draft)) return;
     const cost = recruitCost(recruit);
     if (draft.gold < cost) return;
 
@@ -188,6 +183,43 @@ export function spendEnhancementPoint(characterId) {
   });
 }
 
+export function eraseMercenaryReputation(characterId) {
+  let result = { ok: false, cost: 0 };
+  updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
+    const character = draft.roster.find((item) => item.id === characterId);
+    if (!character || character.status === "阵亡") return;
+    const reputation = Math.max(0, character.notoriety ?? 0);
+    const cost = reputation * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint;
+    result = { ok: false, cost };
+    if (reputation <= 0 || draft.gold < cost) return;
+    draft.gold -= cost;
+    character.notoriety = 0;
+    if (draft.unpaidSecrecy?.mercenaries) delete draft.unpaidSecrecy.mercenaries[character.id];
+    draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金抹去了 ${character.name} 的黑历史。`);
+    result = { ok: true, cost };
+  });
+  return result;
+}
+
+export function dismissMercenary(characterId) {
+  let dismissed = null;
+  updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
+    const character = draft.roster.find((item) => item.id === characterId);
+    if (!character || character.isPlayer || character.status !== "待命") return;
+
+    Object.values(character.equipment ?? {})
+      .filter(Boolean)
+      .forEach((item) => draft.inventory.push(item));
+    if (draft.unpaidSecrecy?.mercenaries) delete draft.unpaidSecrecy.mercenaries[character.id];
+    draft.roster = draft.roster.filter((item) => item.id !== characterId);
+    draft.log.push(`第 ${draft.day} 天：${character.name} 被解雇，装备已收回仓库。`);
+    dismissed = character;
+  });
+  return dismissed;
+}
+
 function canCharacterUseSlot(character, slot) {
   if (slot !== "weapon") return true;
   const limbs = new Set((character.conditions ?? []).map((condition) => condition.limb).filter(Boolean));
@@ -195,9 +227,21 @@ function canCharacterUseSlot(character, slot) {
 }
 
 export function recruitCost(character) {
-  const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
   const config = economyConfig.recruitment;
-  return config.baseCost + rankIndex * config.perRank + character.tags.length * config.perTag;
+  const multiplier = character.signingMultiplier ?? config.signingMultiplierMin;
+  return Math.max(1, identityFee(character) * multiplier);
+}
+
+export function getMercenaryLimit(state = getState()) {
+  const barracksLevel = state.buildings?.barracks ?? 0;
+  return (
+    economyConfig.facilities.baseMercenaryLimit +
+    barracksLevel * economyConfig.facilities.barracksMercenaryLimitPerLevel
+  );
+}
+
+export function getLivingMercenaryCount(state = getState()) {
+  return (state.roster ?? []).filter((character) => character.status !== "阵亡").length;
 }
 
 export function getEquipmentSlots() {
@@ -216,6 +260,7 @@ export function normalizeCharacter(character) {
   character.contractRecord ??= { completed: 0, failed: 0, survived: 0 };
   character.bounty ??= randomNumber(0, 24) * 10;
   character.debt ??= randomNumber(0, 18) * 5;
+  character.signingMultiplier ??= randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax);
   character.wound ??= 0;
   character.stress ??= 0;
   character.status ??= "待命";
@@ -293,15 +338,7 @@ function createEmptyEquipment() {
 }
 
 function createCallsign() {
-  return randomItem(epithetTemplates)
-    .replace("{place}", randomItem(epithetPlaces))
-    .replace("{verb}", randomItem(epithetVerbs))
-    .replace("{role}", randomItem(epithetRoles))
-    .replace("{object}", randomItem(epithetObjects))
-    .replace("{container}", randomItem(epithetContainers))
-    .replace("{force}", randomItem(epithetForces))
-    .replace("{adjective}", randomItem(epithetAdjectives))
-    .replace("{number}", randomItem(epithetNumbers));
+  return `${randomItem(shortEpithetAdjectives)}${randomItem(shortEpithetNouns)}`;
 }
 
 function createRandomName() {

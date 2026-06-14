@@ -19,7 +19,7 @@ import {
 } from "../data/sampleData.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { getState, updateState } from "../js/state.js";
-import { identityFee, payDailyUpkeep, resolveRestAttack } from "./faction.js";
+import { calculateUnpaidSecrecyReputation, identityFee, payDailyUpkeep } from "./faction.js";
 import { evaluateGameOverDraft } from "./game.js";
 import { calculateTeamCombatPower, getPromotionCombatPowerGain } from "./combatPower.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
@@ -83,7 +83,7 @@ export function createContract(options = {}) {
     hidden: { twist: randomItem(contractHiddenTwists) },
     tags,
     refreshCost: calculateRefreshCost(difficulty),
-    investigateCost: calculateInvestigateCost(difficulty),
+    investigateCost: calculateInvestigateCost({ rewardGold }),
     assigned: [],
     remaining: duration,
     status: "available",
@@ -139,7 +139,7 @@ export function investigateMission(id, intelKey = "random") {
     } else if (!mission.revealedIntel.includes(target.key)) {
       mission.revealedIntel.push(target.key);
     }
-    mission.investigateCost = calculateInvestigateCost(mission.difficulty ?? 2, mission.revealedIntel.length + (mission.powerIntelLevel ?? 0));
+    mission.investigateCost ??= calculateInvestigateCost({ rewardGold: mission.reward?.gold, difficulty: mission.difficulty ?? 2 });
     draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金调查「${mission.name}」，更新：${detail}。`);
   });
 }
@@ -163,6 +163,8 @@ export function startMission(id, memberIds) {
     mission.remaining = mission.duration;
     mission.startDay = draft.day;
     mission.endDay = draft.day + mission.duration;
+    mission.advancePaid = calculateMissionAdvancePayment(mission);
+    draft.gold += mission.advancePaid;
     mission.deferredWages = Object.fromEntries(
       validMemberIds.map((memberId) => {
         const character = draft.roster.find((item) => item.id === memberId);
@@ -183,6 +185,7 @@ export function startMission(id, memberIds) {
       detail: `执行 ${mission.duration} 天。队伍：${validMemberIds.length} 人。`,
       missionId: mission.id,
     });
+    refillAvailableMissionsDraft(draft);
     draft.log.push(`第 ${draft.day} 天：小队已出发履行契约「${mission.name}」。`);
   });
 }
@@ -191,6 +194,7 @@ export function advanceDay() {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     draft.day += 1;
+    resolveBaseRaidDraft(draft);
     payDailyUpkeep(draft);
     draft.supplies = Math.max(0, draft.supplies - Math.ceil(draft.roster.length / economyConfig.contracts.execution.dailySupplyDivisor));
     recoverRestingStressDraft(draft);
@@ -225,9 +229,7 @@ export function advanceDay() {
     });
     draft.missions = draft.missions.filter((mission) => mission.status !== "available" || mission.expiresDay >= draft.day);
 
-    while (draft.missions.filter((mission) => mission.status === "available").length < 4) {
-      draft.missions.push(createContract({ issueDay: draft.day }));
-    }
+    refillAvailableMissionsDraft(draft);
 
     if (draft.supplies === 0) {
       draft.roster.filter((character) => character.status !== "阵亡").forEach((character) => {
@@ -236,7 +238,6 @@ export function advanceDay() {
       draft.log.push(`第 ${draft.day} 天：补给耗尽，所有佣兵压力上升。`);
     }
 
-    resolveRestAttack(draft);
     draft.roster.forEach((character) => resolveStressBreakDraft(draft, character));
 
     evaluateGameOverDraft(draft);
@@ -333,18 +334,16 @@ function resolveMissionDraft(draft, mission) {
   });
 
   if (success) {
-    const gold = Math.max(0, Math.round((mission.reward.gold + outcome.goldDelta) * getRewardGoldMultiplier(team)));
+    const grossGold = Math.max(0, Math.round((mission.reward.gold + outcome.goldDelta) * getRewardGoldMultiplier(team)));
+    const gold = Math.max(0, grossGold - (mission.advancePaid ?? 0));
     const reputation = Math.max(0, mission.reward.reputation + outcome.reputationDelta);
-    distributeMercenaryReputationDraft(team.filter((character) => character.status !== "阵亡"), reputation);
+    distributeContractReputationDraft(draft, team.filter((character) => character.status !== "阵亡"), reputation);
     draft.gold += gold;
-    syncBaseReputationDraft(draft);
     draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」成功。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，获得 ${gold} 金，队员瓜分 ${reputation} 声望。${outcome.text}`);
   } else {
-    team.filter((character) => character.status !== "阵亡").forEach((character) => {
-      character.notoriety = Math.max(0, (character.notoriety ?? 0) - 1);
-    });
-    if (outcome.reputationDelta > 0) distributeMercenaryReputationDraft(team.filter((character) => character.status !== "阵亡"), outcome.reputationDelta);
-    syncBaseReputationDraft(draft);
+    const reputationLoss = calculateMissionReputationLoss(mission, team.length);
+    applyContractReputationLossDraft(draft, team.filter((character) => character.status !== "阵亡"), reputationLoss);
+    if (outcome.reputationDelta > 0) distributeContractReputationDraft(draft, team.filter((character) => character.status !== "阵亡"), outcome.reputationDelta);
     draft.gold = Math.max(0, draft.gold + outcome.goldDelta);
     draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，伤亡风险上升。${outcome.text}`);
   }
@@ -396,11 +395,125 @@ function settleReturningWagesDraft(draft, mission, returningTeam) {
   draft.log.push(`第 ${draft.day} 天：外勤薪资需要 ${totalWages} 金，但资金缺口 ${shortage} 金。返队佣兵压力上升，隐秘值下降 ${stealthLoss}。`);
 }
 
+function resolveBaseRaidDraft(draft) {
+  const unpaidReputation = calculateUnpaidSecrecyReputation(draft);
+  const config = economyConfig.baseRaid;
+  if (unpaidReputation < config.minUnpaidReputationForRaid) return;
+  const raidChance = clamp(100 - (draft.stealth ?? 0), 0, 100);
+  if (raidChance <= 0 || randomNumber(1, 100) > raidChance) return;
+
+  const defenders = draft.roster.filter((character) => character.status === "待命");
+  const difficulty = calculateRaidDifficulty(unpaidReputation);
+  if (defenders.length === 0) {
+    applyBaseRaidFailureDraft(draft, difficulty, "无人留守");
+    return;
+  }
+
+  randomlyEquipDefendersDraft(draft, defenders);
+  const powerRequirement = calculateContractPowerRequirement(difficulty, unpaidReputation);
+  const mission = createContract({
+    difficulty,
+    powerRequirement,
+    duration: 1,
+    rewardMultiplier: 1,
+    recommendedTeamSize: { min: 1, max: 4 },
+    requirements: createContractRequirements(["守卫", "战斗"]),
+  });
+  mission.name = "基地暴露袭击";
+  mission.powerRequirement = powerRequirement;
+  mission.status = "raid";
+
+  const memberIds = defenders.map((character) => character.id);
+  const baseDefensePower = calculateBaseDefensePower(draft);
+  const fit = evaluateMissionFitFromRoster(draft.roster, draft.buildings, memberIds, mission, { extraPower: baseDefensePower });
+  const success = randomNumber(1, 100) <= fit.chance;
+  const gap = fit.teamPower - powerRequirement;
+  const enemyDamageTypes = mission.requirements?.damageTypes ?? [];
+
+  defenders.forEach((character) => {
+    character.stress += calculateMissionStressGain(character, success);
+    const deathRisk = calculateDeathRisk(gap, difficulty, character, defenders, success);
+    const woundRisk = calculateWoundRisk(gap, difficulty, success, defenders);
+    if (randomNumber(1, 100) <= deathRisk) {
+      character.status = "阵亡";
+      character.hp = 0;
+      character.wound += 3;
+      return;
+    }
+    if (randomNumber(1, 100) <= woundRisk) {
+      character.wound += 1;
+      character.hp = Math.max(1, character.hp - randomNumber(4, 10));
+      applyNegativeConditionDraft(draft, character, {
+        severity: chooseConditionSeverity(gap, difficulty, success),
+        damageType: randomItem(enemyDamageTypes),
+        armorMatched: hasMatchingArmor(character, enemyDamageTypes),
+      });
+    }
+    maybeApplyDamageTypeConditionDraft(draft, character, mission, gap, success);
+    resolveStressBreakDraft(draft, character);
+  });
+
+  if (success) {
+    draft.log.push(`第 ${draft.day} 天：基地遭遇袭击，留守佣兵与防御设施防守成功。防御设施提供 ${baseDefensePower} 战斗力。`);
+    return;
+  }
+
+  applyBaseRaidFailureDraft(draft, difficulty, "防守失败");
+}
+
+function calculateRaidDifficulty(unpaidReputation) {
+  const config = economyConfig.baseRaid;
+  return clamp(Math.ceil(unpaidReputation / config.unpaidReputationPerDifficulty), config.minDifficulty, config.maxDifficulty);
+}
+
+function calculateBaseDefensePower(draft) {
+  return (draft.buildings?.defenses ?? 0) * economyConfig.facilities.defensePowerPerLevel;
+}
+
+function randomlyEquipDefendersDraft(draft, defenders) {
+  const pool = [...(draft.inventory ?? [])].sort(() => Math.random() - 0.5);
+  defenders.forEach((character) => {
+    ["weapon", "armor"].forEach((slot) => {
+      const index = pool.findIndex((item) => item.slot === slot || item.itemCategory === slot);
+      if (index < 0) return;
+      const [item] = pool.splice(index, 1);
+      if (character.equipment?.[slot]) pool.push(character.equipment[slot]);
+      character.equipment[slot] = item;
+    });
+  });
+  draft.inventory = pool;
+}
+
+function applyBaseRaidFailureDraft(draft, difficulty, reason) {
+  const rewardConfig = economyConfig.contracts.reward;
+  const goldLoss = Math.min(
+    draft.gold,
+    rewardConfig.baseGold + difficulty * randomNumber(rewardConfig.goldPerDifficultyMin, rewardConfig.goldPerDifficultyMax)
+  );
+  draft.gold -= goldLoss;
+  maybeDowngradeFacilityDraft(draft);
+  draft.log.push(`第 ${draft.day} 天：基地遭遇袭击，${reason}，损失 ${goldLoss} 金。`);
+}
+
+function maybeDowngradeFacilityDraft(draft) {
+  if (randomNumber(1, 100) > economyConfig.baseRaid.facilityDamageChance) return;
+  const candidates = Object.entries(draft.buildings ?? {}).filter(([, level]) => level > 0);
+  if (candidates.length === 0) return;
+  const [id, level] = randomItem(candidates);
+  draft.buildings[id] = Math.max(0, level - economyConfig.baseRaid.facilityDowngradeAmount);
+}
+
 function calculateMissionChanceFromRoster(roster, buildings, memberIds, mission) {
   return evaluateMissionFitFromRoster(roster, buildings, memberIds, mission).chance;
 }
 
-function evaluateMissionFitFromRoster(roster, buildings, memberIds, mission) {
+function refillAvailableMissionsDraft(draft) {
+  while (draft.missions.filter((mission) => mission.status === "available").length < economyConfig.contracts.missionBoard.availableLimit) {
+    draft.missions.push(createContract({ issueDay: draft.day }));
+  }
+}
+
+function evaluateMissionFitFromRoster(roster, buildings, memberIds, mission, options = {}) {
   if (memberIds.length === 0) {
     return {
       chance: 0,
@@ -421,7 +534,7 @@ function evaluateMissionFitFromRoster(roster, buildings, memberIds, mission) {
   normalizeContractPowerFields(mission, getState().reputation ?? 0);
   normalizeContractPlanningFields(mission);
   const team = roster.filter((character) => memberIds.includes(character.id));
-  const teamPower = calculateTeamCombatPower(roster, memberIds);
+  const teamPower = calculateTeamCombatPower(roster, memberIds) + (options.extraPower ?? 0);
   const powerChance = calculateMissionChanceFromPower(teamPower - mission.powerRequirement);
   const sizePenalty = calculateTeamSizePenalty(memberIds.length, mission.recommendedTeamSize);
   const tagBonus = calculateTagFitBonus(team, mission);
@@ -429,7 +542,7 @@ function evaluateMissionFitFromRoster(roster, buildings, memberIds, mission) {
   const careerFit = calculateCareerFit(team, mission);
   const careerEffectBonus = calculateCareerEffectBonus(team, mission);
   const unlockedIntelBonus = (mission.revealedIntel?.length ?? 0) * 2 + (mission.powerIntelLevel ?? 0);
-  const intelBonus = (buildings.intel ?? 0) * 4;
+  const intelBonus = 0;
   const chance = clamp(
     powerChance + tagBonus + equipmentBonus + careerFit.bonus + careerEffectBonus + unlockedIntelBonus + intelBonus - sizePenalty - careerFit.penalty,
     2,
@@ -683,24 +796,39 @@ function calculateRefreshCost(difficulty = 2) {
   return config.refreshBase + difficulty * config.refreshPerDifficulty;
 }
 
-function calculateInvestigateCost(difficulty = 2, revealedCount = 0) {
+function calculateMissionAdvancePayment(mission) {
+  if (mission.advancePaid) return mission.advancePaid;
+  const range = economyConfig.contracts.advancePaymentRates[mission.typeCode] ?? economyConfig.contracts.advancePaymentRates.fallback;
+  const [minRate, maxRate] = range;
+  const rate = minRate + Math.random() * (maxRate - minRate);
+  return Math.max(0, Math.floor((mission.reward?.gold ?? 0) * rate));
+}
+
+function calculateInvestigateCost({ rewardGold = 0, difficulty = 2 } = {}) {
   const config = economyConfig.contracts.costs;
-  return config.investigateBase + difficulty * config.investigatePerDifficulty + revealedCount * config.investigatePerIntel;
+  const fallbackReward =
+    rewardGold > 0
+      ? rewardGold
+      : economyConfig.contracts.reward.baseGold + difficulty * economyConfig.contracts.reward.goldPerDifficultyMin;
+  const rate = config.investigationRewardRateMin + Math.random() * (config.investigationRewardRateMax - config.investigationRewardRateMin);
+  return Math.max(config.investigationMinCost, Math.round(fallbackReward * rate));
 }
 
 function calculateDiscountedInvestigateCost(draft, mission, mode = "targeted") {
-  const baseCost = mission.investigateCost ?? calculateInvestigateCost(mission.difficulty ?? 2);
+  const baseCost = mission.investigateCost ?? calculateInvestigateCost({ rewardGold: mission.reward?.gold, difficulty: mission.difficulty ?? 2 });
   const config = economyConfig.contracts.costs;
   const modeMultiplier =
     mode === "random" ? config.randomInvestigationMultiplier : mode === "power" ? config.powerInvestigationMultiplier : 1;
-  const discount = draft.roster
+  const rosterDiscount = draft.roster
     .filter((character) => character.status !== "阵亡")
     .reduce((sum, character) => {
       const category = getCareerCategoryConfig(character);
       const career = getCareerConfig(character);
       return sum + (category?.effects?.investigateDiscount ?? 0) + (career?.effects?.investigateDiscount ?? 0);
     }, 0);
-  return Math.max(1, Math.round(baseCost * modeMultiplier * (1 - Math.min(config.maxInvestigationDiscount, discount))));
+  const facilityDiscount = (draft.buildings?.intel ?? 0) * economyConfig.facilities.intelInvestigationDiscountPerLevel;
+  const discount = Math.min(config.maxInvestigationDiscount, rosterDiscount + facilityDiscount);
+  return Math.max(1, Math.round(baseCost * modeMultiplier * (1 - discount)));
 }
 
 function chooseInvestigationTarget(mission, intelKey = "random") {
@@ -842,18 +970,34 @@ function recoverRestingStressDraft(draft) {
     });
 }
 
-function distributeMercenaryReputationDraft(team, reputation) {
-  if (team.length === 0 || reputation <= 0) return;
+function distributeContractReputationDraft(draft, team, reputation) {
+  if (reputation <= 0) return;
+  const entities = [{ type: "base" }, ...team.map((character) => ({ type: "mercenary", character }))];
   for (let point = 0; point < reputation; point += 1) {
-    const target = randomItem(team);
-    target.notoriety = (target.notoriety ?? 0) + 1;
+    const target = randomItem(entities);
+    if (target.type === "base") {
+      draft.reputation = (draft.reputation ?? 0) + 1;
+    } else {
+      target.character.notoriety = (target.character.notoriety ?? 0) + 1;
+    }
   }
 }
 
-function syncBaseReputationDraft(draft) {
-  draft.reputation = draft.roster
-    .filter((character) => character.status !== "阵亡")
-    .reduce((sum, character) => sum + Math.max(0, character.notoriety ?? 0), 0);
+function calculateMissionReputationLoss(mission, teamSize) {
+  const totalEntities = Math.max(1, teamSize + 1);
+  const successReputation = Math.max(0, mission.reward?.reputation ?? 0);
+  const config = economyConfig.contracts.reputationFailure;
+  const maxTotalLoss = Math.max(0, Math.floor(successReputation * config.maxRate));
+  if (maxTotalLoss <= 0) return 0;
+  return Math.max(config.minLoss, Math.floor(maxTotalLoss / totalEntities));
+}
+
+function applyContractReputationLossDraft(draft, team, reputationLoss) {
+  if (reputationLoss <= 0) return;
+  draft.reputation = Math.max(0, (draft.reputation ?? 0) - reputationLoss);
+  team.forEach((character) => {
+    character.notoriety = Math.max(0, (character.notoriety ?? 0) - reputationLoss);
+  });
 }
 
 function drawPositiveTrait(character, actionType) {
@@ -933,7 +1077,7 @@ function upgradeMissionToContract(mission) {
   mission.hidden ??= { twist: randomItem(contractHiddenTwists) };
   normalizeContractPlanningFields(mission);
   mission.refreshCost ??= calculateRefreshCost(mission.difficulty ?? fallbackTemplate.difficulty ?? 2);
-  mission.investigateCost ??= calculateInvestigateCost(mission.difficulty ?? fallbackTemplate.difficulty ?? 2, mission.revealedIntel.length);
+  mission.investigateCost ??= calculateInvestigateCost({ rewardGold: mission.reward?.gold, difficulty: mission.difficulty ?? fallbackTemplate.difficulty ?? 2 });
   mission.issueDay ??= 1;
   mission.expiresDay ??= mission.issueDay + 4;
   return mission;

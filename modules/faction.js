@@ -24,6 +24,77 @@ export function calculateDailyExpenseBreakdown(state = getState()) {
   return calculateDailyExpenseBreakdownFromDraft(state);
 }
 
+export function isSecrecyBillingDay(day = getState().day) {
+  const config = economyConfig.secrecy;
+  return day >= config.firstBillingDay && (day - config.firstBillingDay) % config.billingCycleDays === 0;
+}
+
+export function calculateSecrecyExpenseItems(state = getState()) {
+  const config = economyConfig.secrecy;
+  const items = [];
+  if ((state.reputation ?? 0) > 0) {
+    items.push({
+      id: "base",
+      type: "base",
+      name: "基地黑历史",
+      reputation: state.reputation ?? 0,
+      cost: (state.reputation ?? 0) * config.baseMonthlyCostPerReputation,
+      paid: false,
+    });
+  }
+  state.roster
+    .filter((character) => character.status !== "阵亡" && (character.notoriety ?? 0) > 0)
+    .forEach((character) => {
+      items.push({
+        id: character.id,
+        type: "mercenary",
+        name: character.name,
+        reputation: character.notoriety ?? 0,
+        cost: (character.notoriety ?? 0) * config.mercenaryMonthlyCostPerReputation,
+        paid: false,
+      });
+    });
+  return items;
+}
+
+export function calculateUnpaidSecrecyReputation(state = getState()) {
+  const mercenaryDebt = Object.values(state.unpaidSecrecy?.mercenaries ?? {}).reduce((sum, value) => sum + Math.max(0, value ?? 0), 0);
+  return Math.max(0, state.unpaidSecrecy?.base ?? 0) + mercenaryDebt;
+}
+
+export function approveSecrecyExpenses(paidIds = []) {
+  const paid = new Set(paidIds);
+  updateState((draft) => {
+    if (draft.gameStatus !== "active" || !isSecrecyBillingDay(draft.day)) return;
+    draft.unpaidSecrecy ??= { base: 0, mercenaries: {} };
+    draft.unpaidSecrecy.mercenaries ??= {};
+    const items = calculateSecrecyExpenseItems(draft);
+    let paidCost = 0;
+    let unpaidReputation = 0;
+
+    items.forEach((item) => {
+      const wantsPay = paid.has(item.id);
+      if (wantsPay && draft.gold >= item.cost) {
+        draft.gold -= item.cost;
+        paidCost += item.cost;
+        return;
+      }
+
+      unpaidReputation += item.reputation;
+      if (item.type === "base") {
+        draft.unpaidSecrecy.base = (draft.unpaidSecrecy.base ?? 0) + item.reputation;
+      } else {
+        draft.unpaidSecrecy.mercenaries[item.id] = (draft.unpaidSecrecy.mercenaries[item.id] ?? 0) + item.reputation;
+      }
+    });
+
+    const stealthLoss = unpaidReputation * economyConfig.secrecy.stealthLossPerUnpaidReputation;
+    draft.stealth = clamp(draft.stealth - stealthLoss, 0, 100);
+    draft.lastSecrecyBillingDay = draft.day;
+    draft.log.push(`第 ${draft.day} 天：隐秘费用结算，支付 ${paidCost} 金，未遮掩声望 ${unpaidReputation}，隐秘值下降 ${stealthLoss}。`);
+  });
+}
+
 export function calculateDailyExpenseBreakdownFromDraft(draft) {
   const livingRoster = draft.roster.filter((character) => character.status !== "阵亡");
   const wageItems = livingRoster
@@ -85,7 +156,8 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
 export function identityFee(character) {
   const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
   const config = economyConfig.dailyExpenses.wages;
-  return config.base + rankIndex * config.perRank + character.notoriety * config.perNotoriety + (character.isPlayer ? config.playerBonus : 0);
+  const rankWage = config.rankDailyWage?.[rankIndex] ?? config.base + rankIndex * config.perRank;
+  return rankWage + character.notoriety * config.perNotoriety + (character.isPlayer ? config.playerBonus : 0);
 }
 
 export function calculateRestAttackChance() {
@@ -156,18 +228,21 @@ export function buyBlackMarketWeapon() {
 export function hospitalTreatMercenaries() {
   updateState((draft) => {
     if (draft.gameStatus !== "active" || (draft.buildings.hospital ?? 0) <= 0) return;
-    const patients = draft.roster.filter((character) => character.status !== "阵亡" && (character.wound > 0 || character.stress >= 8));
-    const cost = economyConfig.facilities.hospitalTreatCost;
-    if (patients.length === 0) {
+    const plan = createHospitalTreatmentPlan(draft);
+    if (plan.entries.length === 0) {
       draft.log.push(`第 ${draft.day} 天：医疗中心没有找到需要处理的伤病佣兵。`);
       return;
     }
-    if (draft.gold < cost) return;
-    draft.gold -= cost;
-    patients.forEach((character) => {
-      character.wound = Math.max(0, character.wound - 1);
-      character.stress = Math.max(0, character.stress - 8);
-      character.hp = Math.min(character.maxHp, character.hp + 12);
+    if (draft.gold < plan.cost) return;
+    draft.gold -= plan.cost;
+    let cured = 0;
+    plan.entries.forEach(({ character, condition }) => {
+      if (randomNumber(1, 100) > plan.successChance) return;
+      character.conditions = (character.conditions ?? []).filter((entry) => entry.id !== condition.id);
+      character.wound = Math.max(0, (character.wound ?? 0) - economyConfig.facilities.hospitalWoundRecoveryOnSuccess);
+      character.stress = Math.max(0, (character.stress ?? 0) - economyConfig.facilities.hospitalStressRecoveryOnSuccess);
+      character.hp = Math.min(character.maxHp, (character.hp ?? character.maxHp) + 12);
+      cured += 1;
     });
     draft.timeline.push({
       id: createId(),
@@ -175,10 +250,14 @@ export function hospitalTreatMercenaries() {
       type: "facility",
       title: "医疗中心治疗",
       status: "done",
-      detail: `${patients.length} 名佣兵恢复。`,
+      detail: `尝试处理 ${plan.entries.length} 个负面状态，成功 ${cured} 个。`,
     });
-    draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金，医疗中心治疗了 ${patients.length} 名佣兵。`);
+    draft.log.push(`第 ${draft.day} 天：支付 ${plan.cost} 金，医疗中心尝试治疗 ${plan.entries.length} 个负面状态，成功 ${cured} 个。`);
   });
+}
+
+export function calculateHospitalTreatmentPlan(state = getState()) {
+  return createHospitalTreatmentPlan(state);
 }
 
 export function payDailyUpkeep(draft) {
@@ -268,6 +347,47 @@ export function getBlackMarketItemCost(kind, rank) {
   return base + rankIndex * perRank;
 }
 
+function createHospitalTreatmentPlan(draft) {
+  const level = draft.buildings?.hospital ?? 0;
+  const allowedSeverity = getHospitalAllowedSeverity(level);
+  const successChance = getHospitalSuccessChance(level);
+  const entries = [];
+  draft.roster
+    .filter((character) => character.status !== "阵亡")
+    .forEach((character) => {
+      (character.conditions ?? [])
+        .filter((condition) => canHospitalTreatSeverity(condition.severity, allowedSeverity))
+        .forEach((condition) => entries.push({ character, condition }));
+    });
+  const cost = entries.reduce((sum, entry) => sum + getHospitalConditionCost(entry.condition), 0);
+  return { entries, cost, successChance, allowedSeverity };
+}
+
+function getHospitalAllowedSeverity(level) {
+  const index = Math.max(0, Math.min(level - 1, economyConfig.facilities.hospitalSeverityByLevel.length - 1));
+  return economyConfig.facilities.hospitalSeverityByLevel[index] ?? "light";
+}
+
+function getHospitalSuccessChance(level) {
+  const index = Math.max(0, Math.min(level - 1, economyConfig.facilities.hospitalSuccessChanceByLevel.length - 1));
+  return economyConfig.facilities.hospitalSuccessChanceByLevel[index] ?? 65;
+}
+
+function canHospitalTreatSeverity(severity = "light", allowedSeverity = "light") {
+  return severityWeight(severity) <= severityWeight(allowedSeverity);
+}
+
+function severityWeight(severity = "light") {
+  if (severity === "heavy") return 3;
+  if (severity === "medium") return 2;
+  return 1;
+}
+
+function getHospitalConditionCost(condition) {
+  const costs = economyConfig.facilities.hospitalConditionCost;
+  return costs[condition.severity] ?? costs.light ?? 14;
+}
+
 function canUpgradeFacilityDraft(draft, nextLevel) {
   const requirement = getFacilityRequirement(nextLevel);
   return draft.reputation >= requirement.reputation && draft.day >= requirement.day;
@@ -275,7 +395,8 @@ function canUpgradeFacilityDraft(draft, nextLevel) {
 
 function calculateFacilityUpkeep(id, level) {
   if (!level || level <= 0) return 0;
-  return (buildings[id]?.upkeep ?? 0) * level;
+  const rawCost = (buildings[id]?.upkeep ?? 0) * level * economyConfig.facilities.upkeepMultiplier;
+  return Math.max(1, Math.round(rawCost));
 }
 
 function calculateLivingSupplyCost(character) {

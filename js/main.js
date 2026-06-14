@@ -5,16 +5,20 @@ import { advanceDay } from "../modules/mission.js";
 import {
   buyBlackMarketItem,
   calculateDailyExpenseBreakdown,
-  calculateRestAttackChance,
+  calculateSecrecyExpenseItems,
+  calculateUnpaidSecrecyReputation,
   canUpgradeFacility,
   getBlackMarketItemCost,
   getFacilityRankLabel,
   getFacilityRequirement,
   getFacilityUpgradeCost,
   hospitalTreatMercenaries,
+  calculateHospitalTreatmentPlan,
+  approveSecrecyExpenses,
+  isSecrecyBillingDay,
   upgradeBuilding,
 } from "../modules/faction.js";
-import { buySupplies, getGameSummary, reduceHeat } from "../modules/game.js";
+import { getGameSummary } from "../modules/game.js";
 import { initArmorUI } from "../ui/armorUI.js";
 import { initCharacterUI, renderCharacterUI } from "../ui/characterUI.js";
 import { initInventoryUI, renderInventoryUI } from "../ui/inventoryUI.js";
@@ -23,8 +27,9 @@ import { initMissionUI, renderMissionUI } from "../ui/missionUI.js";
 import { renderAppShell } from "../ui/appShellUI.js";
 import { initWeaponUI } from "../ui/weaponUI.js";
 import { buyWealthItem, getWealthCollections, getWealthProgress } from "../modules/wealth.js";
-import { showInsufficientFunds, showToast } from "./notifications.js";
+import { showToast } from "./notifications.js";
 import { economyConfig } from "../data/economyConfig.js";
+import { calculateCharacterCombatPower } from "../modules/combatPower.js";
 
 let router = null;
 let pendingExpenseApproval = false;
@@ -45,8 +50,7 @@ function init() {
 
 function bindGlobalActions() {
   document.querySelector("#advance-day").addEventListener("click", requestAdvanceDayApproval);
-  document.querySelector("#buy-supplies").addEventListener("click", () => handleCostAction(economyConfig.baseActions.buySupplies.cost, buySupplies));
-  document.querySelector("#reduce-heat").addEventListener("click", () => handleCostAction(economyConfig.baseActions.reduceHeat.cost, reduceHeat));
+  document.querySelector("#organization-name").addEventListener("click", editOrganizationName);
   initGlobalStatusDrawer();
   document.querySelector("#global-status-close").addEventListener("click", () => {
     document.querySelector("#global-status-drawer").classList.remove("open");
@@ -163,15 +167,14 @@ function renderCommandPanel() {
     won: "胜利",
     lost: "失败",
   }[summary.status];
+  document.querySelector("#organization-name").textContent = state.organizationName ?? "Gun Core";
   document.querySelector("#objective-text").textContent = summary.objectiveText;
   const status = document.querySelector("#game-status");
   status.textContent = statusText;
   status.className = `badge status-${summary.status}`;
   document.querySelector("#advance-day").disabled = summary.status !== "active";
-  document.querySelector("#buy-supplies").disabled = summary.status !== "active";
-  document.querySelector("#reduce-heat").disabled = summary.status !== "active";
   document.querySelector("#command-grid").innerHTML = [
-    ["剩余天数", summary.daysLeft],
+    ["经营天数", state.day],
     ["收藏缺口", summary.reputationLeft],
     ["待命佣兵", `${summary.availableRoster}/${state.roster.length}`],
     ["执行契约", summary.activeContracts],
@@ -180,13 +183,15 @@ function renderCommandPanel() {
     .join("");
 }
 
-function handleCostAction(cost, action) {
-  const state = getState();
-  if (state.gold < cost) {
-    showInsufficientFunds(state.gold, cost);
-    return;
-  }
-  action();
+function editOrganizationName() {
+  const current = getState().organizationName ?? "Gun Core";
+  const value = window.prompt("修改佣兵组织名称", current);
+  if (value === null) return;
+  const trimmed = value.trim().slice(0, 32);
+  if (!trimmed) return;
+  updateState((draft) => {
+    draft.organizationName = trimmed;
+  });
 }
 
 function renderResources() {
@@ -196,14 +201,12 @@ function renderResources() {
   document.querySelector("#current-day").textContent = `第 ${state.day} 天`;
   const resources = [
     ["资金", state.gold],
-    ["补给", state.supplies],
-    ["声望", state.reputation],
+    ["基地声望", state.reputation],
     ["强化点", state.enhancementPoints ?? 0],
     ["收藏", `${wealthProgress.owned}/${wealthProgress.total}`],
     ["隐秘值", `${state.stealth}/100`],
     ["每日支出", dailyExpenses.total],
-    ["遇袭率", `${calculateRestAttackChance()}%`],
-    ["已花", `${wealthProgress.spent} 金`],
+    ["遇袭率", `${Math.max(0, 100 - state.stealth)}%`],
   ];
   const resourceHtml = resources
     .map(([label, value]) => `<div class="resource"><span>${label}</span><strong>${value}</strong></div>`)
@@ -213,11 +216,11 @@ function renderResources() {
   document.querySelector("#global-resource-strip").innerHTML = [
     ["第", `${state.day} 天`],
     ["资金", state.gold],
-    ["声望", state.reputation],
+    ["基地声望", state.reputation],
     ["强化点", state.enhancementPoints ?? 0],
     ["隐秘", `${state.stealth}/100`],
     ["日支出", dailyExpenses.total],
-    ["遇袭", `${calculateRestAttackChance()}%`],
+    ["遇袭", `${Math.max(0, 100 - state.stealth)}%`],
   ]
     .map(([label, value]) => `<div class="strip-resource"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
@@ -226,6 +229,9 @@ function renderResources() {
 function renderExpenses() {
   const state = getState();
   const breakdown = calculateDailyExpenseBreakdown(state);
+  const secrecyItems = calculateSecrecyExpenseItems(state);
+  const unpaidSecrecy = calculateUnpaidSecrecyReputation(state);
+  const secrecyDue = isSecrecyBillingDay(state.day);
   const totalBadge = document.querySelector("#expense-total-badge");
   const summaryGrid = document.querySelector("#expense-summary-grid");
   const list = document.querySelector("#expense-list");
@@ -254,6 +260,7 @@ function renderExpenses() {
     renderExpenseSection("生活补给", "每个未阵亡佣兵每日消耗生活费用，等级越高费用越高。", breakdown.supplies.items, renderSupplyExpenseLine, breakdown.supplies.total),
     renderExpenseSection("武器防具养护", "已装备的武器和防具每天都要维护，等级越高费用越高。", breakdown.equipment.items, renderEquipmentExpenseLine, breakdown.equipment.total),
     renderExpenseSection("基础设施维持", "基地基础开销加已解锁设施维持费。", [...breakdown.base.items, ...breakdown.facilities.items], renderFacilityExpenseLine, breakdown.base.total + breakdown.facilities.total),
+    renderSecrecyExpenseSection(secrecyItems, unpaidSecrecy, secrecyDue),
     renderExpenseApprovalPanel(state, breakdown),
   ].join("");
 
@@ -262,6 +269,8 @@ function renderExpenses() {
       const before = getState();
       const approvedCost = breakdown.total;
       const previousDay = before.day;
+      const paidSecrecyIds = [...list.querySelectorAll("[data-secrecy-pay]:checked")].map((input) => input.value);
+      if (isSecrecyBillingDay(before.day)) approveSecrecyExpenses(paidSecrecyIds);
       pendingExpenseApproval = false;
       advanceDay();
       const after = getState();
@@ -286,6 +295,42 @@ function renderExpenseApprovalPanel(state, breakdown) {
         批准支出并进入下一天
       </button>
     </section>
+  `;
+}
+
+function renderSecrecyExpenseSection(items, unpaidSecrecy, secrecyDue) {
+  const total = items.reduce((sum, item) => sum + item.cost, 0);
+  return `
+    <section class="expense-section">
+      <div class="card-header">
+        <div>
+          <h3>隐秘费用</h3>
+          <p class="muted">${
+            secrecyDue
+              ? "月初结算。可任意勾选支付对象；未支付的声望会永久累计为未遮掩声望，并立刻降低隐秘值。"
+              : `本日无需结算。当前永久未遮掩声望 ${unpaidSecrecy}，每日遇袭率由隐秘值决定。`
+          }</p>
+        </div>
+        <span class="badge">${secrecyDue ? `${total} 金/月` : `未遮掩 ${unpaidSecrecy}`}</span>
+      </div>
+      <div class="expense-line-list">
+        ${
+          secrecyDue && items.length > 0
+            ? items.map(renderSecrecyExpenseLine).join("")
+            : `<p class="muted">${secrecyDue ? "暂无需要遮掩的声望" : "隐秘费每 30 天结算一次，第 1 天不收。"}</p>`
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderSecrecyExpenseLine(item) {
+  return `
+    <label class="expense-line">
+      <span><input data-secrecy-pay value="${item.id}" type="checkbox" checked> ${item.name}</span>
+      <small>${item.type === "base" ? "基地声望" : "佣兵声望"} ${item.reputation} · 不支付将降低 ${item.reputation} 隐秘值</small>
+      <strong>${item.cost} 金</strong>
+    </label>
   `;
 }
 
@@ -350,6 +395,12 @@ function renderFacilityExpenseLine(item) {
   `;
 }
 
+function formatSeverityLabel(severity) {
+  if (severity === "heavy") return "重度";
+  if (severity === "medium") return "中度";
+  return "轻度";
+}
+
 function renderWealth() {
   const state = getState();
   const progress = getWealthProgress(state);
@@ -412,6 +463,12 @@ function renderOverview() {
   const wounded = state.roster.filter((character) => character.wound > 0);
   const stressed = state.roster.filter((character) => character.stress >= 10);
   const availableRoster = state.roster.filter((character) => character.status === "待命");
+  const livingRoster = state.roster.filter((character) => character.status !== "阵亡");
+  const activeRoster = livingRoster.filter((character) => character.status !== "待命");
+  const totalPower = livingRoster.reduce((sum, character) => sum + calculateCharacterCombatPower(character), 0);
+  const avgPower = livingRoster.length > 0 ? Math.round(totalPower / livingRoster.length) : 0;
+  const readyPercent = livingRoster.length > 0 ? Math.round((availableRoster.length / livingRoster.length) * 100) : 0;
+  const activePercent = livingRoster.length > 0 ? Math.round((activeRoster.length / livingRoster.length) * 100) : 0;
 
   document.querySelector("#contract-overview-badge").textContent = `${activeContracts.length} 执行 / ${availableContracts.length} 可接`;
   document.querySelector("#contract-overview").innerHTML =
@@ -428,15 +485,24 @@ function renderOverview() {
           .join("")
       : `<p class="muted">没有正在执行的契约。可在契约页选择队伍后接取。</p>`;
 
-  document.querySelector("#personnel-overview-badge").textContent = `${availableRoster.length}/${state.roster.length} 待命`;
-  document.querySelector("#personnel-overview").innerHTML = [
-    ["待命", availableRoster.length],
-    ["执行中", state.roster.filter((character) => character.status !== "待命").length],
-    ["受伤", wounded.length],
-    ["高压", stressed.length],
-  ]
-    .map(([label, value]) => `<div class="overview-row"><span>${label}</span><strong>${value}</strong></div>`)
-    .join("");
+  document.querySelector("#personnel-overview-badge").textContent = `${livingRoster.length} 人 / 总战力 ${totalPower}`;
+  document.querySelector("#personnel-overview").innerHTML = `
+    <div class="personnel-overview-grid">
+      <article class="personnel-metric primary"><span>人员总量</span><strong>${livingRoster.length}</strong></article>
+      <article class="personnel-metric power"><span>战力总和</span><strong>${totalPower}</strong></article>
+      <article class="personnel-metric"><span>平均战力</span><strong>${avgPower}</strong></article>
+      <article class="personnel-metric"><span>待命人员</span><strong>${availableRoster.length}</strong></article>
+      <article class="personnel-metric"><span>执行中</span><strong>${activeRoster.length}</strong></article>
+    </div>
+    <div class="personnel-bars">
+      <div class="personnel-bar"><span>待命</span><i><b style="width:${readyPercent}%"></b></i><strong>${readyPercent}%</strong></div>
+      <div class="personnel-bar active"><span>外勤</span><i><b style="width:${activePercent}%"></b></i><strong>${activePercent}%</strong></div>
+    </div>
+    <div class="personnel-alert-row">
+      <span class="${wounded.length > 0 ? "danger" : ""}">受伤 ${wounded.length}</span>
+      <span class="${stressed.length > 0 ? "warning" : ""}">高压 ${stressed.length}</span>
+    </div>
+  `;
 
   renderCalendar();
 }
@@ -591,11 +657,11 @@ function renderFacilityAction(id, level, cost, disabled) {
         const isDisabled = state.gameStatus !== "active" ? "disabled" : "";
         return `<button class="${kind === "mecha" ? "primary-button" : "ghost-button"}" data-buy-black-market-item="${kind}" ${isDisabled}>${label} · ${rank}级 ${itemCost} 金</button>`;
       })
-      .join("");
-    return `${actions}${upgradeButton}`;
+      .join("") + upgradeButton;
   }
   if (id === "hospital") {
-    return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" ? "disabled" : ""}>治疗佣兵 ${economyConfig.facilities.hospitalTreatCost} 金</button>${upgradeButton}`;
+    const plan = calculateHospitalTreatmentPlan(state);
+    return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" || plan.entries.length === 0 ? "disabled" : ""}>治疗负面状态 ${plan.cost} 金</button>${upgradeButton}`;
   }
   return upgradeButton;
 }
@@ -618,10 +684,18 @@ function openFacilityDialog(id) {
   const canUpgrade = level < 7 && canUpgradeFacility(id);
   const specialText = {
     blackMarket: `只能买到当前黑市评级的商品。当前可购买 ${rank}级补给、武器、防具与机甲。`,
-    hospital: `解锁后可花费 ${economyConfig.facilities.hospitalTreatCost} 金治疗所有伤病佣兵。`,
+    hospital: (() => {
+      const plan = calculateHospitalTreatmentPlan(state);
+      return `按可治疗的负面状态数量收费。当前可处理 ${plan.entries.length} 个负面状态，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可治疗${formatSeverityLabel(plan.allowedSeverity)}状态。`;
+    })(),
+    defenses: `基地遭遇突袭时提供额外战斗力。当前防御战斗力 +${(state.buildings.defenses ?? 0) * economyConfig.facilities.defensePowerPerLevel}。`,
     tavern: "提高招募池规模，便于寻找更多候选佣兵。",
+    barracks: `提高可雇佣佣兵上限。当前上限 ${
+      economyConfig.facilities.baseMercenaryLimit +
+      (state.buildings.barracks ?? 0) * economyConfig.facilities.barracksMercenaryLimitPerLevel
+    } 人，每升 1 级 +${economyConfig.facilities.barracksMercenaryLimitPerLevel}。`,
     infirmary: "每日推进时自动降低佣兵压力，但方式不体面，也不干净。",
-    intel: "每级为契约成功率提供额外情报加成。",
+    intel: `每级降低调查契约情报费用 ${Math.round(economyConfig.facilities.intelInvestigationDiscountPerLevel * 100)}%，总折扣仍受调查折扣上限限制。`,
   }[id] ?? "基础设施效果待扩展。";
 
   document.querySelector("#facility-dossier").innerHTML = `

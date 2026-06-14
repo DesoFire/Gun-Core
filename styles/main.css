@@ -68,10 +68,26 @@ button:disabled {
   margin-bottom: 20px;
 }
 
-.topbar h1 {
+.topbar h1,
+.organization-name {
   font-size: 34px;
   line-height: 1;
   margin: 4px 0 0;
+}
+
+.organization-name {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  display: block;
+  font-weight: 800;
+  min-height: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.organization-name:hover {
+  color: var(--accent-strong);
 }
 
 .eyebrow {
@@ -302,6 +318,100 @@ button:disabled {
 .overview-row strong {
   font-size: 13px;
   text-align: right;
+}
+
+.personnel-overview-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.personnel-metric {
+  background: #14171b;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.personnel-metric span {
+  color: var(--muted);
+  display: block;
+  font-size: 11px;
+}
+
+.personnel-metric strong {
+  display: block;
+  font-size: 24px;
+  margin-top: 4px;
+}
+
+.personnel-metric.primary strong,
+.personnel-metric.power strong {
+  color: var(--accent-strong);
+  font-size: 30px;
+}
+
+.personnel-bars {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.personnel-bar {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 44px minmax(0, 1fr) 42px;
+}
+
+.personnel-bar span,
+.personnel-bar strong {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.personnel-bar i {
+  background: #111419;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.personnel-bar b {
+  background: var(--good);
+  display: block;
+  height: 100%;
+}
+
+.personnel-bar.active b {
+  background: var(--accent-strong);
+}
+
+.personnel-alert-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.personnel-alert-row span {
+  background: #14171b;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 4px 9px;
+}
+
+.personnel-alert-row .danger {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  color: #e89a93;
+}
+
+.personnel-alert-row .warning {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  color: var(--accent-strong);
 }
 
 .calendar-list {
@@ -762,6 +872,14 @@ h3 {
   margin-top: 3px;
 }
 
+.character-kpi small {
+  color: var(--muted);
+  display: block;
+  font-size: 10px;
+  line-height: 1.25;
+  margin-top: 4px;
+}
+
 .character-kpi.primary strong {
   color: var(--accent-strong);
   font-size: 24px;
@@ -1075,6 +1193,11 @@ h3 {
   margin: 10px 0;
 }
 
+.character-tag-row {
+  align-items: center;
+  min-height: 26px;
+}
+
 .badge {
   background: #2b3038;
   border: 1px solid var(--line);
@@ -1260,6 +1383,7 @@ h3 {
   gap: 8px;
   grid-template-columns: repeat(2, minmax(86px, 1fr));
   min-width: 300px;
+  width: min(390px, 42vw);
 }
 
 .rank-badge,
@@ -1291,11 +1415,13 @@ h3 {
 }
 
 .rank-badge strong {
-  font-size: 28px;
+  font-size: 34px;
+  font-weight: 900;
 }
 
 .rank-none strong {
   color: #8c929d;
+  font-size: 30px;
 }
 
 .rank-F strong {
@@ -1541,6 +1667,16 @@ h3 {
   display: inline-flex;
   font-size: 12px;
   padding: 6px 8px;
+}
+
+.equipment-tag {
+  border-color: color-mix(in srgb, var(--info) 55%, var(--line));
+  color: #a8cce4;
+}
+
+.armor-tag {
+  border-color: color-mix(in srgb, var(--good) 55%, var(--line));
+  color: #9de0a5;
 }
 
 .trait-list {

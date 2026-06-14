@@ -34,7 +34,7 @@ export function calculateTeamCombatPower(roster, memberIds) {
 }
 
 export function getItemCombatPower(item) {
-  if (item.itemCategory === "weapon" || item.slot === "weapon") return clamp(item.power ?? 0, 0, 50);
+  if (item.itemCategory === "weapon" || item.slot === "weapon") return clamp(item.power ?? 0, 0, 160);
   return 0;
 }
 

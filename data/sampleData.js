@@ -239,10 +239,12 @@ export const characterClasses = {
 
 export const buildings = {
   tavern: { name: "酒馆", description: "提高招募池规模。", cost: 70, upkeep: 5, unlockCost: 70 },
+  barracks: { name: "兵营", description: "提高可雇佣佣兵上限。每提升 1 级，佣兵上限 +1。", cost: 85, upkeep: 5, unlockCost: 85 },
+  defenses: { name: "防御设施", description: "在基地遭遇突袭时提供额外基地战斗力。", cost: 100, upkeep: 8, unlockCost: 100 },
   blackMarket: { name: "黑市", description: "花钱购买当前评级的补给、武器、防具和机甲。", cost: 95, upkeep: 6, unlockCost: 95 },
   hospital: { name: "医疗中心", description: "花钱治疗伤病。", cost: 110, upkeep: 9, unlockCost: 110 },
   infirmary: { name: "娱乐中心", description: "通过赌博、成瘾性药物和军妓等方式缓解压力。", cost: 80, upkeep: 7, unlockCost: 80 },
-  intel: { name: "情报室", description: "提高契约成功率。", cost: 90, upkeep: 8, unlockCost: 90 },
+  intel: { name: "情报室", description: "降低调查契约情报的费用。", cost: 90, upkeep: 8, unlockCost: 90 },
 };
 
 export const wealthCollections = [
@@ -661,6 +663,12 @@ export const epithetAdjectives = [
 ];
 
 export const epithetNumbers = ["第七", "最后一", "第三", "零号", "第十三", "唯一", "多余的", "迟到的", "被遗漏的", "未登记的"];
+export const shortEpithetAdjectives = [
+  "坏账", "断线", "空弹", "冷笑", "欠薪", "夜班", "灰烬", "逃票", "黑箱", "过期", "低温", "裂镜", "废墟", "失眠", "赊账", "回声",
+];
+export const shortEpithetNouns = [
+  "医生", "债主", "证人", "守夜人", "账房", "逃兵", "猎手", "搬运工", "祈祷机", "清道夫", "记录员", "替身", "遗嘱", "枪匠", "酒保", "黑函",
+];
 
 export const callsigns = epithetRoles;
 export const genders = ["未申报", "男", "女", "字段冲突", "档案损坏"];

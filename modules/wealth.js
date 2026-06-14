@@ -36,7 +36,7 @@ export function buyWealthItem(itemId) {
     draft.log.push(`第 ${draft.day} 天：私人收藏室新增「${item.name}」，花费 ${item.cost} 金。`);
     if (getWealthProgress(draft).complete) {
       draft.gameStatus = "won";
-      draft.log.push(`第 ${draft.day} 天：收藏室全部填满。战争财完成私人化，短局胜利。`);
+      draft.log.push(`第 ${draft.day} 天：收藏室全部填满。战争财完成私人化，游戏胜利。`);
     }
   });
 }
