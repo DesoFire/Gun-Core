@@ -33,6 +33,7 @@ import {
   sampleItems,
   wealthCollections,
 } from "../data/sampleData.js";
+import { economyConfig } from "../data/economyConfig.js";
 import { estimateBaseCombatPower } from "../modules/combatPower.js";
 import { createId, randomItem, randomNumber } from "./utils.js";
 
@@ -101,14 +102,14 @@ export function createInitialState() {
     objective: {
       title: "收藏室完工",
       targetReputation: 60,
-      deadline: 60,
+      deadline: economyConfig.initialState.deadline,
     },
     day: 1,
-    gold: 180,
-    supplies: 24,
+    gold: economyConfig.initialState.gold,
+    supplies: economyConfig.initialState.supplies,
     enhancementPoints: 0,
     reputation: 0,
-    stealth: 78,
+    stealth: economyConfig.initialState.stealth,
     roster: [createInitialMercenary("assault"), createInitialMercenary("scout")],
     recruitPool: [createInitialMercenary(), createInitialMercenary(), createInitialMercenary()],
     missions: Array.from({ length: 4 }, () => createInitialMission()),
@@ -154,13 +155,13 @@ function normalizeState(savedState) {
   savedState.objective ??= { title: "收藏室完工", targetReputation: 60, deadline: 60 };
   savedState.objective.title ??= "收藏室完工";
   savedState.objective.targetReputation ??= 60;
-  savedState.objective.deadline ??= 60;
+  savedState.objective.deadline ??= economyConfig.initialState.deadline;
   savedState.day ??= 1;
-  savedState.gold ??= 160;
-  savedState.supplies ??= 28;
+  savedState.gold ??= economyConfig.initialState.gold;
+  savedState.supplies ??= economyConfig.initialState.supplies;
   savedState.enhancementPoints ??= 0;
   savedState.reputation ??= 0;
-  savedState.stealth ??= 78;
+  savedState.stealth ??= economyConfig.initialState.stealth;
   savedState.buildings ??= { tavern: 1, infirmary: 0, intel: 0 };
   savedState.roster ??= [];
   savedState.recruitPool ??= [];
@@ -260,14 +261,14 @@ function createInitialMission() {
     duration,
     issueDay,
     expiresDay,
-    reward: { gold: 35 + difficulty * randomNumber(16, 24), reputation: Math.max(5, difficulty * 3 + randomNumber(0, 5)) },
+    reward: createInitialContractReward(difficulty),
     description: `${randomItem(type.verbs)}目标。${randomItem(contractBriefFragments)}`,
     intel: createContractIntel(),
     revealedIntel: [],
     hidden: { twist: randomItem(contractHiddenTwists) },
     tags: [...new Set(type.tags)],
-    refreshCost: 12 + difficulty * 4,
-    investigateCost: 14 + difficulty * 5,
+    refreshCost: calculateInitialRefreshCost(difficulty),
+    investigateCost: calculateInitialInvestigateCost(difficulty),
     remaining: duration,
     assigned: [],
     status: "available",
@@ -445,7 +446,34 @@ function createContractIntel() {
 }
 
 function calculateInitialPowerRequirement(difficulty, reputation = 0) {
-  return 18 + difficulty * randomNumber(8, 12) + Math.floor(reputation / 10) * 3 + randomNumber(-5, 8);
+  const config = economyConfig.contracts.requirement;
+  return (
+    config.basePower +
+    difficulty * randomNumber(config.powerPerDifficultyMin, config.powerPerDifficultyMax) +
+    Math.floor(reputation / config.reputationStep) * config.reputationPressure +
+    randomNumber(config.randomOffsetMin, config.randomOffsetMax)
+  );
+}
+
+function createInitialContractReward(difficulty) {
+  const config = economyConfig.contracts.reward;
+  return {
+    gold: config.baseGold + difficulty * randomNumber(config.goldPerDifficultyMin, config.goldPerDifficultyMax),
+    reputation: Math.max(
+      config.minReputation,
+      difficulty * config.reputationPerDifficulty + randomNumber(config.reputationRandomMin, config.reputationRandomMax)
+    ),
+  };
+}
+
+function calculateInitialRefreshCost(difficulty) {
+  const config = economyConfig.contracts.costs;
+  return config.refreshBase + difficulty * config.refreshPerDifficulty;
+}
+
+function calculateInitialInvestigateCost(difficulty, revealedCount = 0) {
+  const config = economyConfig.contracts.costs;
+  return config.investigateBase + difficulty * config.investigatePerDifficulty + revealedCount * config.investigatePerIntel;
 }
 
 function createInitialRecommendedTeamSize(difficulty) {
@@ -571,8 +599,9 @@ function upgradeMissionToContract(mission) {
   mission.intel ??= createContractIntel();
   mission.revealedIntel ??= [];
   mission.hidden ??= { twist: randomItem(contractHiddenTwists) };
-  mission.refreshCost ??= 12 + (mission.difficulty ?? fallbackTemplate.difficulty ?? 2) * 4;
-  mission.investigateCost ??= 14 + (mission.difficulty ?? fallbackTemplate.difficulty ?? 2) * 5 + mission.revealedIntel.length * 6;
+  const difficulty = mission.difficulty ?? fallbackTemplate.difficulty ?? 2;
+  mission.refreshCost ??= calculateInitialRefreshCost(difficulty);
+  mission.investigateCost ??= calculateInitialInvestigateCost(difficulty, mission.revealedIntel.length);
   mission.issueDay ??= 1;
   mission.expiresDay ??= mission.issueDay + 4;
   return mission;

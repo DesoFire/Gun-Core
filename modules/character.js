@@ -22,6 +22,7 @@ import {
   epithetVerbs,
   positiveConditions,
 } from "../data/sampleData.js";
+import { economyConfig } from "../data/economyConfig.js";
 import { getPromotionCombatPowerGain } from "./combatPower.js";
 import { getState, normalizeCharacterAvatars, updateState } from "../js/state.js";
 import { calculateRank, identityFee } from "./faction.js";
@@ -125,7 +126,7 @@ export function hireRecruit(id) {
 export function refreshRecruits() {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
-    const cost = 15;
+    const cost = economyConfig.recruitment.refreshCost;
     if (draft.gold < cost) return;
     const poolSize = 2 + (draft.buildings.tavern ?? 0);
     draft.gold -= cost;
@@ -195,7 +196,8 @@ function canCharacterUseSlot(character, slot) {
 
 export function recruitCost(character) {
   const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
-  return 42 + rankIndex * 10 + character.tags.length * 4;
+  const config = economyConfig.recruitment;
+  return config.baseCost + rankIndex * config.perRank + character.tags.length * config.perTag;
 }
 
 export function getEquipmentSlots() {

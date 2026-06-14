@@ -20,8 +20,10 @@ import { calculateCharacterCombatPower } from "../modules/combatPower.js";
 import { getWeaponTagNames } from "../modules/weaponGenerator.js";
 import { addLog, getState } from "../js/state.js";
 import { identityFee } from "../modules/faction.js";
+import { economyConfig } from "../data/economyConfig.js";
 import { showInsufficientFunds } from "../js/notifications.js";
 import { renderMercenaryAvatar } from "./mercenaryAvatarUI.js";
+import { careerCategories } from "../data/sampleData.js";
 
 let requestRender = () => {};
 let openDossierCharacterId = null;
@@ -94,9 +96,8 @@ function renderCharacterCard(character) {
       </div>
       <div class="character-meta-row">
         <span>知名度 ${character.notoriety}</span>
-        <span>正面 ${character.positiveConditions?.length ?? 0}</span>
+        <span>正面 ${getPositiveStatusCount(character)}</span>
         <span>负面 ${character.conditions?.length ?? 0}</span>
-        <span>特性 ${character.traits?.length ?? 0}</span>
       </div>
       <button class="link-button" data-open-character-button="${character.id}" type="button">查看人物卡 / 更换装备</button>
     </article>
@@ -159,7 +160,7 @@ function handleRefreshRecruits() {
 }
 
 function getRecruitRefreshCost() {
-  return 15;
+  return economyConfig.recruitment.refreshCost;
 }
 
 export function openCharacterSheet(id, options = {}) {
@@ -173,25 +174,36 @@ export function openCharacterSheet(id, options = {}) {
 function renderCharacterSheet(id) {
   const character = getCharacter(id);
   if (!character) return;
-  const rankLabel = formatRank(character.rank);
+  const combatPower = calculateCharacterCombatPower(character);
+  const assignedMission =
+    character.status.startsWith("履行") || character.status.startsWith("执行") ? character.status : "无";
 
   const dossier = document.querySelector("#mercenary-dossier");
   dossier.innerHTML = `
     <div class="dossier-top">
-      <div class="identity-line identity-line-large">
+      <div class="identity-line identity-line-large dossier-identity">
           ${renderMercenaryAvatar(character, { size: "large" })}
           <div>
             <div class="dossier-code">SSS-GUILD DOSSIER / FIELD SHEET</div>
-          <button class="editable-title" data-edit-character-name="${character.id}" type="button">${character.name}</button>
-          <button class="editable-callsign" data-edit-character-callsign="${character.id}" type="button">外号：${character.callsign ?? "未登记"}</button>
-          <p class="muted">${character.careerCategoryName ?? "未分类"} / ${character.className} · ${rankLabel} · ${character.status}</p>
+            <button class="editable-title" data-edit-character-name="${character.id}" type="button">${character.name}</button>
+            <button class="editable-callsign" data-edit-character-callsign="${character.id}" type="button">外号：${character.callsign ?? "未登记"}</button>
+            <div class="dossier-chip-row">
+              ${renderCareerChip(character)}
+              <span class="career-chip" title="具体职业决定初始战力、标签和职业加成。">${character.className}</span>
+              ${renderStatusSwitch(character.status)}
+            </div>
           </div>
         </div>
+      <div class="dossier-head-stats">
+        ${renderRankBadge(character.rank)}
+        <div class="mini-stat"><span>战力</span><strong>${combatPower}</strong></div>
+        <div class="mini-stat ${character.stress >= 60 ? "danger" : character.stress >= 30 ? "warning" : ""}"><span>压力</span><strong>${character.stress}</strong></div>
+        <div class="mini-stat ${character.wound > 0 ? "danger" : ""}"><span>伤势</span><strong>${character.wound}</strong></div>
+      </div>
       <button class="ghost-button" data-close-dossier type="button">关闭</button>
     </div>
     <div class="subtabbar" aria-label="人物卡切换">
       <button class="subtab-button ${activeDossierTab === "attributes" ? "active" : ""}" data-dossier-tab="attributes" type="button">属性</button>
-      <button class="subtab-button ${activeDossierTab === "equipment" ? "active" : ""}" data-dossier-tab="equipment" type="button">装备</button>
       <button class="subtab-button ${activeDossierTab === "archive" ? "active" : ""}" data-dossier-tab="archive" type="button">档案</button>
     </div>
     <div class="dossier-content">${renderActiveSheetTab(character)}</div>
@@ -220,7 +232,6 @@ function renderCharacterSheet(id) {
 }
 
 function renderActiveSheetTab(character) {
-  if (activeDossierTab === "equipment") return renderEquipmentTab(character);
   if (activeDossierTab === "archive") return `<div class="dossier-grid">${renderCharacterDossier(character)}</div>`;
   return renderAttributesTab(character);
 }
@@ -239,37 +250,22 @@ function editCharacterIdentity(characterId, field) {
 }
 
 function renderAttributesTab(character) {
-  const assignedMission =
-    character.status.startsWith("履行") || character.status.startsWith("执行") ? character.status : "无";
-  const combatPower = calculateCharacterCombatPower(character);
   const state = getState();
   const canEnhance = state.gameStatus === "active" && character.status !== "阵亡" && (state.enhancementPoints ?? 0) > 0;
   return `
     <div class="dossier-grid">
-      <section class="dossier-section">
-        <h3>基本状态</h3>
-        <div class="field-list">
-          <div class="field"><span>战斗力</span><strong>${combatPower}</strong></div>
-          <div class="field"><span>基础战力</span><strong>${character.combatPower ?? 0}</strong></div>
-          <div class="field"><span>当前契约</span><strong>${assignedMission}</strong></div>
-          <div class="field"><span>评级</span><strong>${formatRank(character.rank)}</strong></div>
-          <div class="field"><span>晋升序号</span><strong>${character.level}/7</strong></div>
-          <div class="field"><span>压力</span><strong>${character.stress}</strong></div>
-          <div class="field"><span>伤势</span><strong>${character.wound}</strong></div>
-        </div>
-        <button class="primary-button full-width-button" data-spend-enhancement="${character.id}" ${canEnhance ? "" : "disabled"} type="button">消耗基地强化点（剩余 ${state.enhancementPoints ?? 0}）</button>
-      </section>
       <section class="dossier-section wide">
         <h3>技能</h3>
         <div class="badge-row">${character.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
+        <button class="primary-button full-width-button" data-spend-enhancement="${character.id}" ${canEnhance ? "" : "disabled"} type="button">消耗基地强化点（剩余 ${state.enhancementPoints ?? 0}）</button>
+      </section>
+      <section class="dossier-section wide">
+        <h3>装备</h3>
+        ${renderEquipmentTab(character)}
       </section>
       <section class="dossier-section wide">
         <h3>正面状态</h3>
-        ${renderPositiveConditionList(character)}
-      </section>
-      <section class="dossier-section wide">
-        <h3>正面特性</h3>
-        ${renderTraitList(character)}
+        ${renderPositiveStatusList(character)}
       </section>
       <section class="dossier-section wide">
         <h3>负面状态</h3>
@@ -279,9 +275,10 @@ function renderAttributesTab(character) {
   `;
 }
 
-function renderPositiveConditionList(character) {
+function renderPositiveStatusList(character) {
   const conditions = character.positiveConditions ?? [];
-  if (conditions.length === 0) return `<p class="muted">还没有形成稳定的正面状态。</p>`;
+  const traits = character.traits ?? [];
+  if (conditions.length === 0 && traits.length === 0) return `<p class="muted">还没有形成稳定的正面状态。</p>`;
   return `
     <div class="trait-list">
       ${conditions
@@ -297,30 +294,41 @@ function renderPositiveConditionList(character) {
           `
         )
         .join("")}
-    </div>
-  `;
-}
-
-function renderTraitList(character) {
-  const traits = character.traits ?? [];
-  if (traits.length === 0) return `<p class="muted">还没有通过行动晋升获得特性。</p>`;
-  return `
-    <div class="trait-list">
       ${traits
         .map(
           (trait) => `
-            <article class="trait-item">
+            <article class="trait-item positive-condition-item positive-condition-light">
               <div>
                 <strong>${trait.name}</strong>
                 <p class="muted">${trait.description}</p>
               </div>
-              <span class="badge">${trait.source === "combat" ? "战斗" : "后勤"}</span>
+              <span class="badge positive-condition-badge positive-condition-light">${trait.source === "combat" ? "战斗" : "后勤"}</span>
             </article>
           `
         )
         .join("")}
     </div>
   `;
+}
+
+function renderCareerChip(character) {
+  const category = careerCategories[character.careerCategory];
+  const title = category ? `${category.name}：${category.description}` : "职业大类会影响契约适配和角色成长。";
+  return `<span class="career-chip career-chip-primary" title="${title}">${character.careerCategoryName ?? "未分类"}</span>`;
+}
+
+function renderStatusSwitch(status) {
+  const isReady = status === "待命";
+  return `<span class="status-switch ${isReady ? "ready" : "busy"}" title="角色当前是否可被派遣"><i></i>${status}</span>`;
+}
+
+function renderRankBadge(rank) {
+  const key = rank && rank !== "无" ? rank : "none";
+  return `<div class="rank-badge rank-${key}"><span>评级</span><strong>${formatRank(rank)}</strong></div>`;
+}
+
+function getPositiveStatusCount(character) {
+  return (character.positiveConditions?.length ?? 0) + (character.traits?.length ?? 0);
 }
 
 function renderConditionList(character) {
@@ -414,7 +422,7 @@ function getCandidateItems(slot) {
 }
 
 function bindEquipmentEvents(characterId) {
-  if (activeDossierTab !== "equipment") return;
+  if (activeDossierTab !== "attributes") return;
   const dossier = document.querySelector("#mercenary-dossier");
 
   dossier.querySelectorAll("[data-select-slot]").forEach((button) => {

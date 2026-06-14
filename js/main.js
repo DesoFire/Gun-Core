@@ -24,6 +24,7 @@ import { renderAppShell } from "../ui/appShellUI.js";
 import { initWeaponUI } from "../ui/weaponUI.js";
 import { buyWealthItem, getWealthCollections, getWealthProgress } from "../modules/wealth.js";
 import { showInsufficientFunds, showToast } from "./notifications.js";
+import { economyConfig } from "../data/economyConfig.js";
 
 let router = null;
 let pendingExpenseApproval = false;
@@ -44,8 +45,8 @@ function init() {
 
 function bindGlobalActions() {
   document.querySelector("#advance-day").addEventListener("click", requestAdvanceDayApproval);
-  document.querySelector("#buy-supplies").addEventListener("click", () => handleCostAction(36, buySupplies));
-  document.querySelector("#reduce-heat").addEventListener("click", () => handleCostAction(42, reduceHeat));
+  document.querySelector("#buy-supplies").addEventListener("click", () => handleCostAction(economyConfig.baseActions.buySupplies.cost, buySupplies));
+  document.querySelector("#reduce-heat").addEventListener("click", () => handleCostAction(economyConfig.baseActions.reduceHeat.cost, reduceHeat));
   initGlobalStatusDrawer();
   document.querySelector("#global-status-close").addEventListener("click", () => {
     document.querySelector("#global-status-drawer").classList.remove("open");
@@ -258,8 +259,14 @@ function renderExpenses() {
 
   list.querySelectorAll("[data-confirm-expenses]").forEach((button) => {
     button.addEventListener("click", () => {
+      const before = getState();
+      const approvedCost = breakdown.total;
+      const previousDay = before.day;
       pendingExpenseApproval = false;
       advanceDay();
+      const after = getState();
+      const spent = Math.min(before.gold, approvedCost);
+      showToast(`已进入第 ${after.day} 天。本次批准支出 ${approvedCost} 金，实际支付 ${spent} 金，剩余 ${after.gold} 金。`, "good");
     });
   });
 }
@@ -588,7 +595,7 @@ function renderFacilityAction(id, level, cost, disabled) {
     return `${actions}${upgradeButton}`;
   }
   if (id === "hospital") {
-    return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" ? "disabled" : ""}>治疗佣兵 32 金</button>${upgradeButton}`;
+    return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" ? "disabled" : ""}>治疗佣兵 ${economyConfig.facilities.hospitalTreatCost} 金</button>${upgradeButton}`;
   }
   return upgradeButton;
 }
@@ -611,9 +618,9 @@ function openFacilityDialog(id) {
   const canUpgrade = level < 7 && canUpgradeFacility(id);
   const specialText = {
     blackMarket: `只能买到当前黑市评级的商品。当前可购买 ${rank}级补给、武器、防具与机甲。`,
-    hospital: "解锁后可花费 32 金治疗所有受伤或高压佣兵。",
+    hospital: `解锁后可花费 ${economyConfig.facilities.hospitalTreatCost} 金治疗所有伤病佣兵。`,
     tavern: "提高招募池规模，便于寻找更多候选佣兵。",
-    infirmary: "每日推进时自动降低受伤或高压佣兵的压力。",
+    infirmary: "每日推进时自动降低佣兵压力，但方式不体面，也不干净。",
     intel: "每级为契约成功率提供额外情报加成。",
   }[id] ?? "基础设施效果待扩展。";
 

@@ -17,6 +17,7 @@ import {
   positiveTraits,
   promotionChances,
 } from "../data/sampleData.js";
+import { economyConfig } from "../data/economyConfig.js";
 import { getState, updateState } from "../js/state.js";
 import { identityFee, payDailyUpkeep, resolveRestAttack } from "./faction.js";
 import { evaluateGameOverDraft } from "./game.js";
@@ -35,13 +36,24 @@ export function createContract(options = {}) {
   const state = getState();
   const type = options.type ?? randomItem(contractTypes);
   const issuer = options.issuer ?? randomIssuer();
-  const reputationTier = Math.floor((state.reputation ?? 0) / 15);
-  const difficulty = options.difficulty ?? clamp(randomNumber(1, 3) + reputationTier, 1, 8);
+  const difficultyConfig = economyConfig.contracts.difficulty;
+  const reputationTier = Math.floor((state.reputation ?? 0) / difficultyConfig.reputationTierStep);
+  const difficulty = options.difficulty ?? clamp(randomNumber(difficultyConfig.baseMin, difficultyConfig.baseMax) + reputationTier, difficultyConfig.min, difficultyConfig.max);
   const duration = options.duration ?? randomNumber(1, 3 + Math.floor(difficulty / 2));
   const issueDay = options.issueDay ?? state.day ?? 1;
   const expiresDay = options.expiresDay ?? issueDay + randomNumber(2, 4) + Math.floor(difficulty / 2);
-  const rewardGold = Math.round((35 + difficulty * randomNumber(16, 24)) * (options.rewardMultiplier ?? 1));
-  const rewardReputation = Math.max(5, Math.round(difficulty * 3 + randomNumber(0, 5)));
+  const rewardConfig = economyConfig.contracts.reward;
+  const rewardGold = Math.round(
+    (rewardConfig.baseGold + difficulty * randomNumber(rewardConfig.goldPerDifficultyMin, rewardConfig.goldPerDifficultyMax)) *
+      (options.rewardMultiplier ?? 1)
+  );
+  const rewardReputation = Math.max(
+    rewardConfig.minReputation,
+    Math.round(
+      difficulty * rewardConfig.reputationPerDifficulty +
+        randomNumber(rewardConfig.reputationRandomMin, rewardConfig.reputationRandomMax)
+    )
+  );
   const tags = [...new Set(type.tags)];
   const name = `${type.name}契约：${randomContractSubject(type)}`;
   const powerRequirement = options.powerRequirement ?? calculateContractPowerRequirement(difficulty, state.reputation ?? 0);
@@ -180,7 +192,7 @@ export function advanceDay() {
     if (draft.gameStatus !== "active") return;
     draft.day += 1;
     payDailyUpkeep(draft);
-    draft.supplies = Math.max(0, draft.supplies - Math.ceil(draft.roster.length / 3));
+    draft.supplies = Math.max(0, draft.supplies - Math.ceil(draft.roster.length / economyConfig.contracts.execution.dailySupplyDivisor));
     recoverRestingStressDraft(draft);
 
     if (draft.buildings.infirmary > 0) {
@@ -219,7 +231,7 @@ export function advanceDay() {
 
     if (draft.supplies === 0) {
       draft.roster.filter((character) => character.status !== "阵亡").forEach((character) => {
-        character.stress += 2;
+        character.stress += economyConfig.contracts.execution.noSupplyStress;
       });
       draft.log.push(`第 ${draft.day} 天：补给耗尽，所有佣兵压力上升。`);
     }
@@ -241,7 +253,14 @@ export function getMissionRisk(memberIds, mission) {
 }
 
 export function getContractRiskTag(mission) {
-  const roughChance = clamp(104 - (mission.difficulty ?? 2) * 11 - (mission.duration ?? 1) * 3, 18, 92);
+  const config = economyConfig.contracts.display;
+  const roughChance = clamp(
+    config.roughRiskBase -
+      (mission.difficulty ?? 2) * config.roughRiskDifficultyPenalty -
+      (mission.duration ?? 1) * config.roughRiskDurationPenalty,
+    config.roughRiskMin,
+    config.roughRiskMax
+  );
   return getRiskLabel(roughChance);
 }
 
@@ -253,7 +272,7 @@ export function evaluateMissionFit(memberIds, mission) {
 export function getMissionPowerRange(mission) {
   normalizeContractPowerFields(mission, getState().reputation ?? 0);
   const level = mission.powerIntelLevel ?? 0;
-  const spread = [28, 18, 10, 4][Math.min(level, 3)];
+  const spread = economyConfig.contracts.display.powerIntelSpreads[Math.min(level, 3)];
   const low = Math.max(1, mission.powerRequirement - spread);
   const high = mission.powerRequirement + spread;
   return { low, high, level };
@@ -364,10 +383,15 @@ function settleReturningWagesDraft(draft, mission, returningTeam) {
 
   const shortage = totalWages - draft.gold;
   draft.gold = 0;
-  const stealthLoss = clamp(Math.ceil(shortage / 5) + 3, 3, 18);
+  const config = economyConfig.contracts.execution;
+  const stealthLoss = clamp(
+    Math.ceil(shortage / config.wageShortageDivisor) + config.wageShortageBaseLoss,
+    config.wageShortageMinLoss,
+    config.wageShortageMaxLoss
+  );
   draft.stealth = clamp(draft.stealth - stealthLoss, 0, 100);
   returningTeam.forEach((character) => {
-    character.stress += 2;
+    character.stress += config.wageShortageStress;
   });
   draft.log.push(`第 ${draft.day} 天：外勤薪资需要 ${totalWages} 金，但资金缺口 ${shortage} 金。返队佣兵压力上升，隐秘值下降 ${stealthLoss}。`);
 }
@@ -576,8 +600,14 @@ function drawUniqueRequirements(pool, count) {
 }
 
 function calculateContractPowerRequirement(difficulty, reputation) {
-  const reputationPressure = Math.floor(reputation / 10) * 3;
-  return 18 + difficulty * randomNumber(8, 12) + reputationPressure + randomNumber(-5, 8);
+  const config = economyConfig.contracts.requirement;
+  const reputationPressure = Math.floor(reputation / config.reputationStep) * config.reputationPressure;
+  return (
+    config.basePower +
+    difficulty * randomNumber(config.powerPerDifficultyMin, config.powerPerDifficultyMax) +
+    reputationPressure +
+    randomNumber(config.randomOffsetMin, config.randomOffsetMax)
+  );
 }
 
 function normalizeContractPowerFields(mission, reputation = 0) {
@@ -649,16 +679,20 @@ function getRewardGoldMultiplier(team) {
 }
 
 function calculateRefreshCost(difficulty = 2) {
-  return 12 + difficulty * 4;
+  const config = economyConfig.contracts.costs;
+  return config.refreshBase + difficulty * config.refreshPerDifficulty;
 }
 
 function calculateInvestigateCost(difficulty = 2, revealedCount = 0) {
-  return 14 + difficulty * 5 + revealedCount * 6;
+  const config = economyConfig.contracts.costs;
+  return config.investigateBase + difficulty * config.investigatePerDifficulty + revealedCount * config.investigatePerIntel;
 }
 
 function calculateDiscountedInvestigateCost(draft, mission, mode = "targeted") {
   const baseCost = mission.investigateCost ?? calculateInvestigateCost(mission.difficulty ?? 2);
-  const modeMultiplier = mode === "random" ? 0.65 : mode === "power" ? 0.85 : 1;
+  const config = economyConfig.contracts.costs;
+  const modeMultiplier =
+    mode === "random" ? config.randomInvestigationMultiplier : mode === "power" ? config.powerInvestigationMultiplier : 1;
   const discount = draft.roster
     .filter((character) => character.status !== "阵亡")
     .reduce((sum, character) => {
@@ -666,7 +700,7 @@ function calculateDiscountedInvestigateCost(draft, mission, mode = "targeted") {
       const career = getCareerConfig(character);
       return sum + (category?.effects?.investigateDiscount ?? 0) + (career?.effects?.investigateDiscount ?? 0);
     }, 0);
-  return Math.max(1, Math.round(baseCost * modeMultiplier * (1 - Math.min(0.4, discount))));
+  return Math.max(1, Math.round(baseCost * modeMultiplier * (1 - Math.min(config.maxInvestigationDiscount, discount))));
 }
 
 function chooseInvestigationTarget(mission, intelKey = "random") {

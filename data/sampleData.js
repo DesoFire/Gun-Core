@@ -240,8 +240,8 @@ export const characterClasses = {
 export const buildings = {
   tavern: { name: "酒馆", description: "提高招募池规模。", cost: 70, upkeep: 5, unlockCost: 70 },
   blackMarket: { name: "黑市", description: "花钱购买当前评级的补给、武器、防具和机甲。", cost: 95, upkeep: 6, unlockCost: 95 },
-  hospital: { name: "医院", description: "花钱治疗受伤或高压佣兵。", cost: 110, upkeep: 9, unlockCost: 110 },
-  infirmary: { name: "医务室", description: "每日降低受伤佣兵的压力。", cost: 80, upkeep: 7, unlockCost: 80 },
+  hospital: { name: "医疗中心", description: "花钱治疗伤病。", cost: 110, upkeep: 9, unlockCost: 110 },
+  infirmary: { name: "娱乐中心", description: "通过赌博、成瘾性药物和军妓等方式缓解压力。", cost: 80, upkeep: 7, unlockCost: 80 },
   intel: { name: "情报室", description: "提高契约成功率。", cost: 90, upkeep: 8, unlockCost: 90 },
 };
 

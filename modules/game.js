@@ -1,4 +1,5 @@
 import { getState, updateState } from "../js/state.js";
+import { economyConfig } from "../data/economyConfig.js";
 import { clamp, createId } from "../js/utils.js";
 import { getWealthProgress } from "./wealth.js";
 
@@ -10,11 +11,12 @@ export function getGameSummary() {
 export function buySupplies() {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
-    const cost = 36;
+    const config = economyConfig.baseActions.buySupplies;
+    const cost = config.cost;
     if (draft.gold < cost) return;
     draft.gold -= cost;
-    draft.supplies += 8;
-    draft.stealth = clamp(draft.stealth - 2, 0, 100);
+    draft.supplies += config.amount;
+    draft.stealth = clamp(draft.stealth - config.stealthLoss, 0, 100);
     draft.timeline.push({
       id: createId(),
       day: draft.day,
@@ -31,7 +33,8 @@ export function treatWounds() {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     const wounded = draft.roster.filter((character) => character.wound > 0 || character.stress >= 10);
-    const cost = 28;
+    const config = economyConfig.baseActions.treatWounds;
+    const cost = config.cost;
     if (wounded.length === 0) {
       draft.log.push(`第 ${draft.day} 天：没有需要地下医疗处理的伤员。`);
       return;
@@ -39,9 +42,9 @@ export function treatWounds() {
     if (draft.gold < cost) return;
     draft.gold -= cost;
     wounded.forEach((character) => {
-      character.wound = Math.max(0, character.wound - 1);
-      character.stress = Math.max(0, character.stress - 6);
-      character.hp = Math.min(character.maxHp, character.hp + 8);
+      character.wound = Math.max(0, character.wound - config.woundRecovery);
+      character.stress = Math.max(0, character.stress - config.stressRecovery);
+      character.hp = Math.min(character.maxHp, character.hp + config.hpRecovery);
     });
     draft.timeline.push({
       id: createId(),
@@ -58,10 +61,11 @@ export function treatWounds() {
 export function reduceHeat() {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
-    const cost = 42;
+    const config = economyConfig.baseActions.reduceHeat;
+    const cost = config.cost;
     if (draft.gold < cost) return;
     draft.gold -= cost;
-    draft.stealth = clamp(draft.stealth + 12, 0, 100);
+    draft.stealth = clamp(draft.stealth + config.stealthGain, 0, 100);
     draft.timeline.push({
       id: createId(),
       day: draft.day,

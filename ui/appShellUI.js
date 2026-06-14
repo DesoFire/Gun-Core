@@ -1,3 +1,5 @@
+import { economyConfig } from "../data/economyConfig.js";
+
 export function renderAppShell(root) {
   root.innerHTML = `
     <header class="topbar">
@@ -51,8 +53,8 @@ export function renderAppShell(root) {
             </div>
             <div id="command-grid" class="command-grid"></div>
             <div class="button-row">
-              <button id="buy-supplies" class="ghost-button" type="button">黑市补给 36 金</button>
-              <button id="reduce-heat" class="ghost-button" type="button">清理痕迹 42 金</button>
+              <button id="buy-supplies" class="ghost-button" type="button">黑市补给 ${economyConfig.baseActions.buySupplies.cost} 金</button>
+              <button id="reduce-heat" class="ghost-button" type="button">清理痕迹 ${economyConfig.baseActions.reduceHeat.cost} 金</button>
             </div>
           </section>
 

@@ -6,6 +6,7 @@ import {
   mechaFrames,
   mercenaryRanks,
 } from "../data/sampleData.js";
+import { economyConfig } from "../data/economyConfig.js";
 import { getState, updateState } from "../js/state.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
 import { generateArmorItem } from "./armorGenerator.js";
@@ -65,7 +66,8 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
       rank: getFacilityRankLabel(level),
       cost: calculateFacilityUpkeep(id, level),
     }));
-  const base = { total: 10, items: [{ id: "base", name: "基地基础开销", cost: 10 }] };
+  const baseCost = economyConfig.dailyExpenses.baseUpkeep;
+  const base = { total: baseCost, items: [{ id: "base", name: "基地基础开销", cost: baseCost }] };
   const wages = { total: sumCosts(wageItems), items: wageItems };
   const supplies = { total: sumCosts(supplyItems), items: supplyItems };
   const equipment = { total: sumCosts(equipmentItems), items: equipmentItems };
@@ -82,7 +84,8 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
 
 export function identityFee(character) {
   const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
-  return 3 + rankIndex * 2 + character.notoriety * 2 + (character.isPlayer ? 2 : 0);
+  const config = economyConfig.dailyExpenses.wages;
+  return config.base + rankIndex * config.perRank + character.notoriety * config.perNotoriety + (character.isPlayer ? config.playerBonus : 0);
 }
 
 export function calculateRestAttackChance() {
@@ -154,9 +157,9 @@ export function hospitalTreatMercenaries() {
   updateState((draft) => {
     if (draft.gameStatus !== "active" || (draft.buildings.hospital ?? 0) <= 0) return;
     const patients = draft.roster.filter((character) => character.status !== "阵亡" && (character.wound > 0 || character.stress >= 8));
-    const cost = 32;
+    const cost = economyConfig.facilities.hospitalTreatCost;
     if (patients.length === 0) {
-      draft.log.push(`第 ${draft.day} 天：医院没有找到需要处理的伤员。`);
+      draft.log.push(`第 ${draft.day} 天：医疗中心没有找到需要处理的伤病佣兵。`);
       return;
     }
     if (draft.gold < cost) return;
@@ -170,11 +173,11 @@ export function hospitalTreatMercenaries() {
       id: createId(),
       day: draft.day,
       type: "facility",
-      title: "医院治疗",
+      title: "医疗中心治疗",
       status: "done",
       detail: `${patients.length} 名佣兵恢复。`,
     });
-    draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金，医院治疗了 ${patients.length} 名佣兵。`);
+    draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金，医疗中心治疗了 ${patients.length} 名佣兵。`);
   });
 }
 
@@ -191,10 +194,15 @@ export function payDailyUpkeep(draft) {
 
   const shortage = cost - draft.gold;
   draft.gold = 0;
-  const stealthLoss = clamp(Math.ceil(shortage / 4) + 5, 5, 22);
+  const shortageConfig = economyConfig.dailyExpenses.shortage;
+  const stealthLoss = clamp(
+    Math.ceil(shortage / shortageConfig.divisor) + shortageConfig.baseLoss,
+    shortageConfig.minLoss,
+    shortageConfig.maxLoss
+  );
   draft.stealth = clamp(draft.stealth - stealthLoss, 0, 100);
   draft.roster.filter((character) => character.status !== "阵亡").forEach((character) => {
-    character.stress += 1;
+    character.stress += shortageConfig.stress;
   });
   draft.log.push(`第 ${draft.day} 天：维护费用缺口 ${shortage} 金，假身份链条开始漏风。隐秘值下降 ${stealthLoss}。`);
 }
@@ -208,13 +216,14 @@ export function resolveRestAttack(draft) {
   const casualties = available.sort(() => Math.random() - 0.5).slice(0, casualtyCount);
   casualties.forEach((character) => {
     character.wound += 1;
-    character.stress += randomNumber(4, 8);
+    character.stress += randomNumber(economyConfig.restAttack.woundStressMin, economyConfig.restAttack.woundStressMax);
     character.hp = Math.max(1, character.hp - randomNumber(2, 6));
   });
 
-  const loss = Math.min(draft.gold, randomNumber(12, 32));
+  const attackConfig = economyConfig.restAttack;
+  const loss = Math.min(draft.gold, randomNumber(attackConfig.goldLossMin, attackConfig.goldLossMax));
   draft.gold -= loss;
-  draft.stealth = clamp(draft.stealth - randomNumber(3, 8), 0, 100);
+  draft.stealth = clamp(draft.stealth - randomNumber(attackConfig.stealthLossMin, attackConfig.stealthLossMax), 0, 100);
 
   const damageText =
     casualties.length > 0 ? `${casualties.map((character) => character.name).join("、")} 受伤` : "基地外围设施受损";
@@ -226,8 +235,9 @@ export function calculateRank(character) {
 }
 
 function calculateRestAttackChanceFromDraft(draft) {
-  const pressure = Math.max(0, 72 - draft.stealth);
-  return clamp(Math.round(4 + pressure * 0.75), 4, 58);
+  const config = economyConfig.restAttack;
+  const pressure = Math.max(0, config.triggerStealth - draft.stealth);
+  return clamp(Math.round(config.baseChance + pressure * config.pressureMultiplier), config.minChance, config.maxChance);
 }
 
 export function getFacilityRankLabel(level) {
@@ -238,7 +248,7 @@ export function getFacilityRankLabel(level) {
 export function getFacilityUpgradeCost(id, level) {
   const building = buildings[id];
   if (!building) return 0;
-  return level <= 0 ? building.unlockCost ?? building.cost : building.cost + level * 55;
+  return level <= 0 ? building.unlockCost ?? building.cost : building.cost + level * economyConfig.facilities.upgradePerCurrentLevel;
 }
 
 export function getFacilityRequirement(level) {
@@ -253,8 +263,9 @@ export function canUpgradeFacility(id) {
 
 export function getBlackMarketItemCost(kind, rank) {
   const rankIndex = Math.max(0, facilityRanks.indexOf(rank));
-  const base = { supplies: 26, weapon: 58, armor: 46, mecha: 150 }[kind] ?? 40;
-  return base + rankIndex * (kind === "mecha" ? 45 : 14);
+  const base = economyConfig.blackMarket.baseCost[kind] ?? economyConfig.blackMarket.baseCost.fallback;
+  const perRank = economyConfig.blackMarket.perRank[kind] ?? economyConfig.blackMarket.perRank.fallback;
+  return base + rankIndex * perRank;
 }
 
 function canUpgradeFacilityDraft(draft, nextLevel) {
@@ -269,13 +280,15 @@ function calculateFacilityUpkeep(id, level) {
 
 function calculateLivingSupplyCost(character) {
   const rankIndex = Math.max(0, mercenaryRanks.indexOf(calculateRank(character)));
-  return 2 + Math.ceil(rankIndex / 2);
+  const config = economyConfig.dailyExpenses.livingSupplies;
+  return config.base + Math.ceil(rankIndex / config.rankDivisor);
 }
 
 function calculateEquipmentMaintenanceCost(item) {
   const rankIndex = Math.max(0, facilityRanks.indexOf(item.rarity ?? "F"));
-  const base = item.itemCategory === "weapon" || item.slot === "weapon" ? 2 : 1;
-  return base + rankIndex * 2;
+  const config = economyConfig.dailyExpenses.equipmentMaintenance;
+  const base = item.itemCategory === "weapon" || item.slot === "weapon" ? config.weaponBase : config.armorBase;
+  return base + rankIndex * config.perRank;
 }
 
 function sumCosts(items) {
@@ -291,7 +304,8 @@ function createBlackMarketItem(kind, rank) {
 
 function createRankedSupply(rank) {
   const item = randomItem(blackMarketSupplyPool);
-  const quantity = rank === "F" ? randomNumber(2, 4) : randomNumber(4, 8);
+  const quantityRange = rank === "F" ? economyConfig.blackMarket.supplyQuantityLowRank : economyConfig.blackMarket.supplyQuantityHighRank;
+  const quantity = randomNumber(...quantityRange);
   return {
     id: createId(),
     ...item,

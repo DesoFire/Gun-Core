@@ -122,12 +122,9 @@ function renderContractCard(id) {
   const roster = state.roster;
   const assignedMembers = getMissionMembers(mission, roster);
   const assignedNames = assignedMembers.map((character) => character.name).join("、");
-  const revealedIntel = mission.revealedIntel ?? [];
   const isActive = mission.status === "active";
   const selectedIds = [...dispatchSelection].filter((memberId) => roster.some((character) => character.id === memberId));
   if (selectedIds.length !== dispatchSelection.size) dispatchSelection = new Set(selectedIds);
-  const fit = isActive ? null : evaluateMissionFit(selectedIds, mission);
-  const risk = fit?.risk ?? getMissionRisk(selectedIds, mission);
   const teamPower = getTeamCombatPower(selectedIds);
   const powerRange = getMissionPowerRange(mission);
   const isDispatching = dispatchMissionId === mission.id && !isActive;
@@ -151,32 +148,16 @@ function renderContractCard(id) {
           <div class="field"><span>发布日</span><strong>第 ${mission.issueDay} 天</strong></div>
           <div class="field"><span>截止日</span><strong>第 ${mission.expiresDay} 天</strong></div>
           <div class="field"><span>执行时间</span><strong>${mission.duration} 天</strong></div>
-          <div class="field"><span>难度</span><strong>${mission.difficulty}</strong></div>
+          <div class="field"><span>难度</span><strong>${renderDifficultyBadge(mission.difficulty)}</strong></div>
           <div class="field"><span>战力需求</span><strong>${powerRange.low}-${powerRange.high}</strong></div>
           <div class="field"><span>情报精度</span><strong>${powerRange.level}/3</strong></div>
           <div class="field"><span>报酬</span><strong>${mission.reward.gold} 金 / ${mission.reward.reputation} 声望池</strong></div>
-          <div class="field"><span>当前风险</span><strong>${isActive ? `剩余 ${mission.remaining} 天` : risk.label}</strong></div>
-          <div class="field"><span>已选战力</span><strong>${teamPower}</strong></div>
         </div>
-      </section>
-      <section class="dossier-section">
-        <h3>已知要求</h3>
-        <div class="badge-row">${mission.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
-        <div class="field-list compact-field-list">
-          ${renderKnownRequirementField(mission, "damageTypes")}
-          ${renderKnownRequirementField(mission, "careerCategories")}
-          ${renderKnownRequirementField(mission, "weaponTypes")}
-          ${renderKnownRequirementField(mission, "teamSize")}
-        </div>
-        ${
-          isActive
-            ? `<div class="contract-team-strip contract-team-strip-large">${assignedMembers.map((character) => renderMercenaryAvatar(character)).join("")}<span>${assignedNames || "未知队伍"}</span></div>`
-            : `<p class="muted">战力需求是隐藏定值，当前仅显示估算区间；调查可收窄区间。</p>`
-        }
       </section>
       <section class="dossier-section wide">
         <h3>简报</h3>
         <p class="contract-brief">${mission.description}</p>
+        <div class="badge-row">${mission.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
       </section>
       <section class="dossier-section wide">
         <div class="card-header">
@@ -241,11 +222,6 @@ function renderContractSummaryIntel(mission) {
   return `<div class="contract-intel-chips">${chips.map((chip) => `<span>${chip}</span>`).join("")}</div>`;
 }
 
-function renderKnownRequirementField(mission, key) {
-  const field = contractIntelFields.find((item) => item.key === key);
-  return `<div class="field"><span>${field?.label ?? key}</span><strong>${isIntelRevealed(mission, key) ? formatRequirementValue(mission, key) : "未调查"}</strong></div>`;
-}
-
 function renderIntelAction(mission, field, canAct) {
   const revealed = isIntelRevealed(mission, field.key);
   return `
@@ -257,6 +233,12 @@ function renderIntelAction(mission, field, canAct) {
       <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="${field.key}" ${canAct && !revealed ? "" : "disabled"} type="button">${revealed ? "已获取" : `调查 ${formatInvestigationCost(mission, "targeted")}`}</button>
     </article>
   `;
+}
+
+function renderDifficultyBadge(difficulty = 1) {
+  const ranks = ["F", "F", "E", "D", "C", "B", "A", "S"];
+  const rank = ranks[Math.max(0, Math.min(ranks.length - 1, difficulty))] ?? "F";
+  return `<span class="rank-pill rank-${rank}">${rank}</span>`;
 }
 
 function formatRequirementValue(mission, key) {
