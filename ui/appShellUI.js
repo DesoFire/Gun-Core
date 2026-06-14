@@ -16,13 +16,27 @@ export function renderAppShell(root) {
       <button class="tab-button active" data-tab-target="overview" type="button">总览</button>
       <button class="tab-button" data-tab-target="personnel" type="button">人员</button>
       <button class="tab-button" data-tab-target="missions" type="button">契约</button>
+      <button class="tab-button" data-tab-target="expenses" type="button">支出</button>
+      <button class="tab-button" data-tab-target="wealth" type="button">财富</button>
       <button class="tab-button" data-tab-target="schedule" type="button">日程</button>
       <button class="tab-button" data-tab-target="facilities" type="button">基础设施</button>
       <button class="tab-button temporary-hidden" data-tab-target="mechs" type="button" hidden>机甲</button>
       <button class="tab-button temporary-hidden" data-tab-target="warehouse" type="button" hidden>仓库</button>
     </nav>
 
-    <aside id="global-resource-strip" class="global-resource-strip" aria-label="基地关键状态"></aside>
+    <aside id="global-status-drawer" class="global-status-drawer" aria-label="基地关键状态">
+      <button id="global-status-toggle" class="global-status-toggle" type="button">状态</button>
+      <div id="global-status-panel" class="global-status-panel" hidden>
+        <div class="card-header">
+          <div>
+            <strong>基地关键状态</strong>
+            <p class="muted">随时查看现金流和暴露风险。</p>
+          </div>
+          <button id="global-status-close" class="ghost-button" type="button">关闭</button>
+        </div>
+        <div id="global-resource-strip" class="global-resource-strip"></div>
+      </div>
+    </aside>
 
     <main class="dashboard">
       <section class="tab-page active" data-tab-page="overview">
@@ -126,6 +140,33 @@ export function renderAppShell(root) {
         </section>
       </section>
 
+      <section class="tab-page" data-tab-page="expenses">
+        <section class="panel expense-panel">
+          <div class="section-heading">
+            <div>
+              <h2>基地支出</h2>
+              <p class="muted">当前每日金钱消耗明细。外出佣兵不支付日薪，平安归来后补发。</p>
+            </div>
+            <span id="expense-total-badge" class="badge">0 金/天</span>
+          </div>
+          <div id="expense-summary-grid" class="expense-summary-grid"></div>
+          <div id="expense-list" class="expense-grid"></div>
+        </section>
+      </section>
+
+      <section class="tab-page" data-tab-page="wealth">
+        <section class="panel wealth-panel">
+          <div class="section-heading">
+            <div>
+              <h2>财富</h2>
+              <p class="muted">把 GMS 的战争财转化成私人欲望、收藏室和体面工程。</p>
+            </div>
+            <span id="wealth-progress-badge" class="badge">0/0</span>
+          </div>
+          <div id="wealth-list" class="wealth-grid"></div>
+        </section>
+      </section>
+
       <section class="tab-page" data-tab-page="schedule">
         <section class="panel calendar-panel calendar-page-panel">
           <div class="section-heading">
@@ -136,13 +177,6 @@ export function renderAppShell(root) {
         </section>
       </section>
 
-      <section class="panel log-panel">
-        <div class="section-heading">
-          <h2>行动记录</h2>
-          <button id="clear-log" class="ghost-button" type="button">清空</button>
-        </div>
-        <div id="event-log" class="event-log"></div>
-      </section>
     </main>
 
     <dialog id="player-dialog" class="dialog">

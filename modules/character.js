@@ -1,5 +1,5 @@
 import {
-  callsigns,
+  careerCategories,
   characterClasses,
   creeds,
   equipmentSlots,
@@ -8,9 +8,21 @@ import {
   lastWords,
   mercenaryRanks,
   names,
+  nameProfiles,
   origins,
   personalities,
+  epithetAdjectives,
+  epithetContainers,
+  epithetForces,
+  epithetNumbers,
+  epithetObjects,
+  epithetPlaces,
+  epithetRoles,
+  epithetTemplates,
+  epithetVerbs,
+  positiveConditions,
 } from "../data/sampleData.js";
+import { getPromotionCombatPowerGain } from "./combatPower.js";
 import { getState, normalizeCharacterAvatars, updateState } from "../js/state.js";
 import { calculateRank, identityFee } from "./faction.js";
 import { createId, randomItem, randomNumber } from "../js/utils.js";
@@ -36,13 +48,18 @@ export function hasPlayerCharacter() {
 }
 
 export function createMercenary(classId = randomItem(Object.keys(characterClasses)), isPlayer = false, customName = "") {
-  const baseClass = characterClasses[classId];
+  const resolvedClassId = characterClasses[classId] ? classId : randomItem(Object.keys(characterClasses));
+  const baseClass = characterClasses[resolvedClassId];
+  const category = careerCategories[baseClass.category];
   const maxHp = baseClass.maxHp + randomNumber(-2, 3);
   return {
     id: createId(),
-    name: customName || `${randomItem(names)} · ${randomItem(callsigns)}`,
-    classId,
+    name: customName || createRandomName(),
+    callsign: createCallsign(),
+    classId: resolvedClassId,
     className: baseClass.name,
+    careerCategory: baseClass.category,
+    careerCategoryName: category?.name ?? "未分类",
     level: 0,
     xp: 0,
     hp: maxHp,
@@ -57,9 +74,9 @@ export function createMercenary(classId = randomItem(Object.keys(characterClasse
     stress: randomNumber(0, 8),
     wound: 0,
     isPlayer,
-    tags: [...baseClass.tags],
+    tags: [...new Set([...(category?.tags ?? []), ...baseClass.tags])],
     equipment: createEmptyEquipment(),
-    combatPower: baseClass.baseCombatPower + randomNumber(-3, 4),
+    combatPower: baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0) + randomNumber(-3, 4),
     status: "待命",
   };
 }
@@ -78,7 +95,11 @@ export function createCharacter(data) {
 export function updateCharacter(id, data) {
   updateState((draft) => {
     const character = draft.roster.find((item) => item.id === id);
-    if (character) Object.assign(character, data);
+    if (character) {
+      if (typeof data.name === "string") data.name = data.name.trim().slice(0, 32);
+      if (typeof data.callsign === "string") data.callsign = data.callsign.trim().slice(0, 24);
+      Object.assign(character, data);
+    }
   });
 }
 
@@ -105,10 +126,7 @@ export function refreshRecruits() {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     const cost = 15;
-    if (draft.gold < cost) {
-      draft.log.push(`第 ${draft.day} 天：资金不足，无法刷新招募名单。`);
-      return;
-    }
+    if (draft.gold < cost) return;
     const poolSize = 2 + (draft.buildings.tavern ?? 0);
     draft.gold -= cost;
     draft.recruitPool = Array.from({ length: poolSize }, () => createMercenary());
@@ -122,7 +140,7 @@ export function equipItem(characterId, slot, itemId) {
     if (draft.gameStatus !== "active") return;
     const character = draft.roster.find((item) => item.id === characterId);
     const item = draft.inventory.find((entry) => entry.id === itemId);
-    if (!character || !item || !canEquipItemToSlot(item, slot)) return;
+    if (!character || !item || !canEquipItemToSlot(item, slot) || !canCharacterUseSlot(character, slot)) return;
 
     const previousItem = character.equipment[slot];
     if (previousItem) draft.inventory.push(previousItem);
@@ -150,6 +168,31 @@ export function canEquipItemToSlot(item, slot) {
   return false;
 }
 
+export function spendEnhancementPoint(characterId) {
+  updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
+    const character = draft.roster.find((item) => item.id === characterId);
+    if (!character || character.status === "阵亡" || (draft.enhancementPoints ?? 0) <= 0) return;
+
+    draft.enhancementPoints -= 1;
+    const gain = getPromotionCombatPowerGain(character.rank);
+    character.combatPower = (character.combatPower ?? 0) + gain;
+    const condition = drawPositiveCondition(character, "enhancement");
+    if (condition) {
+      character.positiveConditions ??= [];
+      character.positiveConditions.push(condition);
+    }
+    const conditionText = condition ? `，获得正面状态「${condition.name}」` : "";
+    draft.log.push(`第 ${draft.day} 天：${character.name} 消耗 1 点强化点，战斗力 +${gain}${conditionText}。`);
+  });
+}
+
+function canCharacterUseSlot(character, slot) {
+  if (slot !== "weapon") return true;
+  const limbs = new Set((character.conditions ?? []).map((condition) => condition.limb).filter(Boolean));
+  return !(limbs.has("leftArm") && limbs.has("rightArm"));
+}
+
 export function recruitCost(character) {
   const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
   return 42 + rankIndex * 10 + character.tags.length * 4;
@@ -165,6 +208,7 @@ export function normalizeCharacter(character) {
   character.level = Math.max(0, mercenaryRanks.indexOf(character.rank));
   character.xp ??= 0;
   character.traits ??= [];
+  character.positiveConditions ??= [];
   character.dossier ??= createDossier();
   character.dossier.personality ??= randomItem(personalities);
   character.contractRecord ??= { completed: 0, failed: 0, survived: 0 };
@@ -174,12 +218,25 @@ export function normalizeCharacter(character) {
   character.stress ??= 0;
   character.status ??= "待命";
   character.tags ??= [];
-  character.combatPower ??= character.classId && characterClasses[character.classId] ? characterClasses[character.classId].baseCombatPower : 20;
-  character.maxHp ??= character.classId && characterClasses[character.classId] ? characterClasses[character.classId].maxHp : 24;
+  const baseClass = characterClasses[character.classId] ?? characterClasses.assault;
+  const category = careerCategories[baseClass.category];
+  character.classId = characterClasses[character.classId] ? character.classId : "assault";
+  character.className = baseClass.name;
+  character.careerCategory = baseClass.category;
+  character.careerCategoryName = category?.name ?? "未分类";
+  character.combatPower ??= baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0);
+  character.maxHp ??= baseClass.maxHp ?? 24;
   character.hp ??= Math.max(1, character.maxHp - character.wound * 4);
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
   character.equipment = normalizeEquipmentSlots(character.equipment);
   return character;
+}
+
+function drawPositiveCondition(character, source = "growth") {
+  const owned = new Set((character.positiveConditions ?? []).map((condition) => condition.name));
+  const pool = positiveConditions.filter((condition) => !owned.has(condition.name));
+  const condition = randomItem(pool.length > 0 ? pool : positiveConditions);
+  return condition ? { ...condition, id: createId(), source } : null;
 }
 
 export function renderCharacterDossier(character) {
@@ -231,6 +288,37 @@ function createDossier() {
 
 function createEmptyEquipment() {
   return Object.fromEntries(Object.keys(equipmentSlots).map((slot) => [slot, null]));
+}
+
+function createCallsign() {
+  return randomItem(epithetTemplates)
+    .replace("{place}", randomItem(epithetPlaces))
+    .replace("{verb}", randomItem(epithetVerbs))
+    .replace("{role}", randomItem(epithetRoles))
+    .replace("{object}", randomItem(epithetObjects))
+    .replace("{container}", randomItem(epithetContainers))
+    .replace("{force}", randomItem(epithetForces))
+    .replace("{adjective}", randomItem(epithetAdjectives))
+    .replace("{number}", randomItem(epithetNumbers));
+}
+
+function createRandomName() {
+  const profile = drawWeightedNameProfile();
+  const given = randomItem(profile.given);
+  if (profile.order === "single") return given;
+  const surname = randomItem(profile.surnames);
+  if (profile.order === "surname-first") return `${surname}${profile.joiner ?? ""}${given}`;
+  return `${given}${profile.joiner ?? " "}${surname}`;
+}
+
+function drawWeightedNameProfile() {
+  const total = nameProfiles.reduce((sum, profile) => sum + (profile.weight ?? 1), 0);
+  let roll = randomNumber(1, total);
+  for (const profile of nameProfiles) {
+    roll -= profile.weight ?? 1;
+    if (roll <= 0) return profile;
+  }
+  return nameProfiles[0];
 }
 
 function normalizeEquipmentSlots(equipment) {

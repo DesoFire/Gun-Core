@@ -1,5 +1,6 @@
 import { getState, updateState } from "../js/state.js";
 import { clamp, createId } from "../js/utils.js";
+import { getWealthProgress } from "./wealth.js";
 
 export function getGameSummary() {
   const state = getState();
@@ -10,10 +11,7 @@ export function buySupplies() {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     const cost = 36;
-    if (draft.gold < cost) {
-      draft.log.push(`第 ${draft.day} 天：资金不足，黑市补给商拒绝赊账。`);
-      return;
-    }
+    if (draft.gold < cost) return;
     draft.gold -= cost;
     draft.supplies += 8;
     draft.stealth = clamp(draft.stealth - 2, 0, 100);
@@ -38,10 +36,7 @@ export function treatWounds() {
       draft.log.push(`第 ${draft.day} 天：没有需要地下医疗处理的伤员。`);
       return;
     }
-    if (draft.gold < cost) {
-      draft.log.push(`第 ${draft.day} 天：资金不足，地下诊所不接诊。`);
-      return;
-    }
+    if (draft.gold < cost) return;
     draft.gold -= cost;
     wounded.forEach((character) => {
       character.wound = Math.max(0, character.wound - 1);
@@ -64,10 +59,7 @@ export function reduceHeat() {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     const cost = 42;
-    if (draft.gold < cost) {
-      draft.log.push(`第 ${draft.day} 天：资金不足，无法清理追踪痕迹。`);
-      return;
-    }
+    if (draft.gold < cost) return;
     draft.gold -= cost;
     draft.stealth = clamp(draft.stealth + 12, 0, 100);
     draft.timeline.push({
@@ -85,9 +77,10 @@ export function reduceHeat() {
 export function evaluateGameOverDraft(draft) {
   if (draft.gameStatus !== "active") return;
 
-  if (draft.reputation >= draft.objective.targetReputation) {
+  const wealthProgress = getWealthProgress(draft);
+  if (wealthProgress.complete) {
     draft.gameStatus = "won";
-    draft.log.push(`第 ${draft.day} 天：声望达到 ${draft.reputation}。事务所拿到了长期牌照，短局胜利。`);
+    draft.log.push(`第 ${draft.day} 天：收藏室全部填满。战争财完成私人化，短局胜利。`);
     return;
   }
 
@@ -99,21 +92,22 @@ export function evaluateGameOverDraft(draft) {
 
   if (draft.day > draft.objective.deadline) {
     draft.gameStatus = "lost";
-    draft.log.push(`第 ${draft.day} 天：期限已过，声望仍未达标。投资人撤资，短局失败。`);
+    draft.log.push(`第 ${draft.day} 天：期限已过，收藏室仍未完工。投资人失去耐心，短局失败。`);
   }
 }
 
 function buildGameSummary(state) {
   const daysLeft = Math.max(0, state.objective.deadline - state.day + 1);
-  const reputationLeft = Math.max(0, state.objective.targetReputation - state.reputation);
+  const wealthProgress = getWealthProgress(state);
   const activeContracts = state.missions.filter((mission) => mission.status === "active").length;
   const availableRoster = state.roster.filter((character) => character.status === "待命").length;
   return {
     status: state.gameStatus,
     daysLeft,
-    reputationLeft,
+    reputationLeft: Math.max(0, wealthProgress.total - wealthProgress.owned),
+    wealthProgress,
     activeContracts,
     availableRoster,
-    objectiveText: `${state.objective.deadline} 天内达到 ${state.objective.targetReputation} 声望`,
+    objectiveText: `${state.objective.deadline} 天内买完整个私人收藏室：${wealthProgress.owned}/${wealthProgress.total}`,
   };
 }

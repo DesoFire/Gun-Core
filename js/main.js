@@ -4,7 +4,7 @@ import { getState, resetState, saveState, subscribe, updateState } from "./state
 import { advanceDay } from "../modules/mission.js";
 import {
   buyBlackMarketItem,
-  calculateDailyUpkeep,
+  calculateDailyExpenseBreakdown,
   calculateRestAttackChance,
   canUpgradeFacility,
   getBlackMarketItemCost,
@@ -22,10 +22,15 @@ import { initMechaUI, renderMechaUI } from "../ui/mechaUI.js";
 import { initMissionUI, renderMissionUI } from "../ui/missionUI.js";
 import { renderAppShell } from "../ui/appShellUI.js";
 import { initWeaponUI } from "../ui/weaponUI.js";
+import { buyWealthItem, getWealthCollections, getWealthProgress } from "../modules/wealth.js";
+import { showInsufficientFunds, showToast } from "./notifications.js";
+
+let router = null;
+let pendingExpenseApproval = false;
 
 function init() {
   renderAppShell(document.querySelector("#root"));
-  initRouter();
+  router = initRouter();
   initCharacterUI({ onRenderNeeded: renderApp });
   initMissionUI();
   initMechaUI();
@@ -38,9 +43,14 @@ function init() {
 }
 
 function bindGlobalActions() {
-  document.querySelector("#advance-day").addEventListener("click", advanceDay);
-  document.querySelector("#buy-supplies").addEventListener("click", buySupplies);
-  document.querySelector("#reduce-heat").addEventListener("click", reduceHeat);
+  document.querySelector("#advance-day").addEventListener("click", requestAdvanceDayApproval);
+  document.querySelector("#buy-supplies").addEventListener("click", () => handleCostAction(36, buySupplies));
+  document.querySelector("#reduce-heat").addEventListener("click", () => handleCostAction(42, reduceHeat));
+  initGlobalStatusDrawer();
+  document.querySelector("#global-status-close").addEventListener("click", () => {
+    document.querySelector("#global-status-drawer").classList.remove("open");
+    document.querySelector("#global-status-panel").hidden = true;
+  });
   document.querySelector("#save-game").addEventListener("click", () => {
     saveState();
     updateState((draft) => {
@@ -50,11 +60,6 @@ function bindGlobalActions() {
   document.querySelector("#reset-game").addEventListener("click", () => {
     resetState();
   });
-  document.querySelector("#clear-log").addEventListener("click", () => {
-    updateState((draft) => {
-      draft.log = [];
-    });
-  });
 }
 
 function renderApp() {
@@ -62,12 +67,91 @@ function renderApp() {
   renderResources();
   renderOverview();
   renderBuildings();
+  renderExpenses();
+  renderWealth();
   renderCharacterUI();
   renderMissionUI();
   renderMechaUI();
   renderInventoryUI();
-  renderLog();
   saveState();
+}
+
+function requestAdvanceDayApproval() {
+  const state = getState();
+  if (state.gameStatus !== "active") return;
+  pendingExpenseApproval = true;
+  router?.switchTab("expenses");
+  renderExpenses();
+  showToast("请在支出页确认今日支出，批准后才会进入下一天。", "good");
+}
+
+function initGlobalStatusDrawer() {
+  const drawer = document.querySelector("#global-status-drawer");
+  const toggle = document.querySelector("#global-status-toggle");
+  const panel = document.querySelector("#global-status-panel");
+  const savedPosition = loadDrawerPosition();
+  if (savedPosition) {
+    drawer.style.left = `${savedPosition.left}px`;
+    drawer.style.top = `${savedPosition.top}px`;
+    drawer.style.right = "auto";
+  }
+
+  let drag = null;
+  toggle.addEventListener("pointerdown", (event) => {
+    drag = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: drawer.offsetLeft,
+      top: drawer.offsetTop,
+      moved: false,
+    };
+    toggle.setPointerCapture(event.pointerId);
+    drawer.classList.add("dragging");
+  });
+  toggle.addEventListener("pointermove", (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const dx = event.clientX - drag.startX;
+    const dy = event.clientY - drag.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+    const maxLeft = window.innerWidth - drawer.offsetWidth - 8;
+    const maxTop = window.innerHeight - toggle.offsetHeight - 8;
+    const left = Math.max(8, Math.min(maxLeft, drag.left + dx));
+    const top = Math.max(8, Math.min(maxTop, drag.top + dy));
+    drawer.style.left = `${left}px`;
+    drawer.style.top = `${top}px`;
+    drawer.style.right = "auto";
+  });
+  toggle.addEventListener("pointerup", (event) => {
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    toggle.releasePointerCapture(event.pointerId);
+    drawer.classList.remove("dragging");
+    saveDrawerPosition(drawer);
+    const shouldToggle = !drag.moved;
+    drag = null;
+    if (!shouldToggle) return;
+    drawer.classList.toggle("open");
+    panel.hidden = !drawer.classList.contains("open");
+  });
+  toggle.addEventListener("pointercancel", () => {
+    drag = null;
+    drawer.classList.remove("dragging");
+  });
+}
+
+function loadDrawerPosition() {
+  try {
+    return JSON.parse(localStorage.getItem("gun-core-status-drawer-position") ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+function saveDrawerPosition(drawer) {
+  localStorage.setItem(
+    "gun-core-status-drawer-position",
+    JSON.stringify({ left: drawer.offsetLeft, top: drawer.offsetTop })
+  );
 }
 
 function renderCommandPanel() {
@@ -83,11 +167,11 @@ function renderCommandPanel() {
   status.textContent = statusText;
   status.className = `badge status-${summary.status}`;
   document.querySelector("#advance-day").disabled = summary.status !== "active";
-  document.querySelector("#buy-supplies").disabled = summary.status !== "active" || state.gold < 36;
-  document.querySelector("#reduce-heat").disabled = summary.status !== "active" || state.gold < 42;
+  document.querySelector("#buy-supplies").disabled = summary.status !== "active";
+  document.querySelector("#reduce-heat").disabled = summary.status !== "active";
   document.querySelector("#command-grid").innerHTML = [
     ["剩余天数", summary.daysLeft],
-    ["还需声望", summary.reputationLeft],
+    ["收藏缺口", summary.reputationLeft],
     ["待命佣兵", `${summary.availableRoster}/${state.roster.length}`],
     ["执行契约", summary.activeContracts],
   ]
@@ -95,17 +179,30 @@ function renderCommandPanel() {
     .join("");
 }
 
+function handleCostAction(cost, action) {
+  const state = getState();
+  if (state.gold < cost) {
+    showInsufficientFunds(state.gold, cost);
+    return;
+  }
+  action();
+}
+
 function renderResources() {
   const state = getState();
+  const wealthProgress = getWealthProgress(state);
+  const dailyExpenses = calculateDailyExpenseBreakdown(state);
   document.querySelector("#current-day").textContent = `第 ${state.day} 天`;
   const resources = [
     ["资金", state.gold],
     ["补给", state.supplies],
     ["声望", state.reputation],
+    ["强化点", state.enhancementPoints ?? 0],
+    ["收藏", `${wealthProgress.owned}/${wealthProgress.total}`],
     ["隐秘值", `${state.stealth}/100`],
-    ["每日支出", calculateDailyUpkeep()],
+    ["每日支出", dailyExpenses.total],
     ["遇袭率", `${calculateRestAttackChance()}%`],
-    ["目标", `${Math.min(state.reputation, state.objective.targetReputation)}/${state.objective.targetReputation}`],
+    ["已花", `${wealthProgress.spent} 金`],
   ];
   const resourceHtml = resources
     .map(([label, value]) => `<div class="resource"><span>${label}</span><strong>${value}</strong></div>`)
@@ -115,14 +212,190 @@ function renderResources() {
   document.querySelector("#global-resource-strip").innerHTML = [
     ["第", `${state.day} 天`],
     ["资金", state.gold],
-    ["补给", state.supplies],
     ["声望", state.reputation],
+    ["强化点", state.enhancementPoints ?? 0],
     ["隐秘", `${state.stealth}/100`],
-    ["日支出", calculateDailyUpkeep()],
+    ["日支出", dailyExpenses.total],
     ["遇袭", `${calculateRestAttackChance()}%`],
   ]
     .map(([label, value]) => `<div class="strip-resource"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
+}
+
+function renderExpenses() {
+  const state = getState();
+  const breakdown = calculateDailyExpenseBreakdown(state);
+  const totalBadge = document.querySelector("#expense-total-badge");
+  const summaryGrid = document.querySelector("#expense-summary-grid");
+  const list = document.querySelector("#expense-list");
+  if (!totalBadge || !summaryGrid || !list) return;
+
+  totalBadge.textContent = `${breakdown.total} 金/天`;
+  summaryGrid.innerHTML = [
+    ["佣兵工资", breakdown.wages.total, `${breakdown.wages.items.length} 名待命`],
+    ["生活补给", breakdown.supplies.total, `${breakdown.supplies.items.length} 名佣兵`],
+    ["装备养护", breakdown.equipment.total, `${breakdown.equipment.items.length} 件装备`],
+    ["设施维持", breakdown.facilities.total + breakdown.base.total, `${breakdown.facilities.items.length} 座设施`],
+  ]
+    .map(
+      ([label, value, note]) => `
+        <article class="expense-summary-card">
+          <span>${label}</span>
+          <strong>${value} 金</strong>
+          <p class="muted">${note}</p>
+        </article>
+      `
+    )
+    .join("");
+
+  list.innerHTML = [
+    renderExpenseSection("佣兵工资", "仅待命佣兵按日支付；执行契约期间暂不支付，归来后补发。", breakdown.wages.items, renderWageExpenseLine, breakdown.wages.total),
+    renderExpenseSection("生活补给", "每个未阵亡佣兵每日消耗生活费用，等级越高费用越高。", breakdown.supplies.items, renderSupplyExpenseLine, breakdown.supplies.total),
+    renderExpenseSection("武器防具养护", "已装备的武器和防具每天都要维护，等级越高费用越高。", breakdown.equipment.items, renderEquipmentExpenseLine, breakdown.equipment.total),
+    renderExpenseSection("基础设施维持", "基地基础开销加已解锁设施维持费。", [...breakdown.base.items, ...breakdown.facilities.items], renderFacilityExpenseLine, breakdown.base.total + breakdown.facilities.total),
+    renderExpenseApprovalPanel(state, breakdown),
+  ].join("");
+
+  list.querySelectorAll("[data-confirm-expenses]").forEach((button) => {
+    button.addEventListener("click", () => {
+      pendingExpenseApproval = false;
+      advanceDay();
+    });
+  });
+}
+
+function renderExpenseApprovalPanel(state, breakdown) {
+  return `
+    <section class="expense-section expense-approval-section">
+      <div>
+        <h3>每日结算批准</h3>
+        <p class="muted">${
+          pendingExpenseApproval
+            ? `确认支付当前每日支出 ${breakdown.total} 金。当前资金 ${state.gold} 金。`
+            : "点击顶部“推进一天”后，需要在这里批准支出。"
+        }</p>
+      </div>
+      <button class="approve-button" data-confirm-expenses ${pendingExpenseApproval && state.gameStatus === "active" ? "" : "disabled"} type="button">
+        批准支出并进入下一天
+      </button>
+    </section>
+  `;
+}
+
+function renderExpenseSection(title, description, items, renderLine, total) {
+  return `
+    <section class="expense-section">
+      <div class="card-header">
+        <div>
+          <h3>${title}</h3>
+          <p class="muted">${description}</p>
+        </div>
+        <span class="badge">${total} 金/天</span>
+      </div>
+      <div class="expense-line-list">
+        ${
+          items.length > 0
+            ? items.map(renderLine).join("")
+            : `<p class="muted">暂无支出</p>`
+        }
+      </div>
+    </section>
+  `;
+}
+
+function renderWageExpenseLine(item) {
+  return `
+    <div class="expense-line">
+      <span>${item.name}</span>
+      <small>${item.rank}级 · ${item.status}</small>
+      <strong>${item.cost} 金</strong>
+    </div>
+  `;
+}
+
+function renderSupplyExpenseLine(item) {
+  return `
+    <div class="expense-line">
+      <span>${item.name}</span>
+      <small>${item.rank}级 · 生活补给</small>
+      <strong>${item.cost} 金</strong>
+    </div>
+  `;
+}
+
+function renderEquipmentExpenseLine(item) {
+  return `
+    <div class="expense-line">
+      <span>${item.characterName} · ${item.itemName}</span>
+      <small>${item.slotLabel} · ${item.rarity}级 · ${item.type}</small>
+      <strong>${item.cost} 金</strong>
+    </div>
+  `;
+}
+
+function renderFacilityExpenseLine(item) {
+  return `
+    <div class="expense-line">
+      <span>${item.name}</span>
+      <small>${item.rank ? `${item.rank}级 · Lv.${item.level}` : "固定开销"}</small>
+      <strong>${item.cost} 金</strong>
+    </div>
+  `;
+}
+
+function renderWealth() {
+  const state = getState();
+  const progress = getWealthProgress(state);
+  const badge = document.querySelector("#wealth-progress-badge");
+  const list = document.querySelector("#wealth-list");
+  if (!badge || !list) return;
+
+  badge.textContent = `${progress.owned}/${progress.total} · 已花 ${progress.spent} 金`;
+  list.innerHTML = getWealthCollections()
+    .map(
+      (room) => `
+        <section class="wealth-room">
+          <div class="card-header">
+            <div>
+              <h3>${room.name}</h3>
+              <p class="muted">${room.description}</p>
+            </div>
+            <span class="badge">${room.items.filter((item) => item.owned).length}/${room.items.length}</span>
+          </div>
+          <div class="wealth-item-grid">
+            ${room.items.map((item) => renderWealthItem(item, state)).join("")}
+          </div>
+        </section>
+      `
+    )
+    .join("");
+
+  list.querySelectorAll("[data-buy-wealth-item]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const state = getState();
+      const item = getWealthCollections().flatMap((room) => room.items).find((entry) => entry.id === button.dataset.buyWealthItem);
+      if (item && state.gold < item.cost) {
+        showInsufficientFunds(state.gold, item.cost);
+        return;
+      }
+      buyWealthItem(button.dataset.buyWealthItem);
+    });
+  });
+}
+
+function renderWealthItem(item, state) {
+  const disabled = item.owned || state.gameStatus !== "active" ? "disabled" : "";
+  return `
+    <article class="wealth-item ${item.owned ? "owned" : ""}">
+      <div>
+        <strong>${item.name}</strong>
+        <p class="muted">${item.description}</p>
+      </div>
+      <button class="${item.owned ? "ghost-button" : "primary-button"}" data-buy-wealth-item="${item.id}" ${disabled} type="button">
+        ${item.owned ? "已收藏" : `${item.cost} 金`}
+      </button>
+    </article>
+  `;
 }
 
 function renderOverview() {
@@ -243,7 +516,7 @@ function renderBuildings() {
       const cost = getFacilityUpgradeCost(id, level);
       const requirement = getFacilityRequirement(Math.min(level + 1, 7));
       const canUpgrade = level < 7 && canUpgradeFacility(id);
-      const disabled = state.gold < cost || state.gameStatus !== "active" || !canUpgrade ? "disabled" : "";
+      const disabled = state.gameStatus !== "active" || !canUpgrade ? "disabled" : "";
       return `
         <article class="card facility-card ${isUnlocked ? "" : "locked"}" data-open-facility="${id}">
           <div class="card-header">
@@ -273,18 +546,21 @@ function renderBuildings() {
   container.querySelectorAll("[data-upgrade]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (!ensureButtonCostAvailable(button)) return;
       upgradeBuilding(button.dataset.upgrade);
     });
   });
   container.querySelectorAll("[data-buy-black-market-item]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (!ensureButtonCostAvailable(button)) return;
       buyBlackMarketItem(button.dataset.buyBlackMarketItem);
     });
   });
   container.querySelectorAll("[data-hospital-treat]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (!ensureButtonCostAvailable(button)) return;
       hospitalTreatMercenaries();
     });
   });
@@ -305,14 +581,14 @@ function renderFacilityAction(id, level, cost, disabled) {
     return actions
       .map(([kind, label]) => {
         const itemCost = getBlackMarketItemCost(kind, rank);
-        const isDisabled = state.gameStatus !== "active" || state.gold < itemCost ? "disabled" : "";
+        const isDisabled = state.gameStatus !== "active" ? "disabled" : "";
         return `<button class="${kind === "mecha" ? "primary-button" : "ghost-button"}" data-buy-black-market-item="${kind}" ${isDisabled}>${label} · ${rank}级 ${itemCost} 金</button>`;
       })
       .join("");
     return `${actions}${upgradeButton}`;
   }
   if (id === "hospital") {
-    return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" || state.gold < 32 ? "disabled" : ""}>治疗佣兵 32 金</button>${upgradeButton}`;
+    return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" ? "disabled" : ""}>治疗佣兵 32 金</button>${upgradeButton}`;
   }
   return upgradeButton;
 }
@@ -370,7 +646,7 @@ function openFacilityDialog(id) {
       <section class="dossier-section wide">
         <h3>可用操作</h3>
         <div class="button-row">
-          ${renderFacilityAction(id, level, nextCost, state.gold < nextCost || state.gameStatus !== "active" || !canUpgrade)}
+          ${renderFacilityAction(id, level, nextCost, state.gameStatus !== "active" || !canUpgrade)}
         </div>
       </section>
     </div>
@@ -381,33 +657,39 @@ function openFacilityDialog(id) {
   dialog.querySelector("[data-close-facility]").addEventListener("click", () => dialog.close());
   dialog.querySelectorAll("[data-upgrade]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!ensureButtonCostAvailable(button)) return;
       upgradeBuilding(button.dataset.upgrade);
       dialog.close();
     });
   });
   dialog.querySelectorAll("[data-buy-black-market-item]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!ensureButtonCostAvailable(button)) return;
       buyBlackMarketItem(button.dataset.buyBlackMarketItem);
       dialog.close();
     });
   });
   dialog.querySelectorAll("[data-hospital-treat]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!ensureButtonCostAvailable(button)) return;
       hospitalTreatMercenaries();
       dialog.close();
     });
   });
 }
 
-function renderLog() {
-  document.querySelector("#event-log").innerHTML = getState()
-    .log.slice(-18)
-    .reverse()
-    .map((entry) => {
-      const tone = entry.includes("成功") ? "good" : entry.includes("失败") || entry.includes("受伤") ? "bad" : "";
-      return `<div class="log-entry ${tone}">${entry}</div>`;
-    })
-    .join("");
+function ensureButtonCostAvailable(button) {
+  const cost = getCostFromText(button.textContent);
+  if (!cost) return true;
+  const state = getState();
+  if (state.gold >= cost) return true;
+  showInsufficientFunds(state.gold, cost);
+  return false;
+}
+
+function getCostFromText(text = "") {
+  const match = text.match(/(\d+)\s*金/);
+  return match ? Number(match[1]) : 0;
 }
 
 init();

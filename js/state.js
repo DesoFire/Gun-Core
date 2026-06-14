@@ -1,6 +1,6 @@
 import {
   buildings,
-  callsigns,
+  careerCategories,
   characterClasses,
   contractBriefFragments,
   contractHiddenTwists,
@@ -11,16 +11,27 @@ import {
   contractTypes,
   creeds,
   equipmentSlots,
+  epithetAdjectives,
+  epithetContainers,
+  epithetForces,
+  epithetNumbers,
+  epithetObjects,
+  epithetPlaces,
+  epithetRoles,
+  epithetTemplates,
+  epithetVerbs,
   fears,
   genders,
   lastWords,
   mercenaryRanks,
   missionTemplates,
   names,
+  nameProfiles,
   otherContractIssuers,
   origins,
   personalities,
   sampleItems,
+  wealthCollections,
 } from "../data/sampleData.js";
 import { estimateBaseCombatPower } from "../modules/combatPower.js";
 import { createId, randomItem, randomNumber } from "./utils.js";
@@ -88,16 +99,17 @@ export function createInitialState() {
   return {
     gameStatus: "active",
     objective: {
-      title: "21天打响名号",
+      title: "收藏室完工",
       targetReputation: 60,
-      deadline: 21,
+      deadline: 60,
     },
     day: 1,
     gold: 180,
     supplies: 24,
+    enhancementPoints: 0,
     reputation: 0,
     stealth: 78,
-    roster: [createInitialMercenary("vanguard"), createInitialMercenary("scout")],
+    roster: [createInitialMercenary("assault"), createInitialMercenary("scout")],
     recruitPool: [createInitialMercenary(), createInitialMercenary(), createInitialMercenary()],
     missions: Array.from({ length: 4 }, () => createInitialMission()),
     timeline: [
@@ -107,8 +119,9 @@ export function createInitialState() {
     mechs: [],
     inventory: sampleItems.map((item) => ({ ...item })),
     inventorySeeded: true,
+    wealth: { owned: {} },
     factions: [],
-    log: ["事务所挂牌营业。目标：在第 21 天结束前把声望提升到 60，同时别让隐秘值归零。"],
+    log: ["事务所挂牌营业。目标：把战争财搬进私人收藏室，同时别让隐秘值归零。"],
   };
 }
 
@@ -138,13 +151,14 @@ function getStorage() {
 
 function normalizeState(savedState) {
   savedState.gameStatus ??= "active";
-  savedState.objective ??= { title: "21天打响名号", targetReputation: 60, deadline: 21 };
-  savedState.objective.title ??= "21天打响名号";
+  savedState.objective ??= { title: "收藏室完工", targetReputation: 60, deadline: 60 };
+  savedState.objective.title ??= "收藏室完工";
   savedState.objective.targetReputation ??= 60;
-  savedState.objective.deadline ??= 21;
+  savedState.objective.deadline ??= 60;
   savedState.day ??= 1;
   savedState.gold ??= 160;
   savedState.supplies ??= 28;
+  savedState.enhancementPoints ??= 0;
   savedState.reputation ??= 0;
   savedState.stealth ??= 78;
   savedState.buildings ??= { tavern: 1, infirmary: 0, intel: 0 };
@@ -154,6 +168,9 @@ function normalizeState(savedState) {
   savedState.timeline ??= [];
   savedState.mechs ??= [];
   savedState.inventory ??= sampleItems.map((item) => ({ ...item }));
+  savedState.wealth ??= { owned: {} };
+  savedState.wealth.owned ??= {};
+  normalizeWealthState(savedState);
   if (!savedState.inventorySeeded) {
     const existingIds = new Set(savedState.inventory.map((item) => item.id));
     sampleItems.forEach((item) => {
@@ -171,6 +188,8 @@ function normalizeState(savedState) {
   const usedAvatarKeys = new Set();
   savedState.roster = savedState.roster.map((character) => normalizeCharacterState(character, usedAvatarKeys));
   savedState.recruitPool = savedState.recruitPool.map((character) => normalizeCharacterState(character, usedAvatarKeys));
+  savedState.enhancementPoints += collectLegacyEnhancementPoints(savedState.roster);
+  savedState.enhancementPoints += collectLegacyEnhancementPoints(savedState.recruitPool);
   savedState.reputation = calculateRosterReputation(savedState.roster);
   savedState.missions = savedState.missions.map(normalizeMissionState);
   savedState.timeline = savedState.timeline.map(normalizeTimelineEntry);
@@ -179,13 +198,19 @@ function normalizeState(savedState) {
 }
 
 function createInitialMercenary(classId = randomItem(Object.keys(characterClasses)), isPlayer = false, customName = "") {
-  const baseClass = characterClasses[classId];
+  const resolvedClassId = characterClasses[classId] ? classId : randomItem(Object.keys(characterClasses));
+  const baseClass = characterClasses[resolvedClassId];
+  const category = careerCategories[baseClass.category];
   const maxHp = baseClass.maxHp + randomNumber(-2, 3);
+  const initialStressBonus = baseClass.effects?.initialStressBonus ?? 0;
   const mercenary = {
     id: createId(),
-    name: customName || `${randomItem(names)} · ${randomItem(callsigns)}`,
-    classId,
+    name: customName || createRandomName(),
+    callsign: createCallsign(),
+    classId: resolvedClassId,
     className: baseClass.name,
+    careerCategory: baseClass.category,
+    careerCategoryName: category?.name ?? "未分类",
     level: 0,
     xp: 0,
     hp: maxHp,
@@ -197,12 +222,12 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
     contractRecord: { completed: 0, failed: 0, survived: 0 },
     bounty: randomNumber(0, 24) * 10,
     debt: randomNumber(0, 18) * 5,
-    stress: randomNumber(0, 8),
+    stress: randomNumber(0, 8) + initialStressBonus,
     wound: 0,
     isPlayer,
-    tags: [...baseClass.tags],
+    tags: [...new Set([...(category?.tags ?? []), ...baseClass.tags])],
     equipment: createEmptyEquipment(),
-    combatPower: baseClass.baseCombatPower + randomNumber(-3, 4),
+    combatPower: baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0) + randomNumber(-3, 4),
     status: "待命",
   };
   mercenary.avatar = createUniqueAvatar(mercenary);
@@ -251,8 +276,14 @@ function createInitialMission() {
 
 function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   character.notoriety ??= character.isPlayer ? 3 : 1;
-  character.enhancementPoints ??= 0;
+  splitLegacyName(character);
+  character.name = (character.name || createRandomName()).trim().slice(0, 32);
+  character.callsign ??= createCallsign();
+  character.callsign = character.callsign.trim().slice(0, 24);
   character.conditions ??= [];
+  character.conditions = character.conditions.map(normalizeConditionState);
+  character.positiveConditions ??= [];
+  character.positiveConditions = character.positiveConditions.map(normalizePositiveConditionState);
   character.rank = normalizeRank(character);
   character.level = Math.max(0, mercenaryRanks.indexOf(character.rank));
   character.xp ??= 0;
@@ -266,14 +297,28 @@ function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   character.stress ??= 0;
   character.status ??= "待命";
   character.tags ??= [];
+  if (!characterClasses[character.classId]) character.classId = "assault";
+  const baseClass = characterClasses[character.classId];
+  const category = careerCategories[baseClass.category];
+  character.className = baseClass.name;
+  character.careerCategory = baseClass.category;
+  character.careerCategoryName = category?.name ?? "未分类";
   character.combatPower ??= estimateBaseCombatPower(character);
-  character.maxHp ??= character.classId && characterClasses[character.classId] ? characterClasses[character.classId].maxHp : 24;
+  character.maxHp ??= baseClass.maxHp ?? 24;
   character.hp ??= Math.max(1, character.maxHp - character.wound * 4);
   if (character.hp <= 0) character.status = "阵亡";
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
   character.equipment = normalizeEquipmentSlots(character.equipment);
   character.avatar = normalizeAvatar(character, usedAvatarKeys);
   return character;
+}
+
+function collectLegacyEnhancementPoints(characters = []) {
+  return characters.reduce((sum, character) => {
+    const points = character.enhancementPoints ?? 0;
+    delete character.enhancementPoints;
+    return sum + points;
+  }, 0);
 }
 
 function normalizeMissionState(mission) {
@@ -290,6 +335,7 @@ function normalizeMissionState(mission) {
   mission.requirements ??= createInitialContractRequirements(mission.tags ?? []);
   mission.requirements.weaponTypes ??= [];
   mission.requirements.damageTypes ??= [];
+  mission.requirements.careerCategories ??= [];
   mission.requirements.tags ??= mission.tags?.slice(0, 2) ?? [];
   return mission;
 }
@@ -309,6 +355,33 @@ function normalizeItemState(item) {
   item.note ??= "";
   item.tags ??= [];
   return item;
+}
+
+function normalizeConditionState(condition) {
+  condition.category ??= "physical";
+  condition.severity ??= "light";
+  condition.tags ??= [];
+  condition.powerPenalty ??= 0;
+  condition.deathRiskModifier ??= 0;
+  condition.stress ??= 0;
+  condition.wound ??= 0;
+  return condition;
+}
+
+function normalizePositiveConditionState(condition) {
+  condition.severity ??= "light";
+  condition.tags ??= [];
+  condition.powerBonus ??= 0;
+  condition.deathRiskReduction ??= 0;
+  condition.stressRecoveryBonus ??= 0;
+  return condition;
+}
+
+function normalizeWealthState(savedState) {
+  const validIds = new Set(wealthCollections.flatMap((room) => room.items.map((item) => item.id)));
+  Object.keys(savedState.wealth.owned).forEach((itemId) => {
+    if (!validIds.has(itemId)) delete savedState.wealth.owned[itemId];
+  });
 }
 
 function createEmptyEquipment() {
@@ -385,6 +458,7 @@ function createInitialContractRequirements(tags = []) {
   return {
     weaponTypes: drawInitialRequirements(contractRequirementPool.weaponTypes, randomNumber(1, 2)),
     damageTypes: drawInitialRequirements(contractRequirementPool.damageTypes, randomNumber(1, 2)),
+    careerCategories: drawInitialRequirements(contractRequirementPool.careerCategories, randomNumber(1, 100) <= 35 ? 2 : 1),
     tags: tags.slice(0, 2),
   };
 }
@@ -402,6 +476,44 @@ function calculateRosterReputation(roster) {
   return roster
     .filter((character) => character.status !== "阵亡")
     .reduce((sum, character) => sum + Math.max(0, character.notoriety ?? 0), 0);
+}
+
+function createCallsign() {
+  return randomItem(epithetTemplates)
+    .replace("{place}", randomItem(epithetPlaces))
+    .replace("{verb}", randomItem(epithetVerbs))
+    .replace("{role}", randomItem(epithetRoles))
+    .replace("{object}", randomItem(epithetObjects))
+    .replace("{container}", randomItem(epithetContainers))
+    .replace("{force}", randomItem(epithetForces))
+    .replace("{adjective}", randomItem(epithetAdjectives))
+    .replace("{number}", randomItem(epithetNumbers));
+}
+
+function createRandomName() {
+  const profile = drawWeightedNameProfile();
+  const given = randomItem(profile.given);
+  if (profile.order === "single") return given;
+  const surname = randomItem(profile.surnames);
+  if (profile.order === "surname-first") return `${surname}${profile.joiner ?? ""}${given}`;
+  return `${given}${profile.joiner ?? " "}${surname}`;
+}
+
+function drawWeightedNameProfile() {
+  const total = nameProfiles.reduce((sum, profile) => sum + (profile.weight ?? 1), 0);
+  let roll = randomNumber(1, total);
+  for (const profile of nameProfiles) {
+    roll -= profile.weight ?? 1;
+    if (roll <= 0) return profile;
+  }
+  return nameProfiles[0];
+}
+
+function splitLegacyName(character) {
+  if (character.callsign || typeof character.name !== "string" || !character.name.includes(" · ")) return;
+  const [name, ...callsignParts] = character.name.split(" · ");
+  character.name = name.trim();
+  character.callsign = callsignParts.join(" · ").trim() || createCallsign();
 }
 
 function normalizeAvatar(character, usedKeys) {
