@@ -4,8 +4,7 @@ import { clamp } from "../js/utils.js";
 export function estimateBaseCombatPower(character) {
   const basePower = character.combatPower ?? 20;
   const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
-  const traitPower = (character.traits?.length ?? 0) * 2;
-  return Math.max(10, Math.round(basePower + rankIndex * 3 + traitPower));
+  return Math.max(10, Math.round(basePower + rankIndex * 3));
 }
 
 export function calculateEquipmentCombatPower(character) {
@@ -34,13 +33,21 @@ export function calculateTeamCombatPower(roster, memberIds) {
 }
 
 export function getItemCombatPower(item) {
-  if (item.itemCategory === "weapon" || item.slot === "weapon") return clamp(item.power ?? 0, 0, 160);
+  if (item.itemCategory === "weapon" || item.slot === "weapon") return clamp(item.power ?? 0, 0, 400);
   return 0;
 }
 
 export function getPromotionCombatPowerGain(nextRank) {
-  const rankIndex = Math.max(0, mercenaryRanks.indexOf(nextRank));
-  return 3 + Math.ceil(rankIndex / 2);
+  const gains = {
+    F: 2,
+    E: 4,
+    D: 8,
+    C: 16,
+    B: 32,
+    A: 64,
+    S: 128,
+  };
+  return gains[nextRank] ?? 0;
 }
 
 function rarityBonus(rarity) {

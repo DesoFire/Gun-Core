@@ -38,7 +38,7 @@ function openWeaponDetail(id) {
         <h2 class="dossier-title">${weapon.name}</h2>
         <p class="muted">${renderWeaponSummaryLine(weapon)}</p>
       </div>
-      <button class="ghost-button" data-close-weapon type="button">关闭</button>
+      <button class="ghost-button dialog-close-button" data-close-weapon aria-label="关闭" title="关闭" type="button">关闭</button>
     </div>
     <div class="dossier-grid">
       <section class="dossier-section">

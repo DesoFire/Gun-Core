@@ -6,8 +6,8 @@
 // 设计口径：
 // - 金钱：基地现金，也是所有支出、收益、私人财富消费的统一货币。
 // - 补给：抽象的日常消耗物资。当前主要作为压力惩罚触发器，不直接等同于金钱。
-// - 隐秘值：经营失败的安全阀。资金链断裂会损伤隐秘值，隐秘值归零则失败。
-// - 声望：由被雇佣佣兵的知名度汇总而来，会推高契约难度，也会推高佣兵工资。
+// - 隐秘值：身份暴露压力。主要由每月隐秘费、未支付声望和少量特殊事件影响，隐秘值归零则失败。
+// - 声望：分为基地声望与佣兵个人声望。基地声望决定契约级别；个人声望用于隐秘费与角色履历。
 
 export const economyConfig = {
   initialState: {
@@ -104,20 +104,22 @@ export const economyConfig = {
       roughRiskMax: 92,
     },
     execution: {
-      // 每天消耗补给：ceil(rosterSize / divisor)。
-      dailySupplyDivisor: 3,
       // 补给为 0 时，每名未阵亡佣兵每天增加的压力。
       noSupplyStress: 2,
-      // 外勤归来补发工资不足时的隐秘值损失：ceil(shortage / wageShortageDivisor) + wageShortageBaseLoss。
-      wageShortageDivisor: 5,
-      wageShortageBaseLoss: 3,
-      wageShortageMinLoss: 3,
-      wageShortageMaxLoss: 18,
       // 欠薪会让返队佣兵额外增加压力。
       wageShortageStress: 2,
     },
     hiddenTwists: {
       // 隐藏事件带来的额外金钱/隐秘值变化。调查足够多时使用 mitigated 数值。
+      // weights 控制各类突发事件出现权重。会降低隐秘的事件权重较低，让隐秘值主要由月费和未支付声望驱动。
+      weights: {
+        "情报错误：目标规模比公开简报更大。": 1,
+        "第三方介入：另一支小队试图截胡。": 0.3,
+        "伏击：撤离路线被提前布置火力点。": 1,
+        "客户欺骗：发布方隐瞒了真实目标。": 0.3,
+        "隐藏奖励：目标现场存在额外可回收物资。": 1,
+        "目标背叛：被营救或护送对象临时变更立场。": 1,
+      },
       thirdPartyGoldLoss: 16,
       thirdPartyGoldLossMitigated: 6,
       thirdPartyStealthLoss: 4,
@@ -126,6 +128,20 @@ export const economyConfig = {
       clientFraudStealthLossMitigated: 2,
       hiddenBonusGold: 14,
       hiddenBonusGoldMitigated: 24,
+      // 契约执行随机事件基础触发率。一次契约可能触发多次，每次独立判定。
+      randomEventChance: 55,
+      // 根据契约难度决定最多触发几次随机事件：1-2 级最多 1 次，3-5 级最多 2 次，6-S 级最多 3 次。
+      randomEventRollsByDifficulty: [
+        { maxDifficulty: 2, rolls: 1 },
+        { maxDifficulty: 5, rolls: 2 },
+        { maxDifficulty: 8, rolls: 3 },
+      ],
+      // 高等级契约会略微提高每次事件判定概率。
+      randomEventChancePerDifficulty: 3,
+      // 情报室每级降低契约负面随机事件权重。F 级开始生效。
+      negativeEventWeightReductionPerIntelLevel: 0.12,
+      // 负面事件权重最低保留比例，避免高等级情报室完全消除事故。
+      negativeEventMinWeightMultiplier: 0.25,
     },
   },
 
@@ -135,16 +151,23 @@ export const economyConfig = {
     wages: {
       // 佣兵基础日薪按评级走从 1, 2 开始的斐波那契：无=1，F=2，E=3，D=5，C=8，B=13，A=21，S=34。
       rankDailyWage: [1, 2, 3, 5, 8, 13, 21, 34],
-      // 佣兵日薪：base + rankIndex * perRank + notoriety * perNotoriety + playerBonus。
+      // 佣兵日薪：当前只由评级决定；个人声望不额外提高日薪。
       base: 3,
       perRank: 2,
-      perNotoriety: 0,
+      perPersonalReputation: 0,
       playerBonus: 0,
     },
     livingSupplies: {
-      // 每名未阵亡佣兵的生活补给费：base + ceil(rankIndex / rankDivisor)。
-      base: 2,
-      rankDivisor: 2,
+      // 每名未阵亡佣兵每日消耗补给份数。按评级走从 1, 2 开始的斐波那契：
+      // 无=1，F=2，E=3，D=5，C=8，B=13，A=21，S=34。
+      rankDailySupply: [1, 2, 3, 5, 8, 13, 21, 34],
+      // 支出界面购买补给库存的批发价格。
+      purchaseTiers: [
+        { quantity: 1, cost: 1 },
+        { quantity: 20, cost: 19 },
+        { quantity: 50, cost: 45 },
+        { quantity: 100, cost: 85 },
+      ],
     },
     equipmentMaintenance: {
       // 武器/防具养护费：base + rankIndex * perRank。
@@ -153,12 +176,7 @@ export const economyConfig = {
       perRank: 2,
     },
     shortage: {
-      // 每日支出无法付清时，资金清零，并损失隐秘值：ceil(shortage / divisor) + baseLoss。
-      divisor: 4,
-      baseLoss: 5,
-      minLoss: 5,
-      maxLoss: 22,
-      // 维护费缺口会让所有未阵亡佣兵增加压力。
+      // 每日支出无法付清时，资金清零。维护费缺口只会让所有未阵亡佣兵增加压力，不影响隐秘值。
       stress: 1,
     },
   },
@@ -201,17 +219,17 @@ export const economyConfig = {
     intelInvestigationDiscountPerLevel: 0.08,
     // 医疗中心按负面状态数量收费。轻/中/重状态分别使用不同基础费用。
     hospitalConditionCost: {
-      light: 14,
-      medium: 32,
-      heavy: 72,
+      light: 8,
+      medium: 18,
+      heavy: 42,
     },
     // 医疗中心每级治疗成功率；等级越高越稳定。
-    hospitalSuccessChanceByLevel: [65, 72, 78, 84, 89, 94, 98],
-    // 医疗中心能治疗的负面状态严重度。F-E 只能治轻度，D-C 可治中度，B-S 可尝试重度。
-    hospitalSeverityByLevel: ["light", "light", "medium", "medium", "heavy", "heavy", "heavy"],
+    hospitalSuccessChanceByLevel: [80, 86, 90, 93, 96, 98, 100],
+    // 医疗中心能治疗的负面状态严重度。F 级能处理轻度，E-D 处理中度，C-S 可尝试重度。
+    hospitalSeverityByLevel: ["light", "medium", "medium", "heavy", "heavy", "heavy", "heavy"],
     // 医疗中心治疗成功后附带恢复的伤势/压力。
-    hospitalWoundRecoveryOnSuccess: 1,
-    hospitalStressRecoveryOnSuccess: 10,
+    hospitalWoundRecoveryOnSuccess: 2,
+    hospitalStressRecoveryOnSuccess: 16,
     // 防御设施在基地遇袭时提供固定基地战斗力。
     defensePowerPerLevel: 18,
   },
@@ -236,25 +254,9 @@ export const economyConfig = {
     supplyQuantityLowRank: [2, 4],
     supplyQuantityHighRank: [4, 8],
     // 黑市武器战斗力：参考同级佣兵战力，再乘 0.5-1.5。
-    weaponPowerReferenceByRank: { F: 22, E: 28, D: 36, C: 46, B: 60, A: 78, S: 100 },
-    weaponPowerMultiplierMin: 0.5,
-    weaponPowerMultiplierMax: 1.5,
-  },
-
-  restAttack: {
-    // 隐秘值越低，休整期遇袭概率越高：baseChance + max(0, triggerStealth - stealth) * pressureMultiplier。
-    baseChance: 4,
-    triggerStealth: 72,
-    pressureMultiplier: 0.75,
-    minChance: 4,
-    maxChance: 58,
-    // 遇袭时损失金钱与隐秘值。
-    goldLossMin: 12,
-    goldLossMax: 32,
-    stealthLossMin: 3,
-    stealthLossMax: 8,
-    woundStressMin: 4,
-    woundStressMax: 8,
+    weaponPowerReferenceByRank: { F: 24, E: 28, D: 36, C: 52, B: 84, A: 148, S: 276 },
+    weaponPowerMultiplierMin: 0.3,
+    weaponPowerMultiplierMax: 1.2,
   },
 
   baseRaid: {
@@ -267,5 +269,8 @@ export const economyConfig = {
     // 基地防守失败时，损失金币约等于同级契约报酬。
     facilityDamageChance: 35,
     facilityDowngradeAmount: 1,
+    // 基地防守失败时，小幅降低隐秘值。主要隐秘压力仍来自月费和未支付声望。
+    failureStealthLossMin: 1,
+    failureStealthLossMax: 3,
   },
 };

@@ -9,7 +9,9 @@ import {
 import {
   approveSecrecyExpenses,
   buyBlackMarketItem,
+  buySupplies,
   calculateDailyExpenseBreakdown,
+  calculateDailySupplyConsumption,
   calculateHospitalTreatmentPlan,
   calculateSecrecyExpenseItems,
   calculateUnpaidSecrecyReputation,
@@ -17,6 +19,7 @@ import {
   getBlackMarketItemCost,
   getFacilityRankLabel,
   getFacilityUpgradeCost,
+  getSupplyPurchaseCost,
   hospitalTreatMercenaries,
   isSecrecyBillingDay,
   upgradeBuilding,
@@ -130,8 +133,10 @@ function simulateRun(strategy, runIndex) {
   for (let day = 1; day <= MAX_DAYS; day += 1) {
     const before = snapshot();
     payMonthlySecrecyIfDue();
-    maybeUseFacilities(strategy, metrics);
     maybeDismissLiabilities(strategy, metrics);
+    maybeDismissForSecrecy(strategy, metrics);
+    maybeUseFacilities(strategy, metrics);
+    maybeStockpileSupplies(strategy);
     maybeHire(strategy, metrics);
     runDispatchPolicy(strategy, metrics);
 
@@ -215,7 +220,7 @@ function maybeUpgradeFacilities(strategy, metrics) {
     { id: "defenses", when: state.stealth < 85 || calculateUnpaidSecrecyReputation(state) > 0 },
     { id: "intel", when: strategy.maxInvestigations > 0 },
     { id: "barracks", when: atCap || strategy.hireBelow > getMercenaryLimit(state) },
-    { id: "tavern", when: state.recruitPool.length < 3 && living < strategy.hireBelow },
+    { id: "tavern", when: living < strategy.hireBelow + 1 || needBetterRecruitPool(state) },
   ];
 
   for (const entry of priorities) {
@@ -237,9 +242,9 @@ function getFacilityTargetLevel(id, strategy) {
   if (id === "barracks") return strategy.hireBelow > 4 ? 1 : 0;
   if (id === "hospital") return 1;
   if (id === "blackMarket") return 1;
-  if (id === "defenses") return 2;
+  if (id === "defenses") return 5;
   if (id === "intel") return strategy.maxInvestigations > 1 ? 2 : 1;
-  if (id === "tavern") return 1;
+  if (id === "tavern") return strategy.hireBelow >= 4 ? 3 : 2;
   return 1;
 }
 
@@ -269,6 +274,17 @@ function maybeBuyBlackMarketGear(strategy, metrics) {
     metrics.marketPurchases += 1;
     autoEquipIdleMercenaries();
   }
+}
+
+function maybeStockpileSupplies(strategy) {
+  const state = getState();
+  const dailyUse = calculateDailySupplyConsumption(state);
+  const target = Math.max(14, dailyUse * 14);
+  if ((state.supplies ?? 0) >= target) return;
+  const quantity = chooseSupplyPurchaseQuantity(target - (state.supplies ?? 0));
+  const cost = getSupplyPurchaseCost(quantity);
+  if (state.gold - cost < strategy.reserveGold + 40) return;
+  buySupplies(quantity);
 }
 
 function autoEquipTeamForMission(team, mission) {
@@ -334,6 +350,19 @@ function needMoreArmor(state) {
 
 function totalMedicalBurden(state) {
   return state.roster.reduce((sum, character) => sum + (character.wound ?? 0) * 10 + Math.floor((character.stress ?? 0) / 4), 0);
+}
+
+function needBetterRecruitPool(state) {
+  const bestRecruitPower = max(state.recruitPool.map((candidate) => calculateEffectiveCharacterCombatPower(candidate)));
+  const alivePowers = state.roster.filter((character) => !isDead(character)).map((character) => calculateEffectiveCharacterCombatPower(character));
+  return bestRecruitPower < Math.max(30, avg(alivePowers));
+}
+
+function chooseSupplyPurchaseQuantity(needed) {
+  if (needed >= 100) return 100;
+  if (needed >= 50) return 50;
+  if (needed >= 20) return 20;
+  return 1;
 }
 
 function investigateForPolicy(strategy, mission, metrics) {
@@ -413,6 +442,28 @@ function maybeDismissLiabilities(strategy, metrics) {
   if (getState().roster.length < before) metrics.dismissed = (metrics.dismissed ?? 0) + 1;
 }
 
+function maybeDismissForSecrecy(strategy, metrics) {
+  const state = getState();
+  const daysToBilling = daysUntilSecrecyBilling(state.day);
+  if (daysToBilling > 3) return;
+  const idle = state.roster.filter((character) => isIdle(character) && !isDead(character) && !character.isPlayer);
+  if (idle.length <= 2) return;
+  const candidates = idle
+    .map((character) => {
+      const personalReputation = character.personalReputation ?? 0;
+      const power = calculateEffectiveCharacterCombatPower(character);
+      const burden = personalReputation * 2 + (character.wound ?? 0) * 8 + (character.conditions?.length ?? 0) * 6 - power;
+      return { character, personalReputation, power, burden };
+    })
+    .filter((entry) => entry.personalReputation >= 12 && (entry.power < 35 || entry.burden >= 20))
+    .sort((a, b) => b.burden - a.burden);
+  const target = candidates[0];
+  if (!target) return;
+  const before = getState().roster.length;
+  dismissMercenary(target.character.id);
+  if (getState().roster.length < before) metrics.dismissed = (metrics.dismissed ?? 0) + 1;
+}
+
 function payMonthlySecrecyIfDue() {
   const state = getState();
   if (!isSecrecyBillingDay(state.day)) return;
@@ -425,6 +476,14 @@ function payMonthlySecrecyIfDue() {
     paidIds.push(item.id);
   }
   approveSecrecyExpenses(paidIds);
+}
+
+function daysUntilSecrecyBilling(day) {
+  const first = 31;
+  const cycle = 30;
+  if (day <= first) return first - day;
+  const mod = (day - first) % cycle;
+  return mod === 0 ? 0 : cycle - mod;
 }
 
 function collectDelta(metrics, before) {

@@ -38,7 +38,7 @@ function openArmorDetail(id) {
         <h2 class="dossier-title">${armor.name}</h2>
         <p class="muted">${renderArmorSummaryLine(armor)}</p>
       </div>
-      <button class="ghost-button" data-close-armor type="button">关闭</button>
+      <button class="ghost-button dialog-close-button" data-close-armor aria-label="关闭" title="关闭" type="button">关闭</button>
     </div>
     <div class="dossier-grid">
       <section class="dossier-section">

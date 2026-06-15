@@ -22,7 +22,7 @@ import { getWeaponTagNames } from "../modules/weaponGenerator.js";
 import { getState } from "../js/state.js";
 import { identityFee } from "../modules/faction.js";
 import { economyConfig } from "../data/economyConfig.js";
-import { showInsufficientFunds, showToast } from "../js/notifications.js";
+import { confirmResourceSpend, showInsufficientFunds, showSpendFailure, showSpendSuccess, showToast } from "../js/notifications.js";
 import { renderMercenaryAvatar } from "./mercenaryAvatarUI.js";
 import { careerCategories } from "../data/sampleData.js";
 
@@ -69,12 +69,14 @@ function renderRoster() {
   });
 }
 
-function renderCharacterCard(character) {
+export function renderCharacterCard(character, options = {}) {
+  const isDispatch = options.mode === "dispatch";
+  const selected = Boolean(options.selected);
   const rankLabel = formatRank(character.rank);
   const combatPower = calculateCharacterCombatPower(character);
   const weaponPower = character.equipment?.weapon?.power ?? 0;
   return `
-    <article class="card character-card" data-open-character="${character.id}">
+    <article class="card character-card ${isDispatch ? "dispatch-character-card" : ""} ${selected ? "selected" : ""}" data-open-character="${character.id}">
       <div class="card-header">
         <div class="identity-line">
           ${renderMercenaryAvatar(character)}
@@ -83,7 +85,11 @@ function renderCharacterCard(character) {
             <p class="muted">${character.isPlayer ? "玩家角色 · " : ""}${character.careerCategoryName ?? "未分类"} / ${character.className} · ${rankLabel}</p>
           </div>
         </div>
-        <span class="badge">${character.status}</span>
+        ${
+          isDispatch
+            ? `<button class="${selected ? "ghost-button" : "primary-button"} dispatch-join-button" data-toggle-dispatch-member="${character.id}" type="button">${selected ? "移出" : "加入"}</button>`
+            : `<span class="badge">${character.status}</span>`
+        }
       </div>
       ${renderCharacterTagRow(character)}
       <div class="character-kpi-grid">
@@ -93,11 +99,18 @@ function renderCharacterCard(character) {
         <div class="character-kpi"><span>身份费</span><strong>${identityFee(character)}/天</strong></div>
       </div>
       <div class="character-meta-row">
-        <span>知名度 ${character.notoriety}</span>
+        <span>个人声望 ${character.personalReputation ?? 0}</span>
         <span>正面 ${getPositiveStatusCount(character)}</span>
         <span>负面 ${character.conditions?.length ?? 0}</span>
       </div>
-      <button class="link-button" data-open-character-button="${character.id}" type="button">查看人物卡 / 更换装备</button>
+      ${
+        isDispatch
+          ? `<div class="button-row">
+              <button class="link-button" data-open-dispatch-character="${character.id}" type="button">查看人物卡</button>
+              <button class="link-button" data-equip-dispatch-character="${character.id}" type="button">更换装备</button>
+            </div>`
+          : `<button class="link-button" data-open-character-button="${character.id}" type="button">查看人物卡 / 更换装备</button>`
+      }
     </article>
   `;
 }
@@ -127,7 +140,7 @@ function renderRecruits() {
           </div>
           <div class="character-kpi-grid recruit-kpis">
             <div class="character-kpi primary"><span>战力</span><strong>${combatPower}</strong></div>
-            <div class="character-kpi"><span>知名度</span><strong>${character.notoriety}</strong></div>
+            <div class="character-kpi"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
             <div class="character-kpi"><span>日薪</span><strong>${identityFee(character)}/天</strong></div>
             <div class="character-kpi cost"><span>雇佣费</span><strong>${cost}</strong></div>
           </div>
@@ -151,22 +164,26 @@ function renderRecruits() {
         showInsufficientFunds(state.gold, cost);
         return;
       }
+      if (!confirmResourceSpend(`雇佣「${recruit.name}」`, cost)) return;
+      const beforeGold = getState().gold;
       hireRecruit(button.dataset.recruit);
+      const afterGold = getState().gold;
+      if (afterGold >= beforeGold) {
+        showSpendFailure("雇佣佣兵", "雇佣未完成。");
+        return;
+      }
+      showSpendSuccess("雇佣佣兵", beforeGold - afterGold, afterGold);
     });
   });
 }
 
-function renderCharacterTagRow(character) {
+export function renderCharacterTagRow(character) {
   const tags = [
     { label: character.careerCategoryName ?? "未分类", className: "badge" },
     { label: character.className, className: "badge" },
     ...(character.positiveConditions ?? []).slice(0, 3).map((condition) => ({
       label: condition.name,
       className: `badge positive-condition-badge positive-condition-${condition.severity ?? "light"}`,
-    })),
-    ...(character.traits ?? []).slice(0, 2).map((trait) => ({
-      label: trait.name,
-      className: "badge positive-condition-badge positive-condition-light",
     })),
     ...(character.conditions ?? []).slice(0, 4).map((condition) => ({
       label: condition.name,
@@ -187,7 +204,15 @@ function handleRefreshRecruits() {
     showInsufficientFunds(state.gold, cost);
     return;
   }
+  if (!confirmResourceSpend("刷新招募名单", cost)) return;
+  const beforeGold = state.gold;
   refreshRecruits();
+  const afterGold = getState().gold;
+  if (afterGold >= beforeGold) {
+    showSpendFailure("刷新招募名单", "刷新未完成。");
+    return;
+  }
+  showSpendSuccess("刷新招募名单", beforeGold - afterGold, afterGold);
 }
 
 function getRecruitRefreshCost() {
@@ -216,8 +241,8 @@ function renderCharacterSheet(id) {
           ${renderMercenaryAvatar(character, { size: "large" })}
           <div>
             <div class="dossier-code">SSS-GUILD DOSSIER / FIELD SHEET</div>
-            <button class="editable-title" data-edit-character-name="${character.id}" type="button">${character.name}</button>
-            <button class="editable-callsign" data-edit-character-callsign="${character.id}" type="button">外号：${character.callsign ?? "未登记"}</button>
+            <button class="editable-title" data-edit-character-name="${character.id}" title="点击重命名" type="button">${character.name}</button>
+            <button class="editable-callsign" data-edit-character-callsign="${character.id}" title="点击修改外号" type="button">外号：${character.callsign ?? "未登记"}</button>
             <div class="dossier-chip-row">
               ${renderCareerChip(character)}
               <span class="career-chip" title="具体职业决定初始战力、标签和职业加成。">${character.className}</span>
@@ -230,9 +255,9 @@ function renderCharacterSheet(id) {
         <div class="mini-stat"><span>战力</span><strong>${combatPower}</strong></div>
         <div class="mini-stat ${character.stress >= 60 ? "danger" : character.stress >= 30 ? "warning" : ""}"><span>压力</span><strong>${character.stress}</strong></div>
         <div class="mini-stat ${character.wound > 0 ? "danger" : ""}"><span>伤势</span><strong>${character.wound}</strong></div>
-        <div class="mini-stat"><span>知名度</span><strong>${character.notoriety ?? 0}</strong></div>
+        <div class="mini-stat"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
       </div>
-      <button class="ghost-button" data-close-dossier type="button">关闭</button>
+      <button class="ghost-button dialog-close-button" data-close-dossier aria-label="关闭" title="关闭" type="button">关闭</button>
     </div>
     <div class="subtabbar" aria-label="人物卡切换">
       <button class="subtab-button ${activeDossierTab === "attributes" ? "active" : ""}" data-dossier-tab="attributes" type="button">属性</button>
@@ -252,7 +277,20 @@ function renderCharacterSheet(id) {
     });
   });
   dossier.querySelectorAll("[data-spend-enhancement]").forEach((button) => {
-    button.addEventListener("click", () => spendEnhancementPoint(button.dataset.spendEnhancement));
+    button.addEventListener("click", () => {
+      if (!confirmResourceSpend("强化佣兵", 1, "强化点")) return;
+      const before = getState();
+      const targetBefore = getCharacter(button.dataset.spendEnhancement);
+      const beforePower = targetBefore?.combatPower ?? 0;
+      spendEnhancementPoint(button.dataset.spendEnhancement);
+      const after = getState();
+      const targetAfter = getCharacter(button.dataset.spendEnhancement);
+      if ((after.enhancementPoints ?? 0) >= (before.enhancementPoints ?? 0) || (targetAfter?.combatPower ?? 0) <= beforePower) {
+        showSpendFailure("强化佣兵", "强化点不足或目标不可用。");
+        return;
+      }
+      showToast(`强化佣兵成功，消耗 1 强化点，剩余 ${after.enhancementPoints ?? 0}。`, "good");
+    });
   });
   dossier.querySelectorAll("[data-edit-character-name]").forEach((button) => {
     button.addEventListener("click", () => editCharacterIdentity(button.dataset.editCharacterName, "name"));
@@ -263,12 +301,20 @@ function renderCharacterSheet(id) {
   dossier.querySelectorAll("[data-erase-reputation]").forEach((button) => {
     button.addEventListener("click", () => {
       const target = getCharacter(button.dataset.eraseReputation);
-      const cost = (target?.notoriety ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint;
+      const cost = (target?.personalReputation ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint;
       if (getState().gold < cost) {
         showInsufficientFunds(getState().gold, cost);
         return;
       }
+      if (!confirmResourceSpend(`抹去「${target?.name ?? "佣兵"}」的黑历史`, cost)) return;
+      const beforeGold = getState().gold;
       eraseMercenaryReputation(button.dataset.eraseReputation);
+      const afterGold = getState().gold;
+      if (afterGold >= beforeGold) {
+        showSpendFailure("抹去黑历史", "操作未完成。");
+        return;
+      }
+      showSpendSuccess("抹去黑历史", beforeGold - afterGold, afterGold);
       renderCharacterSheet(id);
     });
   });
@@ -312,11 +358,11 @@ function renderAttributesTab(character) {
       <section class="dossier-section wide">
         <h3>身份风险</h3>
         <div class="field-list">
-          <div class="field"><span>个人声望</span><strong>${character.notoriety ?? 0}</strong></div>
-          <div class="field"><span>月隐秘费</span><strong>${character.notoriety ?? 0} 金</strong></div>
-          <div class="field"><span>抹去黑历史</span><strong>${(character.notoriety ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint} 金</strong></div>
+          <div class="field"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
+          <div class="field"><span>月隐秘费</span><strong>${character.personalReputation ?? 0} 金</strong></div>
+          <div class="field"><span>抹去黑历史</span><strong>${(character.personalReputation ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint} 金</strong></div>
         </div>
-        <button class="ghost-button full-width-button" data-erase-reputation="${character.id}" ${(character.notoriety ?? 0) > 0 && state.gameStatus === "active" ? "" : "disabled"} type="button">一次性抹去该佣兵全部声望</button>
+        <button class="ghost-button full-width-button" data-erase-reputation="${character.id}" ${(character.personalReputation ?? 0) > 0 && state.gameStatus === "active" ? "" : "disabled"} type="button">一次性抹去该佣兵全部个人声望</button>
         <button class="ghost-button full-width-button" data-dismiss-mercenary="${character.id}" ${!character.isPlayer && character.status === "待命" && state.gameStatus === "active" ? "" : "disabled"} type="button">解雇该佣兵</button>
       </section>
       <section class="dossier-section wide">
@@ -342,8 +388,7 @@ function renderAttributesTab(character) {
 
 function renderPositiveStatusList(character) {
   const conditions = character.positiveConditions ?? [];
-  const traits = character.traits ?? [];
-  if (conditions.length === 0 && traits.length === 0) return `<p class="muted">还没有形成稳定的正面状态。</p>`;
+  if (conditions.length === 0) return `<p class="muted">还没有形成稳定的正面状态。</p>`;
   return `
     <div class="trait-list">
       ${conditions
@@ -355,19 +400,6 @@ function renderPositiveStatusList(character) {
                 <p class="muted">${condition.description}</p>
               </div>
               <span class="badge positive-condition-badge positive-condition-${condition.severity ?? "light"}">${formatSeverity(condition.severity)} / +${condition.powerBonus ?? 0} 战力</span>
-            </article>
-          `
-        )
-        .join("")}
-      ${traits
-        .map(
-          (trait) => `
-            <article class="trait-item positive-condition-item positive-condition-light">
-              <div>
-                <strong>${trait.name}</strong>
-                <p class="muted">${trait.description}</p>
-              </div>
-              <span class="badge positive-condition-badge positive-condition-light">${trait.source === "combat" ? "战斗" : "后勤"}</span>
             </article>
           `
         )
@@ -393,7 +425,7 @@ function renderRankBadge(rank) {
 }
 
 function getPositiveStatusCount(character) {
-  return (character.positiveConditions?.length ?? 0) + (character.traits?.length ?? 0);
+  return character.positiveConditions?.length ?? 0;
 }
 
 function renderConditionList(character) {

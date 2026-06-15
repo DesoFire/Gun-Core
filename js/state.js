@@ -97,6 +97,7 @@ export function createInitialState() {
     },
     day: 1,
     organizationName: "Gun Core",
+    introSeen: false,
     gold: economyConfig.initialState.gold,
     supplies: economyConfig.initialState.supplies,
     enhancementPoints: 0,
@@ -151,6 +152,7 @@ function normalizeState(savedState) {
   delete savedState.objective.deadline;
   savedState.day ??= 1;
   savedState.organizationName ??= "Gun Core";
+  savedState.introSeen ??= false;
   savedState.gold ??= economyConfig.initialState.gold;
   savedState.supplies ??= economyConfig.initialState.supplies;
   savedState.enhancementPoints ??= 0;
@@ -212,9 +214,8 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
     xp: 0,
     hp: maxHp,
     maxHp,
-    notoriety: isPlayer ? 3 : randomNumber(0, 2),
+    personalReputation: isPlayer ? 3 : randomNumber(0, 2),
     rank: "无",
-    traits: [],
     dossier: createDossier(),
     contractRecord: { completed: 0, failed: 0, survived: 0 },
     bounty: randomNumber(0, 24) * 10,
@@ -263,7 +264,7 @@ function createInitialMission() {
     description: `${randomItem(type.verbs)}目标。${randomItem(contractBriefFragments)}`,
     intel: createContractIntel(),
     revealedIntel: [],
-    hidden: { twist: randomItem(contractHiddenTwists) },
+    hidden: { twist: randomContractHiddenTwist() },
     tags: [...new Set(type.tags)],
     refreshCost: calculateInitialRefreshCost(difficulty),
     investigateCost: calculateInitialInvestigateCost({ rewardGold: reward.gold, difficulty }),
@@ -274,7 +275,9 @@ function createInitialMission() {
 }
 
 function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
-  character.notoriety ??= character.isPlayer ? 3 : 1;
+  if (character.personalReputation == null && character.notoriety != null) character.personalReputation = character.notoriety;
+  delete character.notoriety;
+  character.personalReputation ??= character.isPlayer ? 3 : 1;
   splitLegacyName(character);
   character.name = (character.name || createRandomName()).trim().slice(0, 32);
   character.callsign ??= createCallsign();
@@ -287,7 +290,7 @@ function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   character.rank = normalizeRank(character);
   character.level = Math.max(0, mercenaryRanks.indexOf(character.rank));
   character.xp ??= 0;
-  character.traits ??= [];
+  delete character.traits;
   character.dossier ??= createDossier();
   character.dossier.personality ??= randomItem(personalities);
   character.contractRecord ??= { completed: 0, failed: 0, survived: 0 };
@@ -508,7 +511,7 @@ function drawInitialRequirements(pool, count) {
 function calculateRosterReputation(roster) {
   return roster
     .filter((character) => character.status !== "阵亡")
-    .reduce((sum, character) => sum + Math.max(0, character.notoriety ?? 0), 0);
+    .reduce((sum, character) => sum + Math.max(0, character.personalReputation ?? 0), 0);
 }
 
 function createCallsign() {
@@ -595,11 +598,27 @@ function upgradeMissionToContract(mission) {
   mission.description ??= `${randomItem(fallbackType.verbs)}目标。${randomItem(contractBriefFragments)}`;
   mission.intel ??= createContractIntel();
   mission.revealedIntel ??= [];
-  mission.hidden ??= { twist: randomItem(contractHiddenTwists) };
+  mission.hidden ??= { twist: randomContractHiddenTwist() };
   const difficulty = mission.difficulty ?? fallbackTemplate.difficulty ?? 2;
   mission.refreshCost ??= calculateInitialRefreshCost(difficulty);
   mission.investigateCost ??= calculateInitialInvestigateCost({ rewardGold: mission.reward?.gold, difficulty });
   mission.issueDay ??= 1;
   mission.expiresDay ??= mission.issueDay + 4;
   return mission;
+}
+
+function randomContractHiddenTwist() {
+  const weights = economyConfig.contracts.hiddenTwists.weights ?? {};
+  const weighted = contractHiddenTwists.map((twist) => ({
+    twist,
+    weight: Math.max(0, weights[twist] ?? 1),
+  }));
+  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  if (total <= 0) return randomItem(contractHiddenTwists);
+  let roll = Math.random() * total;
+  for (const item of weighted) {
+    roll -= item.weight;
+    if (roll <= 0) return item.twist;
+  }
+  return weighted[weighted.length - 1]?.twist ?? randomItem(contractHiddenTwists);
 }

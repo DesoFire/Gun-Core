@@ -58,9 +58,8 @@ export function createMercenary(classId = randomItem(Object.keys(characterClasse
     xp: 0,
     hp: maxHp,
     maxHp,
-    notoriety: isPlayer ? 3 : randomNumber(0, 2),
+    personalReputation: isPlayer ? 3 : randomNumber(0, 2),
     rank: "无",
-    traits: [],
     dossier: createDossier(),
     contractRecord: { completed: 0, failed: 0, survived: 0 },
     bounty: randomNumber(0, 24) * 10,
@@ -189,12 +188,12 @@ export function eraseMercenaryReputation(characterId) {
     if (draft.gameStatus !== "active") return;
     const character = draft.roster.find((item) => item.id === characterId);
     if (!character || character.status === "阵亡") return;
-    const reputation = Math.max(0, character.notoriety ?? 0);
+    const reputation = Math.max(0, character.personalReputation ?? 0);
     const cost = reputation * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint;
     result = { ok: false, cost };
     if (reputation <= 0 || draft.gold < cost) return;
     draft.gold -= cost;
-    character.notoriety = 0;
+    character.personalReputation = 0;
     if (draft.unpaidSecrecy?.mercenaries) delete draft.unpaidSecrecy.mercenaries[character.id];
     draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金抹去了 ${character.name} 的黑历史。`);
     result = { ok: true, cost };
@@ -249,11 +248,13 @@ export function getEquipmentSlots() {
 }
 
 export function normalizeCharacter(character) {
-  character.notoriety ??= character.isPlayer ? 3 : 1;
+  if (character.personalReputation == null && character.notoriety != null) character.personalReputation = character.notoriety;
+  delete character.notoriety;
+  character.personalReputation ??= character.isPlayer ? 3 : 1;
   character.rank = normalizeRank(character);
   character.level = Math.max(0, mercenaryRanks.indexOf(character.rank));
   character.xp ??= 0;
-  character.traits ??= [];
+  delete character.traits;
   character.positiveConditions ??= [];
   character.dossier ??= createDossier();
   character.dossier.personality ??= randomItem(personalities);
@@ -302,7 +303,7 @@ export function renderCharacterDossier(character) {
     <section class="dossier-section">
       <h3>风险与资源状态</h3>
       <div class="field-list">
-        <div class="field"><span>知名度</span><strong>${character.notoriety}</strong></div>
+        <div class="field"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
         <div class="field"><span>身份费</span><strong>${identityFee(character)} 金/天</strong></div>
         <div class="field"><span>悬赏金额</span><strong>${character.bounty} 金</strong></div>
         <div class="field"><span>欠债</span><strong>${character.debt} 金</strong></div>

@@ -3,6 +3,7 @@ import {
   characterClasses,
   contractBriefFragments,
   contractHiddenTwists,
+  contractRandomEvents,
   contractIntelFields,
   contractIntelPool,
   contractIssuers,
@@ -14,12 +15,11 @@ import {
   negativeConditions,
   otherContractIssuers,
   positiveConditions,
-  positiveTraits,
   promotionChances,
 } from "../data/sampleData.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { getState, updateState } from "../js/state.js";
-import { calculateUnpaidSecrecyReputation, identityFee, payDailyUpkeep } from "./faction.js";
+import { calculateDailySupplyConsumption, calculateUnpaidSecrecyReputation, identityFee, payDailyUpkeep } from "./faction.js";
 import { evaluateGameOverDraft } from "./game.js";
 import { calculateTeamCombatPower, getPromotionCombatPowerGain } from "./combatPower.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
@@ -80,7 +80,7 @@ export function createContract(options = {}) {
     description: `${randomItem(type.verbs)}目标。${randomItem(contractBriefFragments)}`,
     intel: createContractIntel(),
     revealedIntel: options.freeIntel ? [randomItem(contractIntelFields).key] : [],
-    hidden: { twist: randomItem(contractHiddenTwists) },
+    hidden: { twist: randomContractHiddenTwist() },
     tags,
     refreshCost: calculateRefreshCost(difficulty),
     investigateCost: calculateInvestigateCost({ rewardGold }),
@@ -196,7 +196,7 @@ export function advanceDay() {
     draft.day += 1;
     resolveBaseRaidDraft(draft);
     payDailyUpkeep(draft);
-    draft.supplies = Math.max(0, draft.supplies - Math.ceil(draft.roster.length / economyConfig.contracts.execution.dailySupplyDivisor));
+    draft.supplies = Math.max(0, draft.supplies - calculateDailySupplyConsumption(draft));
     recoverRestingStressDraft(draft);
 
     if (draft.buildings.infirmary > 0) {
@@ -383,16 +383,10 @@ function settleReturningWagesDraft(draft, mission, returningTeam) {
   const shortage = totalWages - draft.gold;
   draft.gold = 0;
   const config = economyConfig.contracts.execution;
-  const stealthLoss = clamp(
-    Math.ceil(shortage / config.wageShortageDivisor) + config.wageShortageBaseLoss,
-    config.wageShortageMinLoss,
-    config.wageShortageMaxLoss
-  );
-  draft.stealth = clamp(draft.stealth - stealthLoss, 0, 100);
   returningTeam.forEach((character) => {
     character.stress += config.wageShortageStress;
   });
-  draft.log.push(`第 ${draft.day} 天：外勤薪资需要 ${totalWages} 金，但资金缺口 ${shortage} 金。返队佣兵压力上升，隐秘值下降 ${stealthLoss}。`);
+  draft.log.push(`第 ${draft.day} 天：外勤薪资需要 ${totalWages} 金，但资金缺口 ${shortage} 金。返队佣兵压力上升，隐秘值不受欠薪影响。`);
 }
 
 function resolveBaseRaidDraft(draft) {
@@ -486,13 +480,16 @@ function randomlyEquipDefendersDraft(draft, defenders) {
 
 function applyBaseRaidFailureDraft(draft, difficulty, reason) {
   const rewardConfig = economyConfig.contracts.reward;
+  const raidConfig = economyConfig.baseRaid;
   const goldLoss = Math.min(
     draft.gold,
     rewardConfig.baseGold + difficulty * randomNumber(rewardConfig.goldPerDifficultyMin, rewardConfig.goldPerDifficultyMax)
   );
+  const stealthLoss = randomNumber(raidConfig.failureStealthLossMin, raidConfig.failureStealthLossMax);
   draft.gold -= goldLoss;
+  draft.stealth = clamp(draft.stealth - stealthLoss, 0, 100);
   maybeDowngradeFacilityDraft(draft);
-  draft.log.push(`第 ${draft.day} 天：基地遭遇袭击，${reason}，损失 ${goldLoss} 金。`);
+  draft.log.push(`第 ${draft.day} 天：基地遭遇袭击，${reason}，损失 ${goldLoss} 金，隐秘值下降 ${stealthLoss}。`);
 }
 
 function maybeDowngradeFacilityDraft(draft) {
@@ -877,22 +874,18 @@ function resolvePromotionDraft(draft, character, actionType) {
   if (currentIndex < 0 || currentIndex >= mercenaryRanks.length - 1) return;
 
   const nextRank = mercenaryRanks[currentIndex + 1];
-  const trait = drawPositiveTrait(character, actionType);
   const positiveCondition = drawPositiveCondition(character, "promotion");
   const powerGain = getPromotionCombatPowerGain(nextRank);
   character.rank = nextRank;
   character.level = currentIndex + 1;
   character.combatPower = (character.combatPower ?? 0) + powerGain;
-  character.traits ??= [];
-  if (trait) character.traits.push(trait);
   if (positiveCondition) {
     character.positiveConditions ??= [];
     character.positiveConditions.push(positiveCondition);
   }
 
-  const traitText = trait ? `，获得特性「${trait.name}」` : "";
   const conditionText = positiveCondition ? `，获得正面状态「${positiveCondition.name}」` : "";
-  draft.log.push(`第 ${draft.day} 天：${character.name} 晋升为 ${nextRank} 级佣兵，战斗力 +${powerGain}${traitText}${conditionText}。`);
+  draft.log.push(`第 ${draft.day} 天：${character.name} 晋升为 ${nextRank} 级佣兵，战斗力 +${powerGain}${conditionText}。`);
 }
 
 function applyNegativeConditionDraft(draft, character, options = {}) {
@@ -978,7 +971,7 @@ function distributeContractReputationDraft(draft, team, reputation) {
     if (target.type === "base") {
       draft.reputation = (draft.reputation ?? 0) + 1;
     } else {
-      target.character.notoriety = (target.character.notoriety ?? 0) + 1;
+      target.character.personalReputation = (target.character.personalReputation ?? 0) + 1;
     }
   }
 }
@@ -996,16 +989,8 @@ function applyContractReputationLossDraft(draft, team, reputationLoss) {
   if (reputationLoss <= 0) return;
   draft.reputation = Math.max(0, (draft.reputation ?? 0) - reputationLoss);
   team.forEach((character) => {
-    character.notoriety = Math.max(0, (character.notoriety ?? 0) - reputationLoss);
+    character.personalReputation = Math.max(0, (character.personalReputation ?? 0) - reputationLoss);
   });
-}
-
-function drawPositiveTrait(character, actionType) {
-  const pool = positiveTraits[actionType] ?? positiveTraits.logistics;
-  const owned = new Set((character.traits ?? []).map((trait) => trait.name));
-  const candidates = pool.filter((trait) => !owned.has(trait.name));
-  const trait = randomItem(candidates.length > 0 ? candidates : pool);
-  return { ...trait, source: actionType };
 }
 
 function drawPositiveCondition(character, source = "growth") {
@@ -1058,6 +1043,11 @@ function applyHiddenTwistDraft(draft, mission, team, success) {
     result.text += mitigated ? " 背叛被控制，反而提高了业内评价。" : " 目标背叛让委托评价受损。";
   }
 
+  const eventResult = applyContractRandomEventDraft(draft, mission, team, success, revealedCount);
+  result.goldDelta += eventResult.goldDelta;
+  result.reputationDelta += eventResult.reputationDelta;
+  if (eventResult.text) result.text += ` ${eventResult.text}`;
+
   return result;
 }
 
@@ -1074,11 +1064,139 @@ function upgradeMissionToContract(mission) {
   mission.description ??= `${randomItem(fallbackType.verbs)}目标。${randomItem(contractBriefFragments)}`;
   mission.intel ??= createContractIntel();
   mission.revealedIntel ??= [];
-  mission.hidden ??= { twist: randomItem(contractHiddenTwists) };
+  mission.hidden ??= { twist: randomContractHiddenTwist() };
   normalizeContractPlanningFields(mission);
   mission.refreshCost ??= calculateRefreshCost(mission.difficulty ?? fallbackTemplate.difficulty ?? 2);
   mission.investigateCost ??= calculateInvestigateCost({ rewardGold: mission.reward?.gold, difficulty: mission.difficulty ?? fallbackTemplate.difficulty ?? 2 });
   mission.issueDay ??= 1;
   mission.expiresDay ??= mission.issueDay + 4;
   return mission;
+}
+
+function applyContractRandomEventDraft(draft, mission, team, success, revealedCount = 0) {
+  let goldDelta = 0;
+  let reputationDelta = 0;
+  const texts = [];
+  const used = new Set();
+  const rolls = getContractRandomEventRolls(mission);
+  const chance = getContractRandomEventChance(mission);
+
+  for (let index = 0; index < rolls; index += 1) {
+    if (chance <= 0 || Math.random() * 100 > chance) continue;
+    const event = pickContractRandomEvent(draft, mission, revealedCount, used);
+    if (!event) continue;
+    used.add(event.id);
+
+    const severity = event.tone === "negative" ? getNegativeEventSeverityMultiplier(draft, mission) : 1;
+    const effect = event.effect ?? {};
+
+    if (effect.gold) goldDelta += Math.round(effect.gold * severity);
+    if (effect.reputation) reputationDelta += Math.round(effect.reputation * severity);
+    if (effect.stealth) {
+      draft.stealth = clamp(draft.stealth + Math.round(effect.stealth * severity), 0, 100);
+    }
+    if (effect.stress) {
+      team.forEach((character) => {
+        character.stress = Math.max(0, character.stress + Math.round(effect.stress * severity));
+      });
+    }
+    if (effect.wound) {
+      team.forEach((character) => {
+        if (effect.wound < 0) {
+          character.wound = Math.max(0, character.wound + effect.wound);
+        } else if (Math.random() <= 0.5) {
+          character.wound += effect.wound;
+        }
+      });
+    }
+    if (effect.successBonus && success) {
+      goldDelta += effect.successBonus.gold ?? 0;
+      reputationDelta += effect.successBonus.reputation ?? 0;
+    }
+
+    let text = `随机事件：${event.title}。${event.description}`;
+    if (event.tone === "negative" && effect.stealth) {
+      text += " 隐秘值受到牵连。";
+    }
+    texts.push(text);
+  }
+
+  return { goldDelta, reputationDelta, text: texts.join(" ") };
+}
+
+function pickContractRandomEvent(draft, mission, revealedCount = 0, used = new Set()) {
+  const missionCode = mission.typeCode ?? mission.issuer?.typeCode ?? mission.actionType ?? "";
+  const actionType = mission.actionType ?? "";
+  const difficulty = mission.difficulty ?? 1;
+  const intelLevel = Math.min(3, revealedCount);
+  const intelRoomReduction = clamp(
+    (draft.buildings?.intel ?? 0) * economyConfig.contracts.hiddenTwists.negativeEventWeightReductionPerIntelLevel,
+    0,
+    1 - economyConfig.contracts.hiddenTwists.negativeEventMinWeightMultiplier
+  );
+  const candidates = contractRandomEvents
+    .filter((event) => !used.has(event.id))
+    .filter((event) => difficulty >= (event.minDifficulty ?? 1) && difficulty <= (event.maxDifficulty ?? 8))
+    .filter((event) => event.appliesTo.includes(missionCode) || event.appliesTo.includes(actionType) || event.appliesTo.includes("all"))
+    .map((event) => {
+      const baseWeight = event.weight ?? 1;
+      let weight = baseWeight;
+      if (event.tone === "negative") {
+        const reduction = Math.max(0, intelLevel) * 0.08 + intelRoomReduction;
+        const multiplier = Math.max(
+          economyConfig.contracts.hiddenTwists.negativeEventMinWeightMultiplier,
+          1 - reduction
+        );
+        weight *= multiplier;
+      }
+      return { event, weight: Math.max(0, weight) };
+    })
+    .filter((entry) => entry.weight > 0);
+
+  const total = candidates.reduce((sum, entry) => sum + entry.weight, 0);
+  if (total <= 0) return null;
+  let roll = Math.random() * total;
+  for (const entry of candidates) {
+    roll -= entry.weight;
+    if (roll <= 0) return entry.event;
+  }
+  return candidates[candidates.length - 1]?.event ?? null;
+}
+
+function getContractRandomEventRolls(mission) {
+  const difficulty = mission.difficulty ?? 1;
+  const tiers = economyConfig.contracts.hiddenTwists.randomEventRollsByDifficulty ?? [];
+  const tier = tiers.find((entry) => difficulty <= entry.maxDifficulty);
+  return Math.max(0, tier?.rolls ?? 1);
+}
+
+function getContractRandomEventChance(mission) {
+  const config = economyConfig.contracts.hiddenTwists;
+  return clamp(
+    (config.randomEventChance ?? 0) + Math.max(0, (mission.difficulty ?? 1) - 1) * (config.randomEventChancePerDifficulty ?? 0),
+    0,
+    95
+  );
+}
+
+function getNegativeEventSeverityMultiplier(draft, mission) {
+  const intelLevel = Math.max(0, mission.powerIntelLevel ?? 0, mission.revealedIntel?.length ?? 0);
+  const facilityBonus = (draft.buildings?.intel ?? 0) * economyConfig.contracts.hiddenTwists.negativeEventWeightReductionPerIntelLevel;
+  return clamp(1 - intelLevel * 0.1 - facilityBonus * 0.5, 0.35, 1);
+}
+
+function randomContractHiddenTwist() {
+  const weights = economyConfig.contracts.hiddenTwists.weights ?? {};
+  const weighted = contractHiddenTwists.map((twist) => ({
+    twist,
+    weight: Math.max(0, weights[twist] ?? 1),
+  }));
+  const total = weighted.reduce((sum, item) => sum + item.weight, 0);
+  if (total <= 0) return randomItem(contractHiddenTwists);
+  let roll = Math.random() * total;
+  for (const item of weighted) {
+    roll -= item.weight;
+    if (roll <= 0) return item.twist;
+  }
+  return weighted[weighted.length - 1]?.twist ?? randomItem(contractHiddenTwists);
 }

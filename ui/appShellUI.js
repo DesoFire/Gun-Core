@@ -3,7 +3,7 @@ export function renderAppShell(root) {
     <header class="topbar">
       <div>
         <p class="eyebrow">佣兵事务所 Demo</p>
-        <button id="organization-name" class="organization-name" type="button">Gun Core</button>
+        <button id="organization-name" class="organization-name" title="点击修改佣兵组织名称" type="button">Gun Core</button>
       </div>
       <div class="top-actions">
         <button id="save-game" class="ghost-button" type="button">保存</button>
@@ -18,7 +18,7 @@ export function renderAppShell(root) {
       <button class="tab-button" data-tab-target="missions" type="button">契约</button>
       <button class="tab-button" data-tab-target="expenses" type="button">支出</button>
       <button class="tab-button" data-tab-target="wealth" type="button">财富</button>
-      <button class="tab-button" data-tab-target="schedule" type="button">日程</button>
+      <button class="tab-button temporary-hidden" data-tab-target="schedule" type="button" hidden>日程</button>
       <button class="tab-button" data-tab-target="facilities" type="button">基础设施</button>
       <button class="tab-button temporary-hidden" data-tab-target="mechs" type="button" hidden>机甲</button>
       <button class="tab-button temporary-hidden" data-tab-target="warehouse" type="button" hidden>仓库</button>
@@ -41,25 +41,6 @@ export function renderAppShell(root) {
     <main class="dashboard">
       <section class="tab-page active" data-tab-page="overview">
         <div class="overview-layout">
-          <section class="panel command-panel">
-            <div class="section-heading">
-              <div>
-                <h2>局势指挥台</h2>
-                <p id="objective-text" class="muted">读取目标中...</p>
-              </div>
-              <span id="game-status" class="badge">进行中</span>
-            </div>
-            <div id="command-grid" class="command-grid"></div>
-          </section>
-
-          <section class="panel overview-panel">
-            <div class="section-heading">
-              <h2>基地运营</h2>
-              <span id="current-day" class="badge">第 1 天</span>
-            </div>
-            <div id="resource-grid" class="resource-grid"></div>
-          </section>
-
           <section class="panel overview-panel">
             <div class="section-heading">
               <h2>契约执行</h2>
@@ -162,7 +143,7 @@ export function renderAppShell(root) {
         </section>
       </section>
 
-      <section class="tab-page" data-tab-page="schedule">
+      <section class="tab-page temporary-hidden" data-tab-page="schedule" hidden>
         <section class="panel calendar-panel calendar-page-panel">
           <div class="section-heading">
             <h2>行动日程</h2>
@@ -192,6 +173,46 @@ export function renderAppShell(root) {
 
     <dialog id="facility-dialog" class="dialog dossier-dialog">
       <div class="dossier" id="facility-dossier"></div>
+    </dialog>
+
+    <dialog id="intro-dialog" class="dialog intro-dialog">
+      <div class="intro-card">
+        <p class="eyebrow">GMS 接入确认</p>
+        <h2>欢迎来到可控范围内</h2>
+        <div class="intro-copy">
+          <p>SSS 内战爆发后，所有新闻频道终于统一了口径：局势仍在可控范围内。</p>
+          <p>于是粮价上涨，军火脱销，边境关闭，尸体开始影响交通。</p>
+          <p>你没有战斗力，不能亲自上战场。更准确地说，你从未认真考虑过亲自上战场。幸运的是，你有钱，有人脉，还有一套远程佣兵管理系统：GMS。</p>
+          <p>通过 GMS，你将在 SSS 境内招募被称为 Gun 的佣兵，建立隐秘基地，接取契约，购买装备，并从战争中获得一笔体面的收入。</p>
+          <p>这些 Gun 是非法入境的行动人员。为了确保他们在官方记录中继续保持“不存在”的良好状态，你需要按月缴纳隐秘费用。未支付的声望会降低隐秘值；隐秘值越低，基地越容易被找上门。</p>
+        </div>
+        <div class="intro-steps">
+          <article>
+            <strong>1. 看总览</strong>
+            <span>资金、基地声望、隐秘值、日支出和人员状态会决定你今天能犯多大的错。</span>
+          </article>
+          <article>
+            <strong>2. 招募 Gun</strong>
+            <span>在人员页雇佣佣兵。便宜的人通常很便宜，贵的人通常会活着回来要求你付钱。</span>
+          </article>
+          <article>
+            <strong>3. 调查契约</strong>
+            <span>契约页只显示模糊风险。花钱调查敌方伤害、推荐武器、职业需求、人数和战力区间，再决定派谁去。</span>
+          </article>
+          <article>
+            <strong>4. 批准支出</strong>
+            <span>推进一天前需要在支出页确认开销。外出佣兵暂不支付日薪，平安归来后会一并补发。</span>
+          </article>
+          <article>
+            <strong>5. 花掉战争财</strong>
+            <span>财富页用于把 GMS 的利润变成私人收藏、体面工程和更容易入睡的借口。</span>
+          </article>
+        </div>
+        <div class="intro-footer">
+          <p class="muted">欢迎使用 GMS。愿战争早日结束，但不要太早。</p>
+          <button id="intro-confirm" class="primary-button" type="button">开始经营</button>
+        </div>
+      </div>
     </dialog>
   `;
 }

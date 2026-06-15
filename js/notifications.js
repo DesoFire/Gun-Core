@@ -14,5 +14,18 @@ export function showToast(message, tone = "warning") {
 }
 
 export function showInsufficientFunds(currentGold, cost) {
-  showToast(`资金不足。当前 ${currentGold} 金，还差 ${Math.max(0, cost - currentGold)} 金。`);
+  showToast(`资金不足。当前 ${currentGold} 金，还差 ${Math.max(0, cost - currentGold)} 金。`, "bad");
+}
+
+export function confirmResourceSpend(action, cost, resource = "金") {
+  return window.confirm(`${action}\n需要花费 ${cost} ${resource}。是否确认？`);
+}
+
+export function showSpendSuccess(action, cost, remainingGold) {
+  const remainingText = Number.isFinite(remainingGold) ? `，剩余 ${remainingGold} 金` : "";
+  showToast(`${action}成功，花费 ${cost} 金${remainingText}。`, "good");
+}
+
+export function showSpendFailure(action, reason = "条件不满足或资源不足。") {
+  showToast(`${action}失败：${reason}`, "bad");
 }
