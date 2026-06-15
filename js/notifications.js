@@ -14,7 +14,8 @@ export function showToast(message, tone = "warning") {
 }
 
 export function showInsufficientFunds(currentGold, cost) {
-  showToast(`资金不足。当前 ${currentGold} 金，还差 ${Math.max(0, cost - currentGold)} 金。`, "bad");
+  const missing = Math.max(0, cost - currentGold);
+  showToast(`资金不足。当前 ${currentGold} 金，还差 ${missing} 金。`, "bad");
 }
 
 export function confirmResourceSpend(action, cost, resource = "金") {

@@ -23,7 +23,7 @@ export function initMissionUI() {}
 export function renderMissionUI() {
   const state = getState();
   const countBadge = document.querySelector("#selected-count");
-  if (countBadge) countBadge.textContent = "Dispatch from contract card";
+  if (countBadge) countBadge.textContent = "从契约详情派遣";
 
   const container = document.querySelector("#mission-list");
   if (!container) return;
@@ -44,26 +44,11 @@ export function renderMissionUI() {
   container.querySelectorAll("[data-refresh-mission]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      const mission = getState().missions.find((item) => item.id === button.dataset.refreshMission);
-      const cost = mission && mission.refreshCost ? mission.refreshCost : 0;
-      const before = getState();
-      if (before.gold < cost) {
-        showInsufficientFunds(before.gold, cost);
-        return;
-      }
-      if (!confirmResourceSpend(`Refresh contract: ${mission ? mission.name : ""}`, cost)) return;
-      const beforeGold = getState().gold;
-      refreshMission(button.dataset.refreshMission);
-      const afterGold = getState().gold;
-      if (afterGold >= beforeGold) {
-        showSpendFailure("Refresh contract", "Refresh was not completed.");
-        return;
-      }
-      showSpendSuccess("Refresh contract", beforeGold - afterGold, afterGold);
+      handleRefreshMission(button.dataset.refreshMission);
     });
   });
 
-  if (openContractId && document.querySelector("#contract-dialog") && document.querySelector("#contract-dialog").open) {
+  if (openContractId && document.querySelector("#contract-dialog")?.open) {
     renderContractCard(openContractId);
   }
 }
@@ -80,28 +65,47 @@ function renderMissionCard(mission, state) {
       <div class="card-header">
         <div>
           <p class="card-title">${mission.name}</p>
-          <p class="muted">${mission.issuer} / ${mission.type} / expires day ${mission.expiresDay}</p>
+          <p class="muted">${mission.issuer} / ${mission.type} / ${formatDeadline(mission)}</p>
         </div>
-        <span class="badge">${isActive ? `remaining ${mission.remaining}d` : "idle"}</span>
+        <span class="badge">${isActive ? `剩余 ${mission.remaining} 天` : "可接取"}</span>
       </div>
       <div class="contract-public">
-        <span>power ${powerRange.low}-${powerRange.high}</span>
+        <span>战力 ${powerRange.low}-${powerRange.high}</span>
         <span>${risk.label}</span>
-        <span>${mission.duration}d</span>
-        <span>${mission.reward.gold} gold</span>
+        <span>${mission.duration} 天</span>
+        <span>${mission.reward.gold} 金</span>
       </div>
       ${renderContractSummaryIntel(mission)}
       ${
         isActive
-          ? `<div class="contract-team-strip">${assignedMembers.map((character) => renderMercenaryAvatar(character, { size: "small" })).join("")}<span>active</span></div>`
-          : `<p class="muted">${lockedIntelCount} intel items are still locked. Open the card to investigate or dispatch.</p>`
+          ? `<div class="contract-team-strip">${assignedMembers.map((character) => renderMercenaryAvatar(character, { size: "small" })).join("")}<span>执行中</span></div>`
+          : `<p class="muted">仍有 ${lockedIntelCount} 条情报未调查。点开契约卡片后可调查或派遣。</p>`
       }
       <div class="button-row">
-        <button class="primary-button" data-view-contract="${mission.id}" type="button">${isActive ? "View" : "Open contract"}</button>
-        <button class="ghost-button" data-refresh-mission="${mission.id}" ${!canAct || isActive ? "disabled" : ""} type="button">Refresh ${mission.refreshCost || 0} gold</button>
+        <button class="primary-button" data-view-contract="${mission.id}" type="button">${isActive ? "查看" : "打开契约"}</button>
+        <button class="ghost-button" data-refresh-mission="${mission.id}" ${!canAct || isActive ? "disabled" : ""} type="button">刷新 ${mission.refreshCost || 0} 金</button>
       </div>
     </article>
   `;
+}
+
+function handleRefreshMission(missionId) {
+  const mission = getState().missions.find((item) => item.id === missionId);
+  const cost = mission?.refreshCost ?? 0;
+  const before = getState();
+  if (before.gold < cost) {
+    showInsufficientFunds(before.gold, cost);
+    return;
+  }
+  if (!confirmResourceSpend(`刷新契约：${mission?.name ?? ""}`, cost)) return;
+  const beforeGold = getState().gold;
+  refreshMission(missionId);
+  const afterGold = getState().gold;
+  if (afterGold >= beforeGold) {
+    showSpendFailure("刷新契约", "刷新没有完成。");
+    return;
+  }
+  showSpendSuccess("刷新契约", beforeGold - afterGold, afterGold);
 }
 
 function openContractCard(id) {
@@ -139,44 +143,44 @@ function renderContractCard(id) {
   dossier.innerHTML = `
     <div class="dossier-top">
       <div>
-        <div class="dossier-code">CONTRACT / ${mission.typeCode || mission.type} / DAY ${mission.issueDay}-${mission.expiresDay}</div>
+        <div class="dossier-code">契约 / ${mission.typeCode || mission.type} / 第 ${mission.issueDay}-${mission.expiresDay} 天</div>
         <h2 class="dossier-title">${mission.name}</h2>
-        <p class="muted">${mission.issuer} / ${mission.type} / ${mission.acquisition || "broadcast"}</p>
+        <p class="muted">${mission.issuer} / ${mission.type} / ${mission.acquisition || "公开广播"}</p>
       </div>
-      <button class="ghost-button dialog-close-button" data-close-contract aria-label="close" title="close" type="button">Close</button>
+      <button class="ghost-button dialog-close-button" data-close-contract aria-label="关闭" title="关闭" type="button">关闭</button>
     </div>
     <div class="dossier-grid">
       <section class="dossier-section">
-        <h3>Public intel</h3>
+        <h3>公开情报</h3>
         <div class="field-list">
-          <div class="field"><span>Deadline</span><strong>${daysUntilExpires === 0 ? "today" : `${daysUntilExpires} days left`}</strong></div>
-          <div class="field"><span>Duration</span><strong>${mission.duration} days</strong></div>
-          <div class="field"><span>Difficulty</span><strong>${renderDifficultyBadge(mission.difficulty)}</strong></div>
-          <div class="field"><span>Power</span><strong>${powerRange.low}-${powerRange.high}</strong></div>
-          <div class="field"><span>Intel precision</span><strong>${powerRange.level}/3</strong></div>
-          <div class="field"><span>Reward</span><strong>${mission.reward.gold} gold / ${mission.reward.reputation} reputation pool</strong></div>
+          <div class="field"><span>截止</span><strong>${daysUntilExpires === 0 ? "今天截止" : `${daysUntilExpires} 天后截止`}</strong></div>
+          <div class="field"><span>执行时间</span><strong>${mission.duration} 天</strong></div>
+          <div class="field"><span>难度</span><strong>${renderDifficultyBadge(mission.difficulty)}</strong></div>
+          <div class="field"><span>战力区间</span><strong>${powerRange.low}-${powerRange.high}</strong></div>
+          <div class="field"><span>区间精度</span><strong>${powerRange.level}/3</strong></div>
+          <div class="field"><span>报酬</span><strong>${mission.reward.gold} 金 / ${mission.reward.reputation} 声望池</strong></div>
         </div>
       </section>
       <section class="dossier-section wide">
-        <h3>Brief</h3>
+        <h3>简报</h3>
         <p class="contract-brief">${mission.description}</p>
         <div class="badge-row">${mission.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
       </section>
       <section class="dossier-section wide">
         <div class="card-header">
           <div>
-            <h3>Investigate</h3>
-            <p class="muted">Targeted intel is expensive. Random intel is cheaper but uncontrolled.</p>
+            <h3>调查情报</h3>
+            <p class="muted">定向调查更贵但可控；随机调查更便宜，但查到什么算什么。</p>
           </div>
-          <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="random" ${canAct && (lockedIntelFields.length > 0 || powerRange.level < 3) ? "" : "disabled"} type="button">Random ${formatInvestigationCost(mission, "random")}</button>
+          <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="random" ${canAct && (lockedIntelFields.length > 0 || powerRange.level < 3) ? "" : "disabled"} type="button">随机调查 ${formatInvestigationCost(mission, "random")}</button>
         </div>
         <div class="intel-action-grid">
           <article class="intel-action ${powerRange.level >= 3 ? "revealed" : ""}">
             <div>
-              <strong>Power range</strong>
-              <p class="muted">Current ${powerRange.low}-${powerRange.high}, precision ${powerRange.level}/3.</p>
+              <strong>战斗力需求区间</strong>
+              <p class="muted">当前 ${powerRange.low}-${powerRange.high}，精度 ${powerRange.level}/3。</p>
             </div>
-            <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="power" ${canAct && powerRange.level < 3 ? "" : "disabled"} type="button">Refine ${formatInvestigationCost(mission, "power")}</button>
+            <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="power" ${canAct && powerRange.level < 3 ? "" : "disabled"} type="button">缩小区间 ${formatInvestigationCost(mission, "power")}</button>
           </article>
           ${contractIntelFields.map((field) => renderIntelAction(mission, field, canAct)).join("")}
         </div>
@@ -184,13 +188,13 @@ function renderContractCard(id) {
       <section class="dossier-section wide">
         <div class="card-header">
           <div>
-            <h3>Dispatch</h3>
-            <p class="muted">${isActive ? "This contract is already active." : "Select available mercenaries. Open a merc card to inspect or change equipment."}</p>
+            <h3>派遣队伍</h3>
+            <p class="muted">${isActive ? "该契约已经在执行中。" : "选择可派遣佣兵。点开佣兵卡可查看详情或更换装备。"}</p>
           </div>
           ${
             isActive
-              ? `<span class="badge">active</span>`
-              : `<button class="primary-button" data-open-dispatch="${mission.id}" ${state.gameStatus !== "active" ? "disabled" : ""} type="button">${isDispatching ? "Collapse" : "Dispatch"}</button>`
+              ? `<span class="badge">执行中</span>`
+              : `<button class="primary-button" data-open-dispatch="${mission.id}" ${state.gameStatus !== "active" ? "disabled" : ""} type="button">${isDispatching ? "收起" : "派遣"}</button>`
           }
         </div>
         ${isDispatching ? renderDispatchPanel(mission, selectedIds) : renderDispatchSummary(mission, selectedIds)}
@@ -212,10 +216,10 @@ function isIntelRevealed(mission, key) {
 
 function renderContractSummaryIntel(mission) {
   const chips = [];
-  if (isIntelRevealed(mission, "damageTypes")) chips.push(`damage ${formatRequirementValue(mission, "damageTypes")}`);
-  if (isIntelRevealed(mission, "careerCategories")) chips.push(`career ${formatRequirementValue(mission, "careerCategories")}`);
-  if (isIntelRevealed(mission, "weaponTypes")) chips.push(`weapon ${formatRequirementValue(mission, "weaponTypes")}`);
-  if (isIntelRevealed(mission, "teamSize")) chips.push(`team ${formatRequirementValue(mission, "teamSize")}`);
+  if (isIntelRevealed(mission, "damageTypes")) chips.push(`敌伤：${formatRequirementValue(mission, "damageTypes")}`);
+  if (isIntelRevealed(mission, "careerCategories")) chips.push(`职业：${formatRequirementValue(mission, "careerCategories")}`);
+  if (isIntelRevealed(mission, "weaponTypes")) chips.push(`武器：${formatRequirementValue(mission, "weaponTypes")}`);
+  if (isIntelRevealed(mission, "teamSize")) chips.push(`人数：${formatRequirementValue(mission, "teamSize")}`);
   if (chips.length === 0) return "";
   return `<div class="contract-intel-chips">${chips.map((chip) => `<span>${chip}</span>`).join("")}</div>`;
 }
@@ -228,7 +232,7 @@ function renderIntelAction(mission, field, canAct) {
         <strong>${field.label}</strong>
         <p class="muted">${revealed ? formatRequirementValue(mission, field.key) : getIntelHint(field.key)}</p>
       </div>
-      <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="${field.key}" ${canAct && !revealed ? "" : "disabled"} type="button">${revealed ? "Known" : `Investigate ${formatInvestigationCost(mission, "targeted")}`}</button>
+      <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="${field.key}" ${canAct && !revealed ? "" : "disabled"} type="button">${revealed ? "已知" : `调查 ${formatInvestigationCost(mission, "targeted")}`}</button>
     </article>
   `;
 }
@@ -241,29 +245,29 @@ function renderDifficultyBadge(difficulty = 1) {
 
 function formatRequirementValue(mission, key) {
   const requirements = mission.requirements || {};
-  if (key === "damageTypes") return (requirements.damageTypes || []).join(" / ") || "unknown";
+  if (key === "damageTypes") return (requirements.damageTypes || []).join(" / ") || "未知";
   if (key === "careerCategories") return formatCareerRequirements(requirements.careerCategories);
-  if (key === "weaponTypes") return (requirements.weaponTypes || []).join(" / ") || "unknown";
+  if (key === "weaponTypes") return (requirements.weaponTypes || []).join(" / ") || "未知";
   if (key === "teamSize") {
     const teamSize = mission.recommendedTeamSize || {};
-    return `${teamSize.min || 1}-${teamSize.max || 4} people`;
+    return `${teamSize.min || 1}-${teamSize.max || 4} 人`;
   }
-  return (mission.intel && mission.intel[key]) || "unknown";
+  return (mission.intel && mission.intel[key]) || "未知";
 }
 
 function formatCareerRequirements(categories = []) {
-  if (categories.length === 0) return "unknown";
-  return categories.map((category) => (careerCategories[category] && careerCategories[category].name) || category).join(" + ");
+  if (categories.length === 0) return "未知";
+  return categories.map((category) => careerCategories[category]?.name || category).join(" + ");
 }
 
 function getIntelHint(key) {
   const hints = {
-    damageTypes: "Enemy damage type. Use matching armor.",
-    careerCategories: "Recommended mercenary career category.",
-    weaponTypes: "Recommended weapon or damage direction.",
-    teamSize: "Recommended team size range.",
+    damageTypes: "敌方伤害类型。携带对应防具可降低风险。",
+    careerCategories: "推荐参与的佣兵职业大类。",
+    weaponTypes: "推荐武器或伤害方向。",
+    teamSize: "推荐小队人数区间。",
   };
-  return hints[key] || "locked";
+  return hints[key] || "未调查";
 }
 
 function formatInvestigationCost(mission, mode) {
@@ -273,7 +277,7 @@ function formatInvestigationCost(mission, mode) {
   const buildings = getState().buildings || {};
   const facilityDiscount = (buildings.intel || 0) * economyConfig.facilities.intelInvestigationDiscountPerLevel;
   const discount = Math.min(config.maxInvestigationDiscount, facilityDiscount);
-  return `${Math.max(1, Math.round(base * multiplier * (1 - discount)))} gold`;
+  return `${Math.max(1, Math.round(base * multiplier * (1 - discount)))} 金`;
 }
 
 function renderDispatchSummary(mission, selectedIds) {
@@ -283,9 +287,9 @@ function renderDispatchSummary(mission, selectedIds) {
   return `
     <div class="dispatch-summary">
       <div class="field-list">
-        <div class="field"><span>Selected</span><strong>${selectedIds.length > 0 ? `${selectedIds.length} people` : "none"}</strong></div>
-        <div class="field"><span>Team power</span><strong>${teamPower}</strong></div>
-        <div class="field"><span>Required range</span><strong>${range.low}-${range.high}</strong></div>
+        <div class="field"><span>已选</span><strong>${selectedIds.length > 0 ? `${selectedIds.length} 人` : "无"}</strong></div>
+        <div class="field"><span>小队战力</span><strong>${teamPower}</strong></div>
+        <div class="field"><span>需求区间</span><strong>${range.low}-${range.high}</strong></div>
       </div>
     </div>
   `;
@@ -299,16 +303,16 @@ function renderDispatchPanel(mission, selectedIds) {
   return `
     <div class="dispatch-panel">
       <div class="dispatch-status">
-        <div class="field"><span>Selected</span><strong>${selectedIds.length}/4</strong></div>
-        <div class="field"><span>Team power</span><strong>${teamPower}</strong></div>
-        <div class="field"><span>Required range</span><strong>${range.low}-${range.high}</strong></div>
-        <button class="primary-button" data-confirm-dispatch="${mission.id}" ${state.gameStatus !== "active" || selectedIds.length === 0 ? "disabled" : ""} type="button">Confirm dispatch</button>
+        <div class="field"><span>已选</span><strong>${selectedIds.length}/4</strong></div>
+        <div class="field"><span>小队战力</span><strong>${teamPower}</strong></div>
+        <div class="field"><span>需求区间</span><strong>${range.low}-${range.high}</strong></div>
+        <button class="primary-button" data-confirm-dispatch="${mission.id}" ${state.gameStatus !== "active" || selectedIds.length === 0 ? "disabled" : ""} type="button">确认派遣</button>
       </div>
       <div class="dispatch-roster">
         ${
           availableRoster.length > 0
             ? availableRoster.map((character) => renderDispatchCharacter(character, selectedIds.includes(character.id))).join("")
-            : `<p class="muted">No available mercenaries.</p>`
+            : `<p class="muted">没有可派遣佣兵。</p>`
         }
       </div>
     </div>
@@ -337,24 +341,7 @@ function bindContractEvents(mission) {
   });
 
   dossier.querySelectorAll("[data-investigate-contract]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const state = getState();
-      const cost = extractCost(button.textContent) || mission.investigateCost || 0;
-      if (state.gold < cost) {
-        showInsufficientFunds(state.gold, cost);
-        return;
-      }
-      if (!confirmResourceSpend(`Investigate contract: ${mission.name}`, cost)) return;
-      const beforeGold = getState().gold;
-      investigateMission(button.dataset.investigateContract, button.dataset.intelKey || "random");
-      const afterGold = getState().gold;
-      if (afterGold >= beforeGold) {
-        showSpendFailure("Investigate contract", "Investigation was not completed.");
-        return;
-      }
-      showSpendSuccess("Investigate contract", beforeGold - afterGold, afterGold);
-      renderContractCard(mission.id);
-    });
+    button.addEventListener("click", () => handleInvestigate(button, mission));
   });
 
   dossier.querySelectorAll("[data-toggle-dispatch-member]").forEach((button) => {
@@ -383,6 +370,25 @@ function bindContractEvents(mission) {
   });
 }
 
+function handleInvestigate(button, mission) {
+  const state = getState();
+  const cost = extractCost(button.textContent) || mission.investigateCost || 0;
+  if (state.gold < cost) {
+    showInsufficientFunds(state.gold, cost);
+    return;
+  }
+  if (!confirmResourceSpend(`调查契约：${mission.name}`, cost)) return;
+  const beforeGold = getState().gold;
+  investigateMission(button.dataset.investigateContract, button.dataset.intelKey || "random");
+  const afterGold = getState().gold;
+  if (afterGold >= beforeGold) {
+    showSpendFailure("调查契约", "调查没有完成。");
+    return;
+  }
+  showSpendSuccess("调查契约", beforeGold - afterGold, afterGold);
+  renderContractCard(mission.id);
+}
+
 function toggleDispatchMember(id) {
   if (dispatchSelection.has(id)) {
     dispatchSelection.delete(id);
@@ -394,6 +400,11 @@ function toggleDispatchMember(id) {
 
 function getMissionMembers(mission, roster) {
   return mission.assigned.map((memberId) => roster.find((character) => character.id === memberId)).filter(Boolean);
+}
+
+function formatDeadline(mission) {
+  const days = Math.max(0, mission.expiresDay - getState().day);
+  return days === 0 ? "今天截止" : `${days} 天后截止`;
 }
 
 function extractCost(text = "") {

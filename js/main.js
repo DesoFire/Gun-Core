@@ -471,13 +471,13 @@ function renderExpenseSection(title, description, items, renderLine, total) {
           <h3>${title}</h3>
           <p class="muted">${description}</p>
         </div>
-        <span class="badge">${total} 閲?澶?/span>
+        <span class="badge">${total} 金</span>
       </div>
       <div class="expense-line-list">
         ${
           items.length > 0
             ? items.map(renderLine).join("")
-            : `<p class="muted">鏆傛棤鏀嚭</p>`
+            : `<p class="muted">暂无支出</p>`
         }
       </div>
     </section>
@@ -488,8 +488,8 @@ function renderWageExpenseLine(item) {
   return `
     <div class="expense-line">
       <span>${item.name}</span>
-      <small>${item.rank}绾?路 ${item.status}</small>
-      <strong>${item.cost} 閲?/strong>
+      <small>${item.rank}级 · ${item.status}</small>
+      <strong>${item.cost} 金</strong>
     </div>
   `;
 }
@@ -498,8 +498,8 @@ function renderSupplyExpenseLine(item) {
   return `
     <div class="expense-line">
       <span>${item.name}</span>
-      <small>${item.rank}绾?路 鐢熸椿琛ョ粰</small>
-      <strong>${item.cost} 閲?/strong>
+      <small>${item.rank}级 · 生活补给</small>
+      <strong>${item.cost} 份</strong>
     </div>
   `;
 }
@@ -507,9 +507,9 @@ function renderSupplyExpenseLine(item) {
 function renderEquipmentExpenseLine(item) {
   return `
     <div class="expense-line">
-      <span>${item.characterName} 路 ${item.itemName}</span>
-      <small>${item.slotLabel} 路 ${item.rarity}绾?路 ${item.type}</small>
-      <strong>${item.cost} 閲?/strong>
+      <span>${item.characterName} · ${item.itemName}</span>
+      <small>${item.slotLabel} · ${item.rarity}级 · ${item.type}</small>
+      <strong>${item.cost} 金</strong>
     </div>
   `;
 }
@@ -518,16 +518,16 @@ function renderFacilityExpenseLine(item) {
   return `
     <div class="expense-line">
       <span>${item.name}</span>
-      <small>${item.rank ? `${item.rank}绾?路 Lv.${item.level}` : "鍥哄畾寮€閿€"}</small>
-      <strong>${item.cost} 閲?/strong>
+      <small>${item.rank ? `${item.rank}级 · Lv.${item.level}` : "固定开销"}</small>
+      <strong>${item.cost} 金</strong>
     </div>
   `;
 }
 
 function formatSeverityLabel(severity) {
-  if (severity === "heavy") return "閲嶅害";
-  if (severity === "medium") return "涓害";
-  return "杞诲害";
+  if (severity === "heavy") return "重度";
+  if (severity === "medium") return "中度";
+  return "轻度";
 }
 
 function renderWealth() {
@@ -562,22 +562,22 @@ function renderWealth() {
       const state = getState();
       const item = getWealthCollections().flatMap((room) => room.items).find((entry) => entry.id === button.dataset.buyWealthItem);
       if (!item) {
-        showSpendFailure("Buy collection", "Collection item was not found.");
+        showSpendFailure("购买收藏", "找不到该收藏品。");
         return;
       }
-      if (item && state.gold < item.cost) {
+      if (state.gold < item.cost) {
         showInsufficientFunds(state.gold, item.cost);
         return;
       }
-      if (!confirmGoldSpend(`Buy collection: ${item.name}`, item.cost)) return;
+      if (!confirmGoldSpend(`购买收藏：${item.name}`, item.cost)) return;
       const beforeGold = getState().gold;
       buyWealthItem(button.dataset.buyWealthItem);
       const afterGold = getState().gold;
       if (afterGold >= beforeGold) {
-        showSpendFailure("Buy collection", "Purchase was not completed.");
+        showSpendFailure("购买收藏", "购买没有完成。");
         return;
       }
-      showSpendSuccess("Buy collection", beforeGold - afterGold, afterGold);
+      showSpendSuccess("购买收藏", beforeGold - afterGold, afterGold);
     });
   });
 }
@@ -603,15 +603,15 @@ function renderOverview() {
   const availableContracts = state.missions.filter((mission) => mission.status === "available");
   const wounded = state.roster.filter((character) => character.wound > 0);
   const stressed = state.roster.filter((character) => character.stress >= 10);
-  const availableRoster = state.roster.filter((character) => character.status === "寰呭懡");
-  const livingRoster = state.roster.filter((character) => character.status !== "闃典骸");
-  const activeRoster = livingRoster.filter((character) => character.status !== "寰呭懡");
+  const availableRoster = state.roster.filter((character) => character.status === "待命");
+  const livingRoster = state.roster.filter((character) => character.status !== "阵亡");
+  const activeRoster = livingRoster.filter((character) => character.status !== "待命");
   const totalPower = livingRoster.reduce((sum, character) => sum + calculateCharacterCombatPower(character), 0);
   const avgPower = livingRoster.length > 0 ? Math.round(totalPower / livingRoster.length) : 0;
   const readyPercent = livingRoster.length > 0 ? Math.round((availableRoster.length / livingRoster.length) * 100) : 0;
   const activePercent = livingRoster.length > 0 ? Math.round((activeRoster.length / livingRoster.length) * 100) : 0;
 
-  document.querySelector("#contract-overview-badge").textContent = `${activeContracts.length} 鎵ц / ${availableContracts.length} 鍙帴`;
+  document.querySelector("#contract-overview-badge").textContent = `${activeContracts.length} 执行 / ${availableContracts.length} 可接`;
   document.querySelector("#contract-overview").innerHTML =
     activeContracts.length > 0
       ? activeContracts
@@ -704,12 +704,12 @@ function isEntryOnDay(entry, day) {
 
 function renderCalendarEntry(entry) {
   const label = {
-    active: "鎵ц",
-    done: "瀹屾垚",
-    failed: "澶辫触",
-    missed: "閿欒繃",
-    planned: "璁″垝",
-  }[entry.status] ?? "璁板綍";
+    active: "执行中",
+    done: "已完成",
+    failed: "失败",
+    missed: "错过",
+    planned: "计划",
+  }[entry.status] ?? "记录";
   return `
     <div class="calendar-event ${entry.status}">
       <span>${label}</span>
@@ -752,10 +752,10 @@ function renderBuildings() {
           <p class="muted">${building.description}</p>
           ${
             isStackedDefense
-              ? `<p class="muted">Build again: +${economyConfig.facilities.defensePowerPerLevel} defense power · Cost ${cost} gold</p>`
+              ? `<p class="muted">继续修建：防御战斗力 +${economyConfig.facilities.defensePowerPerLevel} · 费用 ${cost} 金</p>`
               : level < 7
-                ? `<p class="muted">Next stage: ${nextRank} · Cost ${cost} gold</p>`
-              : `<p class="muted">Max level reached.</p>`
+                ? `<p class="muted">下一阶段：${nextRank}级 · 费用 ${cost} 金</p>`
+                : `<p class="muted">已达到最高等级。</p>`
           }
           <div class="button-row">
             ${renderFacilityAction(id, level, cost, disabled)}
@@ -842,10 +842,7 @@ function openFacilityDialog(id) {
     })(),
     defenses: `基地遭遇突袭时提供额外战斗力。当前已建 ${level} 座，防御战斗力 +${(state.buildings.defenses ?? 0) * economyConfig.facilities.defensePowerPerLevel}。`,
     tavern: "提高招募池规模，便于寻找更多候选佣兵。",
-    barracks: `鎻愰珮鍙泧浣ｄ剑鍏典笂闄愩€傚綋鍓嶄笂闄?${
-      economyConfig.facilities.baseMercenaryLimit +
-      (state.buildings.barracks ?? 0) * economyConfig.facilities.barracksMercenaryLimitPerLevel
-    } 人，每升 1 级 +${economyConfig.facilities.barracksMercenaryLimitPerLevel}。`,
+    barracks: `提高可雇佣佣兵上限。当前上限 ${economyConfig.facilities.baseMercenaryLimit + (state.buildings.barracks ?? 0) * economyConfig.facilities.barracksMercenaryLimitPerLevel} 人，每升 1 级 +${economyConfig.facilities.barracksMercenaryLimitPerLevel}。`,
     infirmary: "每日推进时自动降低佣兵压力，但方式不体面，也不干净。",
     intel: `每级降低调查契约情报费用 ${Math.round(economyConfig.facilities.intelInvestigationDiscountPerLevel * 100)}%，总折扣仍受调查折扣上限限制。`,
   }[id] ?? "基础设施效果待扩展。";
@@ -853,7 +850,7 @@ function openFacilityDialog(id) {
   document.querySelector("#facility-dossier").innerHTML = `
     <div class="dossier-top">
       <div>
-        <div class="dossier-code">BASE FACILITY / ${id.toUpperCase()}</div>
+        <div class="dossier-code">基础设施 / ${id.toUpperCase()}</div>
         <h2 class="dossier-title">${building.name}</h2>
         <p class="muted">${
           isStackedDefense
@@ -956,8 +953,8 @@ function handleFacilityUpgradeSpend(button) {
 
 function handleBlackMarketSpend(button) {
   const kind = button.dataset.buyBlackMarketItem;
-  const labels = { supplies: "榛戝競閲囪喘琛ョ粰", weapon: "榛戝競璐拱姝﹀櫒", armor: "榛戝競璐拱闃插叿", mecha: "榛戝競璐拱鏈虹敳" };
-  const action = labels[kind] ?? "榛戝競閲囪喘";
+  const labels = { supplies: "黑市采购补给", weapon: "黑市购买武器", armor: "黑市购买防具", mecha: "黑市购买机甲" };
+  const action = labels[kind] ?? "黑市采购";
   const cost = getCostFromText(button.textContent);
   if (!confirmGoldSpend(action, cost)) return false;
   const before = getState();
@@ -975,7 +972,7 @@ function handleBlackMarketSpend(button) {
 }
 
 function handleHospitalSpend(button) {
-  const action = "Medical treatment";
+  const action = "医疗中心治疗";
   const cost = getCostFromText(button.textContent);
   if (!confirmGoldSpend(action, cost)) return false;
   const before = getState();
@@ -988,8 +985,9 @@ function handleHospitalSpend(button) {
     showSpendFailure(action, getGoldFailureReason(beforeGold, cost));
     return false;
   }
-  const curedText = beforeConditions > afterConditions ? `, cured ${beforeConditions - afterConditions} negative status` : ", no condition was cured this time";
-  showToast(`${action} complete, spent ${beforeGold - after.gold} gold${curedText}, remaining ${after.gold} gold.`, beforeConditions > afterConditions ? "good" : "warning");
+  const cured = beforeConditions - afterConditions;
+  const curedText = cured > 0 ? `，治愈 ${cured} 个负面状态` : "，本次没有治愈负面状态";
+  showToast(`${action}完成，花费 ${beforeGold - after.gold} 金${curedText}，剩余 ${after.gold} 金。`, cured > 0 ? "good" : "warning");
   return true;
 }
 

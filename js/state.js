@@ -88,11 +88,12 @@ export function normalizeCharacterAvatars(draft = state) {
   draft.recruitPool = (draft.recruitPool ?? []).map((character) => normalizeCharacterState(character, usedAvatarKeys));
 }
 
+
 export function createInitialState() {
   return {
     gameStatus: "active",
     objective: {
-      title: "收藏室完工",
+      title: "填满私人收藏室",
       targetReputation: 60,
     },
     day: 1,
@@ -108,7 +109,7 @@ export function createInitialState() {
     recruitPool: [createInitialMercenary(), createInitialMercenary(), createInitialMercenary()],
     missions: Array.from({ length: economyConfig.contracts.missionBoard.availableLimit }, () => createInitialMission()),
     timeline: [
-      { id: createId(), day: 1, type: "system", title: "事务所挂牌", status: "done", detail: "第一批契约送达。经营开始。" },
+      { id: createId(), day: 1, type: "system", title: "事务所挂牌", status: "待命", detail: "第一批契约送达。经营开始。" },
     ],
     buildings: { tavern: 1, barracks: 0, defenses: 0, infirmary: 0, intel: 0 },
     mechs: [],
@@ -146,8 +147,8 @@ function getStorage() {
 
 function normalizeState(savedState) {
   savedState.gameStatus ??= "active";
-  savedState.objective ??= { title: "收藏室完工", targetReputation: 60 };
-  savedState.objective.title ??= "收藏室完工";
+  savedState.objective ??= { title: "填满私人收藏室", targetReputation: 60 };
+  savedState.objective.title ??= "填满私人收藏室";
   savedState.objective.targetReputation ??= 60;
   delete savedState.objective.deadline;
   savedState.day ??= 1;
@@ -251,7 +252,7 @@ function createInitialMission() {
     type: type.name,
     typeCode: type.code,
     actionType: type.actionType,
-    acquisition: "广撒网",
+    acquisition: "广播网",
     difficulty,
     powerRequirement,
     powerIntelLevel: 0,
@@ -426,11 +427,12 @@ function randomIssuer() {
   return randomItem(otherContractIssuers);
 }
 
+
 function randomContractSubject(type) {
   const subjects = {
-    护送: ["补给车队", "边境医师", "失联证人", "净水芯片"],
-    运输: ["封存货箱", "机兵零件", "加密药剂", "旧联邦账册"],
-    侦察: ["坠落带", "敌方前哨", "异常信号", "空港残骸"],
+    护送: ["补给车队", "边境医生", "失联证人", "净水芯片"],
+    运输: ["封存货箱", "机兵零件", "加密药剂", "旧联邦账本"],
+    侦察: ["坠落哨站", "敌方前哨", "异常信号", "空港残骸"],
     搜索: ["失踪信使", "地下档案", "污染源头", "遗迹入口"],
     回收: ["黑匣子", "样本罐", "无人机残骸", "债务芯片"],
     歼灭: ["异源兽巢", "劫掠队", "叛逃安保组", "失控机兵"],
