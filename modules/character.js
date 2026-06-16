@@ -12,7 +12,7 @@
   shortEpithetAdjectives,
   shortEpithetNouns,
 } from "../data/sampleData.js";
-import { getTrainingSkill, trainingPools } from "../data/trainingPools.js";
+import { getAllTrainingSkills, getTrainingSkill, trainingPools } from "../data/trainingPools.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { getPromotionCombatPowerGain } from "./combatPower.js";
 import { getState, normalizeCharacterAvatars, updateState } from "../js/state.js";
@@ -35,21 +35,25 @@ export function getTrainingPools() {
   return trainingPools;
 }
 
-export function createMercenary(customName = "") {
+export function createMercenary(customName = "", options = {}) {
+  const rank = options.rank ?? drawRecruitRank(options.tavernLevel ?? 0);
+  const template = getRecruitRankTemplate(rank);
+  const combatPowerRange = template.combatPower ?? [17, 28];
+  const skillCount = Math.max(0, template.skillCount ?? 0);
   return {
     id: createId(),
     name: customName || createRandomName(),
     callsign: createCallsign(),
     personalReputation: randomNumber(0, 2),
-    rank: "无",
+    rank,
     dossier: createDossier(),
     missionRecord: { completed: 0, failed: 0, survived: 0 },
     bounty: randomNumber(0, 24) * 10,
     debt: randomNumber(0, 18) * 5,
     signingMultiplier: randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax),
     equipment: createEmptyEquipment(),
-    skills: [],
-    combatPower: randomNumber(17, 28),
+    skills: drawRecruitSkills(skillCount),
+    combatPower: randomNumber(combatPowerRange[0], combatPowerRange[1]),
     status: "待命",
   };
 }
@@ -88,11 +92,12 @@ export function hireRecruit(id) {
 export function refreshRecruits() {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
-    const cost = economyConfig.recruitment.refreshCost;
+    const tavernLevel = draft.facilities.tavern ?? 0;
+    const cost = getRecruitRefreshCost(tavernLevel);
     if (draft.gold < cost) return;
     const poolSize = 2 + (draft.facilities.tavern ?? 0);
     draft.gold -= cost;
-    draft.recruitPool = Array.from({ length: poolSize }, () => createMercenary());
+    draft.recruitPool = Array.from({ length: poolSize }, () => createMercenary("", { tavernLevel: draft.facilities.tavern ?? 0 }));
     normalizeCharacterAvatars(draft);
     draft.log.push(`第 ${draft.day} 天：酒馆送来了一批新的候选人。`);
   });
@@ -196,7 +201,7 @@ export function eraseMercenaryReputation(characterId) {
 }
 
 
-export function dismissMercenary(characterId) {
+export function dismissMercenary(characterId, options = {}) {
   let dismissed = null;
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
@@ -205,6 +210,9 @@ export function dismissMercenary(characterId) {
     if (character.status !== "待命" && !isDeadStatus(character.status)) return;
 
     const wasDead = isDeadStatus(character.status);
+    const dismissalCost = wasDead ? 0 : Math.max(0, Math.floor(options.cost ?? 0));
+    if (!wasDead && draft.gold < dismissalCost) return;
+    if (!wasDead) draft.gold -= dismissalCost;
     Object.values(character.equipment ?? {})
       .filter(Boolean)
       .forEach((item) => draft.inventory.push(item));
@@ -212,7 +220,7 @@ export function dismissMercenary(characterId) {
     draft.roster = draft.roster.filter((item) => item.id !== characterId);
     draft.log.push(wasDead
       ? `第 ${draft.day} 天：${character.name} 的尸体已被妥善处理，装备已收回仓库。`
-      : `第 ${draft.day} 天：${character.name} 被解雇，装备已收回仓库。`);
+      : `第 ${draft.day} 天：支付 ${dismissalCost} 金后，${character.name} 被解雇，装备已收回仓库。`);
     dismissed = character;
   });
   return dismissed;
@@ -232,6 +240,12 @@ export function recruitCost(character) {
   const config = economyConfig.recruitment;
   const multiplier = character.signingMultiplier ?? config.signingMultiplierMin;
   return Math.max(1, identityFee(character) * multiplier);
+}
+
+export function getRecruitRefreshCost(tavernLevel = 0) {
+  const table = economyConfig.recruitment.refreshCostByTavernLevel ?? [economyConfig.recruitment.refreshCost ?? 15];
+  const index = Math.max(0, Math.min(tavernLevel, table.length - 1));
+  return table[index] ?? economyConfig.recruitment.refreshCost ?? 15;
 }
 
 export function getMercenaryLimit(state = getState()) {
@@ -346,6 +360,30 @@ function createRandomName() {
   const surname = randomItem(profile.surnames);
   if (profile.order === "surname-first") return `${surname}${profile.joiner ?? ""}${given}`;
   return `${given}${profile.joiner ?? " "}${surname}`;
+}
+
+function getRecruitRankTemplate(rank) {
+  const templates = economyConfig.recruitment.rankTemplates ?? {};
+  return templates[rank] ?? templates.无 ?? { combatPower: [17, 28], skillCount: 0 };
+}
+
+function drawRecruitRank(tavernLevel = 0) {
+  const tables = economyConfig.recruitment.tavernRankWeightsByLevel ?? [{ 无: 100 }];
+  const table = tables[Math.max(0, Math.min(tavernLevel, tables.length - 1))] ?? tables[0];
+  const entries = Object.entries(table).filter(([, weight]) => Number(weight) > 0);
+  const total = entries.reduce((sum, [, weight]) => sum + Number(weight), 0);
+  if (total <= 0) return "无";
+  let roll = randomNumber(1, total);
+  for (const [rank, weight] of entries) {
+    roll -= Number(weight);
+    if (roll <= 0) return rank;
+  }
+  return entries[0]?.[0] ?? "无";
+}
+
+function drawRecruitSkills(count = 0) {
+  if (count <= 0) return [];
+  return shuffle(getAllTrainingSkills()).slice(0, count);
 }
 
 function drawWeightedNameProfile() {

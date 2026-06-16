@@ -9,6 +9,7 @@ import {
   getEquipmentSlots,
   getLivingMercenaryCount,
   getMercenaryLimit,
+  getRecruitRefreshCost as calculateRecruitRefreshCost,
   getRecruitPool,
   getTrainingPools,
   hireRecruit,
@@ -229,7 +230,15 @@ function handleRefreshRecruits() {
 }
 
 function getRecruitRefreshCost() {
-  return economyConfig.recruitment.refreshCost;
+  return calculateRecruitRefreshCost(getState().facilities?.tavern ?? 0);
+}
+
+function getEraseReputationCost(character) {
+  return (character?.personalReputation ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint;
+}
+
+function getDismissMercenaryCost(character) {
+  return recruitCost(character) + getEraseReputationCost(character);
 }
 
 export function openCharacterSheet(id, options = {}) {
@@ -347,7 +356,7 @@ function renderCharacterSheet(id) {
   dossier.querySelectorAll("[data-erase-reputation]").forEach((button) => {
     button.addEventListener("click", () => {
       const target = getCharacter(button.dataset.eraseReputation);
-      const cost = (target?.personalReputation ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint;
+      const cost = getEraseReputationCost(target);
       if (getState().gold < cost) {
         showInsufficientFunds(getState().gold, cost);
         return;
@@ -368,13 +377,26 @@ function renderCharacterSheet(id) {
     button.addEventListener("click", () => {
       const target = getCharacter(button.dataset.dismissMercenary);
       if (!target) return;
+      const dead = isDeadStatus(target.status);
+      const cost = dead ? 0 : getDismissMercenaryCost(target);
+      if (!dead && getState().gold < cost) {
+        showInsufficientFunds(getState().gold, cost);
+        return;
+      }
       const confirmed = window.confirm(
-        isDeadStatus(target.status)
+        dead
           ? `确认收尸 ${target.name}？装备会回到仓库，财务系统会停止把尸体当作员工。`
-          : `确认解雇 ${target.name}？装备会回到仓库，但该佣兵会离开基地。`
+          : `确认支付 ${cost} 金解雇 ${target.name}？费用包含签字费赔付和黑历史清理，装备会回到仓库。`
       );
       if (!confirmed) return;
-      dismissMercenary(button.dataset.dismissMercenary);
+      const beforeGold = getState().gold;
+      const dismissed = dismissMercenary(button.dataset.dismissMercenary, { cost });
+      const afterGold = getState().gold;
+      if (!dismissed) {
+        showSpendFailure(dead ? "收尸" : "解雇佣兵", dead ? "收尸未完成。" : "解雇未完成。");
+        return;
+      }
+      if (!dead) showSpendSuccess("解雇佣兵", beforeGold - afterGold, afterGold);
       document.querySelector("#mercenary-dialog").close();
       openDossierCharacterId = null;
       requestRender();
@@ -411,6 +433,8 @@ function renderAttributesTab(character) {
   const dead = isDeadStatus(character.status);
   const canDismiss = (character.status === "\u5f85\u547d" || dead) && state.gameStatus === "active";
   const dismissLabel = dead ? "\u6536\u5c38" : "\u89e3\u96c7\u8be5\u4f63\u5175";
+  const blackHistoryCost = getEraseReputationCost(character);
+  const dismissalCost = dead ? 0 : getDismissMercenaryCost(character);
   return `
     <div class="dossier-grid">
       ${renderCombatPowerBreakdown(character)}
@@ -419,7 +443,8 @@ function renderAttributesTab(character) {
         <div class="field-list">
           <div class="field"><span>\u4e2a\u4eba\u58f0\u671b</span><strong>${character.personalReputation ?? 0}</strong></div>
           <div class="field"><span>\u6708\u9690\u79d8\u8d39</span><strong>${character.personalReputation ?? 0} \u91d1</strong></div>
-          <div class="field"><span>\u62b9\u53bb\u9ed1\u5386\u53f2</span><strong>${(character.personalReputation ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint} \u91d1</strong></div>
+          <div class="field"><span>\u62b9\u53bb\u9ed1\u5386\u53f2</span><strong>${blackHistoryCost} \u91d1</strong></div>
+          <div class="field"><span>${dead ? "\u6536\u5c38\u8d39\u7528" : "\u89e3\u96c7\u8d39\u7528"}</span><strong>${dismissalCost} \u91d1</strong></div>
         </div>
         <button class="ghost-button full-width-button" data-erase-reputation="${character.id}" ${(character.personalReputation ?? 0) > 0 && state.gameStatus === "active" ? "" : "disabled"} type="button">\u4e00\u6b21\u6027\u62b9\u53bb\u8be5\u4f63\u5175\u5168\u90e8\u4e2a\u4eba\u58f0\u671b</button>
         <button class="ghost-button full-width-button" data-dismiss-mercenary="${character.id}" ${canDismiss ? "" : "disabled"} type="button">${dismissLabel}</button>

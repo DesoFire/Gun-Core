@@ -194,8 +194,9 @@ export const economyConfig = {
   },
 
   recruitment: {
-    // 刷新招募池费用。
+    // 招募池刷新费用。按酒馆等级读取，下标 0=未解锁，1=F级，依次到 7=S级。
     refreshCost: 15,
+    refreshCostByTavernLevel: [15, 20, 28, 40, 58, 82, 115, 160],
     // 签字费 = 该佣兵当前日薪 * signingMultiplier。倍率在生成佣兵时固定，通常为 3-7 倍。
     signingMultiplierMin: 3,
     signingMultiplierMax: 7,
@@ -203,11 +204,44 @@ export const economyConfig = {
     baseCost: 24,
     perRank: 6,
     perTag: 2,
+    // 招募生成模板。基础战斗力不包含武器、防具、伤势、压力和技能修正。
+    rankTemplates: {
+      无: { combatPower: [18, 28], skillCount: 0 },
+      F: { combatPower: [30, 42], skillCount: 1 },
+      E: { combatPower: [46, 62], skillCount: 2 },
+      D: { combatPower: [70, 90], skillCount: 3 },
+      C: { combatPower: [106, 134], skillCount: 4 },
+      B: { combatPower: [166, 210], skillCount: 5 },
+      A: { combatPower: [280, 360], skillCount: 6 },
+      S: { combatPower: [480, 620], skillCount: 7 },
+    },
+    // 酒馆等级对应不同评级佣兵的刷新权重。数组下标 0=未解锁，1=F级，依次到 7=S级。
+    tavernRankWeightsByLevel: [
+      { 无: 100 },
+      { 无: 80, F: 20 },
+      { 无: 55, F: 35, E: 10 },
+      { 无: 35, F: 35, E: 22, D: 8 },
+      { 无: 20, F: 30, E: 28, D: 16, C: 6 },
+      { 无: 12, F: 22, E: 28, D: 22, C: 12, B: 4 },
+      { 无: 8, F: 15, E: 22, D: 25, C: 18, B: 9, A: 3 },
+      { 无: 5, F: 10, E: 17, D: 24, C: 22, B: 14, A: 6, S: 2 },
+    ],
   },
 
   facilities: {
-    // 升级费用：建筑基础 cost + 当前等级 * upgradePerCurrentLevel。解锁 F 级使用建筑 unlockCost/cost。
+    // 默认升级费用兜底：未单独配置的设施使用建筑基础 cost + 当前等级 * upgradePerCurrentLevel。
     upgradePerCurrentLevel: 55,
+    // 不同基础设施的升级费用表。数组下标 0=解锁到F级，1=升到E级，依次到 6=升到S级。
+    // 防御设施不使用评级，表格代表第 1、2、3...座的修建费用，超出后按最后一档递增。
+    upgradeCostsByFacility: {
+      tavern: [70, 115, 185, 295, 470, 750, 1200],
+      barracks: [85, 130, 195, 290, 430, 640, 950],
+      blackMarket: [95, 155, 250, 400, 640, 1020, 1600],
+      hospital: [110, 180, 295, 475, 760, 1220, 1950],
+      entertainmentCenter: [80, 125, 195, 305, 480, 760, 1200],
+      intel: [90, 150, 245, 395, 635, 1020, 1640],
+      defenses: [100, 145, 210, 305, 445, 650, 950],
+    },
     // 基础设施日维护费全局倍率。用于整体压低设施维护压力。
     upkeepMultiplier: 0.35,
     // 初始佣兵上限。兵营每提升 1 级，上限 +1。
@@ -215,21 +249,57 @@ export const economyConfig = {
     barracksMercenaryLimitPerLevel: 1,
     // 情报室每级降低调查费用的比例，最高不超过 missions.costs.maxInvestigationDiscount。
     intelInvestigationDiscountPerLevel: 0.08,
-    // 医疗中心按“单个物理负面状态”收费并尝试移除。等级越高，可处理的伤势点数越高，成功率越高。
+    // 医疗中心按“单个物理负面状态”收费并尝试移除。
+    // 规则读取 woundPoints：先看设施等级能否处理该点数，再按点数查治疗费和成功率。
     hospitalTreatment: {
-      baseCost: 8,
-      costPerPoint: 5,
-      severityMultiplier: { light: 1, medium: 1.25, heavy: 1.6 },
-      maxPointsByLevel: [2, 4, 6, 8, 10, 12, 99],
-      successChanceByLevel: [72, 80, 86, 91, 95, 98, 100],
+      maxPointsByLevel: [1, 2, 4, 5, 7, 8, 9],
+      costByPoint: {
+        1: 1,
+        2: 4,
+        3: 8,
+        4: 16,
+        5: 32,
+        6: 64,
+        7: 128,
+        8: 256,
+        9: 512,
+      },
+      successChanceByPointByLevel: [
+        { 1: 72 },
+        { 1: 80, 2: 76 },
+        { 1: 86, 2: 82, 3: 78, 4: 74 },
+        { 1: 91, 2: 87, 3: 83, 4: 79, 5: 75 },
+        { 1: 95, 2: 91, 3: 87, 4: 83, 5: 79, 6: 75, 7: 71 },
+        { 1: 98, 2: 94, 3: 90, 4: 86, 5: 82, 6: 78, 7: 74, 8: 70 },
+        { 1: 100, 2: 96, 3: 92, 4: 88, 5: 84, 6: 80, 7: 76, 8: 72, 9: 68 },
+      ],
     },
-    // 娱乐中心按“单个精神负面状态”收费并尝试移除。等级越高，可处理的压力点数越高，成功率越高。
+    // 娱乐中心按“单个精神负面状态”收费并尝试移除。
+    // 规则读取 stressPoints，配置方式与医疗中心相同。
     entertainmentCenterTreatment: {
-      baseCost: 6,
-      costPerPoint: 6,
-      severityMultiplier: { light: 1, medium: 1.3, heavy: 1.75 },
-      maxPointsByLevel: [2, 4, 6, 8, 10, 12, 99],
-      successChanceByLevel: [68, 76, 83, 89, 94, 98, 100],
+      maxPointsByLevel: [1, 2, 4, 5, 7, 8, 11],
+      costByPoint: {
+        1: 1,
+        2: 4,
+        3: 8,
+        4: 16,
+        5: 32,
+        6: 64,
+        7: 128,
+        8: 256,
+        9: 512,
+        10: 1024,
+        11: 2048,
+      },
+      successChanceByPointByLevel: [
+        { 1: 68 },
+        { 1: 76, 2: 72 },
+        { 1: 83, 2: 79, 3: 75, 4: 71 },
+        { 1: 89, 2: 85, 3: 81, 4: 77, 5: 73 },
+        { 1: 94, 2: 90, 3: 86, 4: 82, 5: 78, 6: 74, 7: 70 },
+        { 1: 98, 2: 94, 3: 90, 4: 86, 5: 82, 6: 78, 7: 74, 8: 70 },
+        { 1: 100, 2: 96, 3: 92, 4: 88, 5: 84, 6: 80, 7: 76, 8: 72, 9: 68, 10: 64, 11: 60 },
+      ],
     },
     // 防御设施在基地遇袭时提供固定基地战斗力。
     defensePowerPerLevel: 18,

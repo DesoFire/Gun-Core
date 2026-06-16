@@ -270,8 +270,8 @@ function treatNegativeConditions({ facilityId, category, config, sourceName, emp
     if (draft.gold < plan.cost) return;
     draft.gold -= plan.cost;
     let cured = 0;
-    plan.entries.forEach(({ character, condition }) => {
-      if (randomNumber(1, 100) > plan.successChance) return;
+    plan.entries.forEach(({ character, condition, successChance }) => {
+      if (randomNumber(1, 100) > successChance) return;
       character.conditions = (character.conditions ?? []).filter((entry) => entry.id !== condition.id);
       cured += 1;
     });
@@ -368,6 +368,12 @@ export function getFacilityRankLabel(level) {
 export function getFacilityUpgradeCost(id, level) {
   const facility = facilities[id];
   if (!facility) return 0;
+  const table = economyConfig.facilities.upgradeCostsByFacility?.[id];
+  if (Array.isArray(table) && table.length > 0) {
+    const index = level <= 0 ? 0 : Math.min(level, table.length - 1);
+    const value = table[index];
+    if (value != null) return value;
+  }
   return level <= 0 ? facility.unlockCost ?? facility.cost : facility.cost + level * economyConfig.facilities.upgradePerCurrentLevel;
 }
 
@@ -388,7 +394,6 @@ export function getBlackMarketItemCost(kind, rank) {
 function createTreatmentPlan(draft, { facilityId, category, config, characterId = null }) {
   const level = draft.facilities?.[facilityId] ?? 0;
   const maxPoints = getTreatmentMaxPoints(level, config);
-  const successChance = getTreatmentSuccessChance(level, config);
   const entries = [];
   draft.roster
     .filter((character) => !isDeadStatus(character.status))
@@ -397,10 +402,18 @@ function createTreatmentPlan(draft, { facilityId, category, config, characterId 
       (character.conditions ?? [])
         .filter((condition) => condition.category === category)
         .filter((condition) => getTreatmentConditionPoints(condition, category) <= maxPoints)
-        .forEach((condition) => entries.push({ character, condition }));
+        .forEach((condition) =>
+          entries.push({
+            character,
+            condition,
+            points: getTreatmentConditionPoints(condition, category),
+            cost: getTreatmentConditionCost(condition, category, config),
+            successChance: getTreatmentSuccessChance(level, condition, category, config),
+          })
+        );
     });
-  const cost = entries.reduce((sum, entry) => sum + getTreatmentConditionCost(entry.condition, category, config), 0);
-  return { entries, cost, successChance, maxPoints };
+  const cost = entries.reduce((sum, entry) => sum + entry.cost, 0);
+  return { entries, cost, maxPoints };
 }
 
 function getTreatmentMaxPoints(level, config) {
@@ -410,7 +423,14 @@ function getTreatmentMaxPoints(level, config) {
   return values[index] ?? 1;
 }
 
-function getTreatmentSuccessChance(level, config) {
+function getTreatmentSuccessChance(level, condition, category, config) {
+  const points = getTreatmentConditionPoints(condition, category);
+  const table = config?.successChanceByPointByLevel;
+  if (Array.isArray(table)) {
+    const levelTable = table[Math.max(0, Math.min(level - 1, table.length - 1))] ?? {};
+    const chance = levelTable[points] ?? levelTable[String(points)];
+    if (chance != null) return chance;
+  }
   const values = config?.successChanceByLevel ?? [70, 76, 82, 88, 93, 97, 100];
   const index = Math.max(0, Math.min(level - 1, values.length - 1));
   return values[index] ?? 65;
@@ -422,6 +442,8 @@ function getTreatmentConditionPoints(condition, category) {
 
 function getTreatmentConditionCost(condition, category, config) {
   const points = getTreatmentConditionPoints(condition, category);
+  const tableCost = config?.costByPoint?.[points] ?? config?.costByPoint?.[String(points)];
+  if (tableCost != null) return tableCost;
   const base = config?.baseCost ?? 8;
   const perPoint = config?.costPerPoint ?? 5;
   const severityMultiplier = config?.severityMultiplier?.[condition.severity] ?? 1;
