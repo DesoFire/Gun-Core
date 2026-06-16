@@ -1,7 +1,7 @@
 import {
   canEquipItemToSlot,
-  equipItem,
   dismissMercenary,
+  equipItem,
   eraseMercenaryReputation,
   getCharacter,
   getCharacters,
@@ -15,9 +15,10 @@ import {
   renderCharacterDossier,
   spendEnhancementPoint,
   unequipItem,
+  updateCharacter,
 } from "../modules/character.js";
 import { getInventory } from "../modules/inventory.js";
-import { calculateCharacterCombatPower } from "../modules/combatPower.js";
+import { calculateEffectiveCharacterCombatPower, getCombatPowerBreakdown } from "../modules/combatPower.js";
 import { getWeaponTagNames } from "../modules/weaponGenerator.js";
 import { getState } from "../js/state.js";
 import { identityFee } from "../modules/faction.js";
@@ -33,7 +34,6 @@ let selectedEquipmentSlot = "weapon";
 
 export function initCharacterUI({ onRenderNeeded }) {
   requestRender = onRenderNeeded;
-
   document.querySelector("#refresh-recruits").addEventListener("click", handleRefreshRecruits);
 }
 
@@ -53,7 +53,7 @@ function renderRoster() {
   const container = document.querySelector("#roster-list");
   const roster = getCharacters();
   if (roster.length === 0) {
-    container.innerHTML = `<p class="muted">还没有佣兵。先去招募或创建玩家角色。</p>`;
+    container.innerHTML = `<p class="muted">还没有佣兵。先去招募一批能替你承担后果的人。</p>`;
     return;
   }
 
@@ -73,8 +73,7 @@ export function renderCharacterCard(character, options = {}) {
   const isDispatch = options.mode === "dispatch";
   const selected = Boolean(options.selected);
   const rankLabel = formatRank(character.rank);
-  const combatPower = calculateCharacterCombatPower(character);
-  const weaponPower = character.equipment?.weapon?.power ?? 0;
+  const finalPower = calculateEffectiveCharacterCombatPower(character);
   return `
     <article class="card character-card ${isDispatch ? "dispatch-character-card" : ""} ${selected ? "selected" : ""}" data-open-character="${character.id}">
       <div class="card-header">
@@ -82,7 +81,7 @@ export function renderCharacterCard(character, options = {}) {
           ${renderMercenaryAvatar(character)}
           <div>
             <p class="card-title">${character.name}</p>
-            <p class="muted">${character.isPlayer ? "玩家角色 · " : ""}${character.careerCategoryName ?? "未分类"} / ${character.className} · ${rankLabel}</p>
+            <p class="muted">${character.className} · ${rankLabel}</p>
           </div>
         </div>
         ${
@@ -93,15 +92,15 @@ export function renderCharacterCard(character, options = {}) {
       </div>
       ${renderCharacterTagRow(character)}
       <div class="character-kpi-grid">
-        <div class="character-kpi primary"><span>总战力</span><strong>${combatPower}</strong><small>基础 ${character.combatPower ?? 0} / 武器 +${weaponPower}</small></div>
+        <div class="character-kpi primary"><span>战力</span><strong>${finalPower}</strong></div>
         <div class="character-kpi ${character.stress >= 60 ? "danger" : character.stress >= 30 ? "warning" : ""}"><span>压力</span><strong>${character.stress}</strong></div>
         <div class="character-kpi ${character.wound > 0 ? "danger" : ""}"><span>伤势</span><strong>${character.wound}</strong></div>
         <div class="character-kpi"><span>身份费</span><strong>${identityFee(character)}/天</strong></div>
       </div>
       <div class="character-meta-row">
         <span>个人声望 ${character.personalReputation ?? 0}</span>
-        <span>正面 ${getPositiveStatusCount(character)}</span>
-        <span>负面 ${character.conditions?.length ?? 0}</span>
+        <span>正面状态 ${getPositiveStatusCount(character)}</span>
+        <span>负面状态 ${character.conditions?.length ?? 0}</span>
       </div>
       ${
         isDispatch
@@ -124,7 +123,7 @@ function renderRecruits() {
   container.innerHTML = getRecruitPool()
     .map((character) => {
       const cost = recruitCost(character);
-      const combatPower = calculateCharacterCombatPower(character);
+      const finalPower = calculateEffectiveCharacterCombatPower(character);
       const disabled = state.gameStatus !== "active" || isFull ? "disabled" : "";
       return `
         <article class="card recruit-card">
@@ -133,13 +132,13 @@ function renderRecruits() {
               ${renderMercenaryAvatar(character)}
               <div>
                 <p class="card-title">${character.name}</p>
-                <p class="muted">${character.careerCategoryName ?? "未分类"} / ${character.className}</p>
+                <p class="muted">${character.className} · ${formatRank(character.rank)}</p>
               </div>
             </div>
             <button class="primary-button" data-recruit="${character.id}" ${disabled} type="button">招募 ${cost} 金</button>
           </div>
           <div class="character-kpi-grid recruit-kpis">
-            <div class="character-kpi primary"><span>战力</span><strong>${combatPower}</strong></div>
+            <div class="character-kpi primary"><span>战力</span><strong>${finalPower}</strong></div>
             <div class="character-kpi"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
             <div class="character-kpi"><span>日薪</span><strong>${identityFee(character)}/天</strong></div>
             <div class="character-kpi cost"><span>雇佣费</span><strong>${cost}</strong></div>
@@ -230,29 +229,26 @@ export function openCharacterSheet(id, options = {}) {
 function renderCharacterSheet(id) {
   const character = getCharacter(id);
   if (!character) return;
-  const combatPower = calculateCharacterCombatPower(character);
-  const assignedMission =
-    character.status.startsWith("履行") || character.status.startsWith("执行") ? character.status : "无";
-
+  const breakdown = getCombatPowerBreakdown(character);
   const dossier = document.querySelector("#mercenary-dossier");
   dossier.innerHTML = `
     <div class="dossier-top">
       <div class="identity-line identity-line-large dossier-identity">
-          ${renderMercenaryAvatar(character, { size: "large" })}
-          <div>
-            <div class="dossier-code">SSS-GUILD DOSSIER / FIELD SHEET</div>
-            <button class="editable-title" data-edit-character-name="${character.id}" title="点击重命名" type="button">${character.name}</button>
-            <button class="editable-callsign" data-edit-character-callsign="${character.id}" title="点击修改外号" type="button">外号：${character.callsign ?? "未登记"}</button>
-            <div class="dossier-chip-row">
-              ${renderCareerChip(character)}
-              <span class="career-chip" title="具体职业决定初始战力、标签和职业加成。">${character.className}</span>
-              ${renderStatusSwitch(character.status)}
-            </div>
+        ${renderMercenaryAvatar(character, { size: "large" })}
+        <div>
+          <div class="dossier-code">SSS-GUILD DOSSIER / FIELD SHEET</div>
+          <button class="editable-title" data-edit-character-name="${character.id}" title="点击重命名" type="button">${character.name}</button>
+          <button class="editable-callsign" data-edit-character-callsign="${character.id}" title="点击修改外号" type="button">外号：${character.callsign ?? "未登记"}</button>
+          <div class="dossier-chip-row">
+            ${renderCareerChip(character)}
+            <span class="career-chip" title="具体职业会影响职业加成和契约中的建议职业匹配。">${character.className}</span>
+            ${renderStatusSwitch(character.status)}
           </div>
         </div>
+      </div>
       <div class="dossier-head-stats">
         ${renderRankBadge(character.rank)}
-        <div class="mini-stat"><span>战力</span><strong>${combatPower}</strong></div>
+        <div class="mini-stat primary"><span>最终战力</span><strong>${breakdown.final}</strong></div>
         <div class="mini-stat ${character.stress >= 60 ? "danger" : character.stress >= 30 ? "warning" : ""}"><span>压力</span><strong>${character.stress}</strong></div>
         <div class="mini-stat ${character.wound > 0 ? "danger" : ""}"><span>伤势</span><strong>${character.wound}</strong></div>
         <div class="mini-stat"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
@@ -261,6 +257,7 @@ function renderCharacterSheet(id) {
     </div>
     <div class="subtabbar" aria-label="人物卡切换">
       <button class="subtab-button ${activeDossierTab === "attributes" ? "active" : ""}" data-dossier-tab="attributes" type="button">属性</button>
+      <button class="subtab-button ${activeDossierTab === "equipment" ? "active" : ""}" data-dossier-tab="equipment" type="button">装备</button>
       <button class="subtab-button ${activeDossierTab === "archive" ? "active" : ""}" data-dossier-tab="archive" type="button">档案</button>
     </div>
     <div class="dossier-content">${renderActiveSheetTab(character)}</div>
@@ -322,17 +319,23 @@ function renderCharacterSheet(id) {
     button.addEventListener("click", () => {
       const target = getCharacter(button.dataset.dismissMercenary);
       if (!target) return;
-      const confirmed = window.confirm(`确认解雇 ${target.name}？装备会回到仓库，但该佣兵会离开基地。`);
+      const confirmed = window.confirm(
+        isDeadStatus(target.status)
+          ? `确认收尸 ${target.name}？装备会回到仓库，财务系统会停止把尸体当作员工。`
+          : `确认解雇 ${target.name}？装备会回到仓库，但该佣兵会离开基地。`
+      );
       if (!confirmed) return;
       dismissMercenary(button.dataset.dismissMercenary);
       document.querySelector("#mercenary-dialog").close();
       openDossierCharacterId = null;
+      requestRender();
     });
   });
   bindEquipmentEvents(id);
 }
 
 function renderActiveSheetTab(character) {
+  if (activeDossierTab === "equipment") return renderEquipmentTab(character);
   if (activeDossierTab === "archive") return `<div class="dossier-grid">${renderCharacterDossier(character)}</div>`;
   return renderAttributesTab(character);
 }
@@ -348,14 +351,19 @@ function editCharacterIdentity(characterId, field) {
   if (!trimmed) return;
   updateCharacter(characterId, { [field]: trimmed });
   renderCharacterSheet(characterId);
+  requestRender();
 }
 
 function renderAttributesTab(character) {
   const state = getState();
-  const canEnhance = state.gameStatus === "active" && character.status !== "阵亡" && (state.enhancementPoints ?? 0) > 0;
+  const dead = isDeadStatus(character.status);
+  const canEnhance = state.gameStatus === "active" && !dead && (state.enhancementPoints ?? 0) > 0;
+  const canDismiss = (character.status === "待命" || dead) && state.gameStatus === "active";
+  const dismissLabel = dead ? "收尸" : "解雇该佣兵";
   return `
     <div class="dossier-grid">
-      <section class="dossier-section wide">
+      ${renderCombatPowerBreakdown(character)}
+      <section class="dossier-section">
         <h3>身份风险</h3>
         <div class="field-list">
           <div class="field"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
@@ -363,16 +371,11 @@ function renderAttributesTab(character) {
           <div class="field"><span>抹去黑历史</span><strong>${(character.personalReputation ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint} 金</strong></div>
         </div>
         <button class="ghost-button full-width-button" data-erase-reputation="${character.id}" ${(character.personalReputation ?? 0) > 0 && state.gameStatus === "active" ? "" : "disabled"} type="button">一次性抹去该佣兵全部个人声望</button>
-        <button class="ghost-button full-width-button" data-dismiss-mercenary="${character.id}" ${!character.isPlayer && character.status === "待命" && state.gameStatus === "active" ? "" : "disabled"} type="button">解雇该佣兵</button>
+        <button class="ghost-button full-width-button" data-dismiss-mercenary="${character.id}" ${canDismiss ? "" : "disabled"} type="button">${dismissLabel}</button>
       </section>
       <section class="dossier-section wide">
-        <h3>技能</h3>
-        <div class="badge-row">${character.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
+        <h3>成长</h3>
         <button class="primary-button full-width-button" data-spend-enhancement="${character.id}" ${canEnhance ? "" : "disabled"} type="button">消耗基地强化点（剩余 ${state.enhancementPoints ?? 0}）</button>
-      </section>
-      <section class="dossier-section wide">
-        <h3>装备</h3>
-        ${renderEquipmentTab(character)}
       </section>
       <section class="dossier-section wide">
         <h3>正面状态</h3>
@@ -383,6 +386,25 @@ function renderAttributesTab(character) {
         ${renderConditionList(character)}
       </section>
     </div>
+  `;
+}
+
+function renderCombatPowerBreakdown(character) {
+  const breakdown = getCombatPowerBreakdown(character);
+  return `
+    <section class="dossier-section">
+      <h3>战力构成</h3>
+      <div class="field-list">
+        <div class="field"><span>基础战力</span><strong>${breakdown.base}</strong></div>
+        <div class="field"><span>装备战力</span><strong class="tag-positive">+${breakdown.equipment}</strong></div>
+        <div class="field"><span>正面状态</span><strong class="tag-positive">+${breakdown.positive}</strong></div>
+        <div class="field"><span>职业加成</span><strong class="tag-positive">+${breakdown.classBonus}</strong></div>
+        <div class="field"><span>伤势扣减</span><strong class="tag-negative">-${breakdown.injuryPenalty}</strong></div>
+        <div class="field"><span>压力扣减</span><strong class="tag-negative">-${breakdown.stressPenalty}</strong></div>
+        <div class="field"><span>负面状态</span><strong class="tag-negative">-${breakdown.conditionPenalty}</strong></div>
+        <div class="field"><span>最终战力</span><strong>${breakdown.final}</strong></div>
+      </div>
+    </section>
   `;
 }
 
@@ -471,7 +493,7 @@ function renderEquipmentTab(character) {
       <section class="dossier-section equipment-browser">
         <div class="card-header">
           <div>
-            <h3>${slots[selectedEquipmentSlot]} 可用装备</h3>
+            <h3>${slots[selectedEquipmentSlot]} · 可用装备</h3>
             <p class="muted">${slotLocked ? "双手缺失，无法获得武器战斗力。" : "当前只保留武器和防具两个槽位。"}</p>
           </div>
           <button class="ghost-button" data-unequip-slot="${selectedEquipmentSlot}" ${canAct && character.equipment[selectedEquipmentSlot] ? "" : "disabled"} type="button">卸下当前</button>
@@ -519,7 +541,7 @@ function getCandidateItems(slot) {
 }
 
 function bindEquipmentEvents(characterId) {
-  if (activeDossierTab !== "attributes") return;
+  if (activeDossierTab !== "equipment") return;
   const dossier = document.querySelector("#mercenary-dossier");
 
   dossier.querySelectorAll("[data-select-slot]").forEach((button) => {
@@ -538,6 +560,8 @@ function bindEquipmentEvents(characterId) {
       const itemId = event.dataTransfer.getData("text/plain");
       selectedEquipmentSlot = button.dataset.dropSlot;
       equipItem(characterId, selectedEquipmentSlot, itemId);
+      renderCharacterSheet(characterId);
+      requestRender();
     });
   });
 
@@ -549,10 +573,18 @@ function bindEquipmentEvents(characterId) {
   });
 
   dossier.querySelectorAll("[data-equip-item]").forEach((button) => {
-    button.addEventListener("click", () => equipItem(characterId, selectedEquipmentSlot, button.dataset.equipItem));
+    button.addEventListener("click", () => {
+      equipItem(characterId, selectedEquipmentSlot, button.dataset.equipItem);
+      renderCharacterSheet(characterId);
+      requestRender();
+    });
   });
   dossier.querySelectorAll("[data-unequip-slot]").forEach((button) => {
-    button.addEventListener("click", () => unequipItem(characterId, button.dataset.unequipSlot));
+    button.addEventListener("click", () => {
+      unequipItem(characterId, button.dataset.unequipSlot);
+      renderCharacterSheet(characterId);
+      requestRender();
+    });
   });
 }
 
@@ -569,5 +601,9 @@ function renderEquipmentSummary(item) {
 }
 
 function formatRank(rank) {
-  return rank === "无" ? "无等级" : `${rank} 级佣兵`;
+  return rank === "无" ? "无等级" : `${rank}级佣兵`;
+}
+
+function isDeadStatus(status) {
+  return status === "阵亡" || status === "闃典骸";
 }

@@ -54,11 +54,10 @@ export function createContract(options = {}) {
         randomNumber(rewardConfig.reputationRandomMin, rewardConfig.reputationRandomMax)
     )
   );
-  const tags = [...new Set(type.tags)];
   const name = `${type.name}契约：${randomContractSubject(type)}`;
   const powerRequirement = options.powerRequirement ?? calculateContractPowerRequirement(difficulty, state.reputation ?? 0);
   const recommendedTeamSize = options.recommendedTeamSize ?? createRecommendedTeamSize(difficulty);
-  const requirements = options.requirements ?? createContractRequirements(tags);
+  const requirements = options.requirements ?? createContractRequirements();
 
   return {
     id: createId(),
@@ -81,7 +80,6 @@ export function createContract(options = {}) {
     intel: createContractIntel(),
     revealedIntel: options.freeIntel ? [randomItem(contractIntelFields).key] : [],
     hidden: { twist: randomContractHiddenTwist() },
-    tags,
     refreshCost: calculateRefreshCost(difficulty),
     investigateCost: calculateInvestigateCost({ rewardGold }),
     assigned: [],
@@ -95,7 +93,6 @@ export function normalizeMission(mission) {
   mission.remaining ??= mission.duration;
   mission.assigned ??= [];
   mission.status ??= "available";
-  mission.tags ??= [];
   normalizeContractPlanningFields(mission);
   return mission;
 }
@@ -175,16 +172,6 @@ export function startMission(id, memberIds) {
     draft.roster.forEach((character) => {
       if (validMemberIds.includes(character.id)) character.status = `履行「${mission.name}」`;
     });
-    draft.timeline.push({
-      id: createId(),
-      day: draft.day,
-      endDay: mission.endDay,
-      type: "contract",
-      title: mission.name,
-      status: "active",
-      detail: `执行 ${mission.duration} 天。队伍：${validMemberIds.length} 人。`,
-      missionId: mission.id,
-    });
     refillAvailableMissionsDraft(draft);
     draft.log.push(`第 ${draft.day} 天：小队已出发履行契约「${mission.name}」。`);
   });
@@ -216,15 +203,6 @@ export function advanceDay() {
 
     const expiredMissions = draft.missions.filter((mission) => mission.status === "available" && mission.expiresDay < draft.day);
     expiredMissions.forEach((mission) => {
-      draft.timeline.push({
-        id: createId(),
-        day: draft.day,
-        type: "contract",
-        title: mission.name,
-        status: "missed",
-        detail: "契约截止，发布方撤回委托。",
-        missionId: mission.id,
-      });
       draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」超过截止日，已从列表撤下。`);
     });
     draft.missions = draft.missions.filter((mission) => mission.status !== "available" || mission.expiresDay >= draft.day);
@@ -305,7 +283,6 @@ function resolveMissionDraft(draft, mission) {
     const woundRisk = calculateWoundRisk(gap, mission.difficulty, success, team);
     if (randomNumber(1, 100) <= deathRisk) {
       character.status = "阵亡";
-      character.hp = 0;
       character.wound += 3;
       draft.log.push(`第 ${draft.day} 天：${character.name} 在「${mission.name}」中阵亡。`);
       return;
@@ -313,7 +290,6 @@ function resolveMissionDraft(draft, mission) {
     character.status = "待命";
     if (randomNumber(1, 100) <= woundRisk) {
       character.wound += 1;
-      character.hp = Math.max(1, character.hp - randomNumber(4, 10));
       applyNegativeConditionDraft(draft, character, {
         severity: chooseConditionSeverity(gap, mission.difficulty, success),
         damageType: randomItem(enemyDamageTypes),
@@ -350,13 +326,6 @@ function resolveMissionDraft(draft, mission) {
 
   settleReturningWagesDraft(draft, mission, team.filter((character) => character.status !== "阵亡"));
 
-  const timelineEntry = draft.timeline.find((entry) => entry.missionId === mission.id && entry.status === "active");
-  if (timelineEntry) {
-    timelineEntry.status = success ? "done" : "failed";
-    timelineEntry.day = mission.startDay ?? timelineEntry.day;
-    timelineEntry.endDay = draft.day;
-    timelineEntry.detail = success ? "契约完成并结算。" : "契约失败，队伍返回。";
-  }
   draft.missions = draft.missions.filter((item) => item.id !== mission.id);
   evaluateGameOverDraft(draft);
 }
@@ -411,7 +380,7 @@ function resolveBaseRaidDraft(draft) {
     duration: 1,
     rewardMultiplier: 1,
     recommendedTeamSize: { min: 1, max: 4 },
-    requirements: createContractRequirements(["守卫", "战斗"]),
+    requirements: createContractRequirements(),
   });
   mission.name = "基地暴露袭击";
   mission.powerRequirement = powerRequirement;
@@ -430,13 +399,11 @@ function resolveBaseRaidDraft(draft) {
     const woundRisk = calculateWoundRisk(gap, difficulty, success, defenders);
     if (randomNumber(1, 100) <= deathRisk) {
       character.status = "阵亡";
-      character.hp = 0;
       character.wound += 3;
       return;
     }
     if (randomNumber(1, 100) <= woundRisk) {
       character.wound += 1;
-      character.hp = Math.max(1, character.hp - randomNumber(4, 10));
       applyNegativeConditionDraft(draft, character, {
         severity: chooseConditionSeverity(gap, difficulty, success),
         damageType: randomItem(enemyDamageTypes),
@@ -518,7 +485,6 @@ function evaluateMissionFitFromRoster(roster, buildings, memberIds, mission, opt
       powerGap: -(mission.powerRequirement ?? 0),
       risk: getRiskLabel(0),
       teamSizePenalty: 0,
-      matchingTags: 0,
       matchingWeapons: 0,
       matchingDamageTypes: 0,
       matchingCareerCategories: 0,
@@ -534,14 +500,13 @@ function evaluateMissionFitFromRoster(roster, buildings, memberIds, mission, opt
   const teamPower = calculateTeamCombatPower(roster, memberIds) + (options.extraPower ?? 0);
   const powerChance = calculateMissionChanceFromPower(teamPower - mission.powerRequirement);
   const sizePenalty = calculateTeamSizePenalty(memberIds.length, mission.recommendedTeamSize);
-  const tagBonus = calculateTagFitBonus(team, mission);
   const equipmentBonus = calculateEquipmentFitBonus(team, mission);
   const careerFit = calculateCareerFit(team, mission);
   const careerEffectBonus = calculateCareerEffectBonus(team, mission);
   const unlockedIntelBonus = (mission.revealedIntel?.length ?? 0) * 2 + (mission.powerIntelLevel ?? 0);
   const intelBonus = 0;
   const chance = clamp(
-    powerChance + tagBonus + equipmentBonus + careerFit.bonus + careerEffectBonus + unlockedIntelBonus + intelBonus - sizePenalty - careerFit.penalty,
+    powerChance + equipmentBonus + careerFit.bonus + careerEffectBonus + unlockedIntelBonus + intelBonus - sizePenalty - careerFit.penalty,
     2,
     98
   );
@@ -552,7 +517,6 @@ function evaluateMissionFitFromRoster(roster, buildings, memberIds, mission, opt
     powerGap: teamPower - mission.powerRequirement,
     risk: getRiskLabel(chance),
     teamSizePenalty: sizePenalty,
-    matchingTags: countMatchingTags(team, mission.tags ?? []),
     matchingWeapons: countMatchingEquipmentTags(team, mission.requirements?.weaponTypes ?? []),
     matchingDamageTypes: countMatchingEquipmentTags(team, mission.requirements?.damageTypes ?? []),
     matchingCareerCategories: careerFit.matched,
@@ -575,10 +539,6 @@ function calculateTeamSizePenalty(teamSize, recommendedTeamSize) {
   if (teamSize < min) return (min - teamSize) * 12;
   if (teamSize > max) return (teamSize - max) * 8;
   return 0;
-}
-
-function calculateTagFitBonus(team, mission) {
-  return Math.min(18, countMatchingTags(team, mission.tags ?? []) * 4);
 }
 
 function calculateEquipmentFitBonus(team, mission) {
@@ -609,8 +569,6 @@ function calculateCareerEffectBonus(team, mission) {
       bonus += category?.effects?.abnormalMissionChanceBonus ?? 0;
       bonus += career?.effects?.abnormalMissionChanceBonus ?? 0;
     }
-    const tagBonus = career?.effects?.tagMissionChanceBonus;
-    if (tagBonus && (mission.tags ?? []).includes(tagBonus.tag)) bonus += tagBonus.value ?? 0;
     if (career?.effects?.belowMaxTeamChanceBonus && team.length < (mission.recommendedTeamSize?.max ?? 4)) {
       bonus += career.effects.belowMaxTeamChanceBonus;
     }
@@ -619,10 +577,6 @@ function calculateCareerEffectBonus(team, mission) {
     }
     return sum + bonus;
   }, 0);
-}
-
-function countMatchingTags(team, tags) {
-  return team.reduce((sum, character) => sum + (character.tags ?? []).filter((tag) => tags.includes(tag)).length, 0);
 }
 
 function countMatchingEquipmentTags(team, wantedTags) {
@@ -639,8 +593,8 @@ function hasAnyRequirementMatch(character, mission) {
   const equipmentTags = Object.values(character.equipment ?? {})
     .filter(Boolean)
     .flatMap((item) => [item.type, item.damageType, item.itemCategory, ...(item.tags ?? [])].filter(Boolean));
-  const wanted = [...(mission.requirements?.weaponTypes ?? []), ...(mission.requirements?.damageTypes ?? []), ...(mission.requirements?.tags ?? [])];
-  return wanted.some((tag) => equipmentTags.includes(tag) || (character.tags ?? []).includes(tag));
+  const wanted = [...(mission.requirements?.weaponTypes ?? []), ...(mission.requirements?.damageTypes ?? [])];
+  return wanted.some((tag) => equipmentTags.includes(tag));
 }
 
 function getCareerConfig(character) {
@@ -688,7 +642,7 @@ function createRecommendedTeamSize(difficulty) {
   return { min: 3, max: 4 };
 }
 
-function createContractRequirements(tags = []) {
+function createContractRequirements() {
   const weaponTypeCount = randomNumber(1, 2);
   const damageTypeCount = randomNumber(1, 2);
   const careerCategoryCount = randomNumber(1, 100) <= 35 ? 2 : 1;
@@ -696,7 +650,6 @@ function createContractRequirements(tags = []) {
     weaponTypes: drawUniqueRequirements(contractRequirementPool.weaponTypes, weaponTypeCount),
     damageTypes: drawUniqueRequirements(contractRequirementPool.damageTypes, damageTypeCount),
     careerCategories: drawUniqueRequirements(contractRequirementPool.careerCategories, careerCategoryCount),
-    tags: tags.slice(0, 2),
   };
 }
 
@@ -727,11 +680,11 @@ function normalizeContractPowerFields(mission, reputation = 0) {
 
 function normalizeContractPlanningFields(mission) {
   mission.recommendedTeamSize ??= createRecommendedTeamSize(mission.difficulty ?? 2);
-  mission.requirements ??= createContractRequirements(mission.tags ?? []);
+  mission.requirements ??= createContractRequirements();
   mission.requirements.weaponTypes ??= [];
   mission.requirements.damageTypes ??= [];
   mission.requirements.careerCategories ??= [];
-  mission.requirements.tags ??= mission.tags?.slice(0, 2) ?? [];
+  delete mission.requirements.tags;
 }
 
 function calculateMissionChanceFromPower(gap) {
@@ -877,7 +830,6 @@ function resolvePromotionDraft(draft, character, actionType) {
   const positiveCondition = drawPositiveCondition(character, "promotion");
   const powerGain = getPromotionCombatPowerGain(nextRank);
   character.rank = nextRank;
-  character.level = currentIndex + 1;
   character.combatPower = (character.combatPower ?? 0) + powerGain;
   if (positiveCondition) {
     character.positiveConditions ??= [];
@@ -894,7 +846,6 @@ function applyNegativeConditionDraft(draft, character, options = {}) {
   character.conditions.push(condition);
   character.wound += condition.wound ?? 0;
   character.stress += (condition.stress ?? 0) + getSeverityStress(condition.severity);
-  character.hp = Math.max(1, character.hp - Math.max(3, (condition.wound ?? 0) * 5));
   draft.log.push(`第 ${draft.day} 天：${character.name} 获得负面状态「${condition.name}」。`);
 }
 
@@ -1021,7 +972,6 @@ function applyHiddenTwistDraft(draft, mission, team, success) {
     const target = randomItem(team);
     if (target && !mitigated) {
       target.wound += 1;
-      target.hp = Math.max(1, target.hp - randomNumber(4, 9));
       target.stress += 4;
       result.text += ` ${target.name} 在伏击中受伤。`;
     } else {
@@ -1055,7 +1005,9 @@ function upgradeMissionToContract(mission) {
   if (mission.issuer && mission.type && mission.intel && mission.hidden) return mission;
 
   const fallbackTemplate = missionTemplates.find((template) => template.name === mission.name) ?? randomItem(missionTemplates);
-  const fallbackType = contractTypes.find((type) => type.tags.some((tag) => (mission.tags ?? fallbackTemplate.tags).includes(tag))) ?? randomItem(contractTypes);
+  const fallbackType =
+    contractTypes.find((type) => type.name === mission.type || type.code === mission.typeCode) ??
+    randomItem(contractTypes);
   mission.issuer ??= randomIssuer();
   mission.type ??= fallbackType.name;
   mission.typeCode ??= fallbackType.code;

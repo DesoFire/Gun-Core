@@ -67,7 +67,7 @@ export function subscribe(listener) {
 
 export function addLog(message) {
   updateState((draft) => {
-    draft.log.push(`第 ${draft.day} 天：${message}`);
+    draft.log.push(`? ${draft.day} ??${message}`);
   });
 }
 
@@ -108,9 +108,6 @@ export function createInitialState() {
     roster: [createInitialMercenary("assault"), createInitialMercenary("scout")],
     recruitPool: [createInitialMercenary(), createInitialMercenary(), createInitialMercenary()],
     missions: Array.from({ length: economyConfig.contracts.missionBoard.availableLimit }, () => createInitialMission()),
-    timeline: [
-      { id: createId(), day: 1, type: "system", title: "事务所挂牌", status: "待命", detail: "第一批契约送达。经营开始。" },
-    ],
     buildings: { tavern: 1, barracks: 0, defenses: 0, infirmary: 0, intel: 0 },
     mechs: [],
     inventory: sampleItems.map((item) => ({ ...item })),
@@ -166,7 +163,7 @@ function normalizeState(savedState) {
   savedState.roster ??= [];
   savedState.recruitPool ??= [];
   savedState.missions ??= Array.from({ length: economyConfig.contracts.missionBoard.availableLimit }, () => createInitialMission());
-  savedState.timeline ??= [];
+  delete savedState.timeline;
   savedState.mechs ??= [];
   savedState.inventory ??= sampleItems.map((item) => ({ ...item }));
   savedState.wealth ??= { owned: {} };
@@ -192,16 +189,14 @@ function normalizeState(savedState) {
   savedState.enhancementPoints += collectLegacyEnhancementPoints(savedState.roster);
   savedState.enhancementPoints += collectLegacyEnhancementPoints(savedState.recruitPool);
   savedState.missions = savedState.missions.map(normalizeMissionState);
-  savedState.timeline = savedState.timeline.map(normalizeTimelineEntry);
   savedState.inventory = savedState.inventory.map(normalizeItemState);
   return savedState;
 }
 
-function createInitialMercenary(classId = randomItem(Object.keys(characterClasses)), isPlayer = false, customName = "") {
+function createInitialMercenary(classId = randomItem(Object.keys(characterClasses)), customName = "") {
   const resolvedClassId = characterClasses[classId] ? classId : randomItem(Object.keys(characterClasses));
   const baseClass = characterClasses[resolvedClassId];
   const category = careerCategories[baseClass.category];
-  const maxHp = baseClass.maxHp + randomNumber(-2, 3);
   const initialStressBonus = baseClass.effects?.initialStressBonus ?? 0;
   const mercenary = {
     id: createId(),
@@ -211,11 +206,7 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
     className: baseClass.name,
     careerCategory: baseClass.category,
     careerCategoryName: category?.name ?? "未分类",
-    level: 0,
-    xp: 0,
-    hp: maxHp,
-    maxHp,
-    personalReputation: isPlayer ? 3 : randomNumber(0, 2),
+    personalReputation: randomNumber(0, 2),
     rank: "无",
     dossier: createDossier(),
     contractRecord: { completed: 0, failed: 0, survived: 0 },
@@ -224,7 +215,6 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
     signingMultiplier: randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax),
     stress: randomNumber(0, 8) + initialStressBonus,
     wound: 0,
-    isPlayer,
     tags: [...new Set([...(category?.tags ?? []), ...baseClass.tags])],
     equipment: createEmptyEquipment(),
     combatPower: baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0) + randomNumber(-3, 4),
@@ -243,7 +233,7 @@ function createInitialMission() {
   const expiresDay = issueDay + randomNumber(2, 4) + Math.floor(difficulty / 2);
   const powerRequirement = calculateInitialPowerRequirement(difficulty, 0);
   const recommendedTeamSize = createInitialRecommendedTeamSize(difficulty);
-  const requirements = createInitialContractRequirements(type.tags);
+  const requirements = createInitialContractRequirements();
   const reward = createInitialContractReward(difficulty);
   return {
     id: createId(),
@@ -266,7 +256,6 @@ function createInitialMission() {
     intel: createContractIntel(),
     revealedIntel: [],
     hidden: { twist: randomContractHiddenTwist() },
-    tags: [...new Set(type.tags)],
     refreshCost: calculateInitialRefreshCost(difficulty),
     investigateCost: calculateInitialInvestigateCost({ rewardGold: reward.gold, difficulty }),
     remaining: duration,
@@ -278,7 +267,8 @@ function createInitialMission() {
 function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   if (character.personalReputation == null && character.notoriety != null) character.personalReputation = character.notoriety;
   delete character.notoriety;
-  character.personalReputation ??= character.isPlayer ? 3 : 1;
+  character.personalReputation ??= 1;
+  delete character.isPlayer;
   splitLegacyName(character);
   character.name = (character.name || createRandomName()).trim().slice(0, 32);
   character.callsign ??= createCallsign();
@@ -289,8 +279,8 @@ function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   character.positiveConditions ??= [];
   character.positiveConditions = character.positiveConditions.map(normalizePositiveConditionState);
   character.rank = normalizeRank(character);
-  character.level = Math.max(0, mercenaryRanks.indexOf(character.rank));
-  character.xp ??= 0;
+  delete character.level;
+  delete character.xp;
   delete character.traits;
   character.dossier ??= createDossier();
   character.dossier.personality ??= randomItem(personalities);
@@ -300,8 +290,7 @@ function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   character.signingMultiplier ??= randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax);
   character.wound ??= 0;
   character.stress ??= 0;
-  character.status ??= "待命";
-  character.tags ??= [];
+  character.status = normalizeCharacterStatus(character.status);
   if (!characterClasses[character.classId]) character.classId = "assault";
   const baseClass = characterClasses[character.classId];
   const category = careerCategories[baseClass.category];
@@ -309,9 +298,8 @@ function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   character.careerCategory = baseClass.category;
   character.careerCategoryName = category?.name ?? "未分类";
   character.combatPower ??= estimateBaseCombatPower(character);
-  character.maxHp ??= baseClass.maxHp ?? 24;
-  character.hp ??= Math.max(1, character.maxHp - character.wound * 4);
-  if (character.hp <= 0) character.status = "阵亡";
+  delete character.maxHp;
+  delete character.hp;
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
   character.equipment = normalizeEquipmentSlots(character.equipment);
   character.avatar = normalizeAvatar(character, usedAvatarKeys);
@@ -331,28 +319,17 @@ function normalizeMissionState(mission) {
   mission.remaining ??= mission.duration;
   mission.assigned ??= [];
   mission.status ??= "available";
-  mission.tags ??= [];
   mission.issueDay ??= 1;
   mission.expiresDay ??= mission.issueDay + 4;
   mission.powerRequirement ??= calculateInitialPowerRequirement(mission.difficulty ?? 2, 0);
   mission.powerIntelLevel ??= Math.min(3, mission.revealedIntel?.length ?? 0);
   mission.recommendedTeamSize ??= createInitialRecommendedTeamSize(mission.difficulty ?? 2);
-  mission.requirements ??= createInitialContractRequirements(mission.tags ?? []);
+  mission.requirements ??= createInitialContractRequirements();
   mission.requirements.weaponTypes ??= [];
   mission.requirements.damageTypes ??= [];
   mission.requirements.careerCategories ??= [];
-  mission.requirements.tags ??= mission.tags?.slice(0, 2) ?? [];
+  delete mission.requirements.tags;
   return mission;
-}
-
-function normalizeTimelineEntry(entry) {
-  entry.id ??= createId();
-  entry.day ??= 1;
-  entry.type ??= "system";
-  entry.title ??= "未命名记录";
-  entry.status ??= "done";
-  entry.detail ??= "";
-  return entry;
 }
 
 function normalizeItemState(item) {
@@ -413,13 +390,18 @@ function createDossier() {
 }
 
 function calculateRank(character) {
-  return mercenaryRanks.includes(character.rank) ? character.rank : "无";
+  return mercenaryRanks.includes(character.rank) ? character.rank : "?";
 }
 
 function normalizeRank(character) {
   if (mercenaryRanks.includes(character.rank)) return character.rank;
-  if (typeof character.level === "number") return mercenaryRanks[Math.min(character.level, mercenaryRanks.length - 1)] ?? "无";
   return calculateRank(character);
+}
+
+function normalizeCharacterStatus(status) {
+  if (status !== "??" && status !== "??" && String(status).includes("?")) return "??";
+  if (status !== "??" && status !== "??" && String(status).includes("?")) return "??";
+  return status ?? "??";
 }
 
 function randomIssuer() {
@@ -492,12 +474,11 @@ function createInitialRecommendedTeamSize(difficulty) {
   return { min: 3, max: 4 };
 }
 
-function createInitialContractRequirements(tags = []) {
+function createInitialContractRequirements() {
   return {
     weaponTypes: drawInitialRequirements(contractRequirementPool.weaponTypes, randomNumber(1, 2)),
     damageTypes: drawInitialRequirements(contractRequirementPool.damageTypes, randomNumber(1, 2)),
     careerCategories: drawInitialRequirements(contractRequirementPool.careerCategories, randomNumber(1, 100) <= 35 ? 2 : 1),
-    tags: tags.slice(0, 2),
   };
 }
 
@@ -590,8 +571,9 @@ function upgradeMissionToContract(mission) {
   if (mission.issuer && mission.type && mission.intel && mission.hidden) return mission;
 
   const fallbackTemplate = missionTemplates.find((template) => template.name === mission.name) ?? randomItem(missionTemplates);
-  const fallbackTags = mission.tags ?? fallbackTemplate.tags;
-  const fallbackType = contractTypes.find((type) => type.tags.some((tag) => fallbackTags.includes(tag))) ?? randomItem(contractTypes);
+  const fallbackType =
+    contractTypes.find((type) => type.name === mission.type || type.code === mission.typeCode) ??
+    randomItem(contractTypes);
   mission.issuer ??= randomIssuer();
   mission.type ??= fallbackType.name;
   mission.typeCode ??= fallbackType.code;

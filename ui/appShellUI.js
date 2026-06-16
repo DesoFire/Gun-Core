@@ -18,10 +18,9 @@ export function renderAppShell(root) {
       <button class="tab-button" data-tab-target="missions" type="button">契约</button>
       <button class="tab-button" data-tab-target="expenses" type="button">支出</button>
       <button class="tab-button" data-tab-target="wealth" type="button">财富</button>
-      <button class="tab-button temporary-hidden" data-tab-target="schedule" type="button" hidden>日程</button>
       <button class="tab-button" data-tab-target="facilities" type="button">基础设施</button>
       <button class="tab-button temporary-hidden" data-tab-target="mechs" type="button" hidden>机甲</button>
-      <button class="tab-button temporary-hidden" data-tab-target="warehouse" type="button" hidden>仓库</button>
+      <button class="tab-button" data-tab-target="warehouse" type="button">仓库</button>
     </nav>
 
     <aside id="global-status-drawer" class="global-status-drawer" aria-label="基地关键状态">
@@ -35,6 +34,20 @@ export function renderAppShell(root) {
           <button id="global-status-close" class="ghost-button" type="button">关闭</button>
         </div>
         <div id="global-resource-strip" class="global-resource-strip"></div>
+      </div>
+    </aside>
+
+    <aside id="global-log-drawer" class="global-status-drawer global-log-drawer" aria-label="行动日志">
+      <button id="global-log-toggle" class="global-status-toggle" type="button">日志</button>
+      <div id="global-log-panel" class="global-status-panel global-log-panel" hidden>
+        <div class="card-header">
+          <div>
+            <strong>行动日志</strong>
+            <p class="muted">记录操作、契约结算和突发事件。</p>
+          </div>
+          <button id="global-log-close" class="ghost-button" type="button">关闭</button>
+        </div>
+        <div id="global-log-list" class="global-log-list"></div>
       </div>
     </aside>
 
@@ -56,7 +69,6 @@ export function renderAppShell(root) {
             </div>
             <div id="personnel-overview" class="overview-list"></div>
           </section>
-
         </div>
       </section>
 
@@ -143,16 +155,6 @@ export function renderAppShell(root) {
         </section>
       </section>
 
-      <section class="tab-page temporary-hidden" data-tab-page="schedule" hidden>
-        <section class="panel calendar-panel calendar-page-panel">
-          <div class="section-heading">
-            <h2>行动日程</h2>
-            <span class="badge">按天</span>
-          </div>
-          <div id="calendar-list" class="calendar-list calendar-list-large"></div>
-        </section>
-      </section>
-
     </main>
 
     <dialog id="mercenary-dialog" class="dialog dossier-dialog">
@@ -181,7 +183,7 @@ export function renderAppShell(root) {
         <h2>欢迎来到可控范围内</h2>
         <div class="intro-copy">
           <p>SSS 内战爆发后，所有新闻频道终于统一了口径：局势仍在可控范围内。</p>
-          <p>于是粮价上涨，军火脱销，边境关闭，尸体开始影响交通。</p>
+          <p>于是粮价上涨，军火脱销，边境关门，尸体开始影响交通。</p>
           <p>你没有战斗力，不能亲自上战场。更准确地说，你从未认真考虑过亲自上战场。幸运的是，你有钱，有人脉，还有一套远程佣兵管理系统：GMS。</p>
           <p>通过 GMS，你将在 SSS 境内招募被称为 Gun 的佣兵，建立隐秘基地，接取契约，购买装备，并从战争中获得一笔体面的收入。</p>
           <p>这些 Gun 是非法入境的行动人员。为了确保他们在官方记录中继续保持“不存在”的良好状态，你需要按月缴纳隐秘费用。未支付的声望会降低隐秘值；隐秘值越低，基地越容易被找上门。</p>

@@ -645,78 +645,6 @@ function renderOverview() {
     </div>
   `;
 
-  renderCalendar();
-}
-
-function renderCalendar() {
-  const state = getState();
-  const startDay = Math.max(1, state.day - 2);
-  const days = Array.from({ length: 7 }, (_, index) => startDay + index);
-  const activeMissions = state.missions.filter((mission) => mission.status === "active");
-  const availableMissions = state.missions.filter((mission) => mission.status === "available");
-
-  document.querySelector("#calendar-list").innerHTML = days
-    .map((day) => {
-      const entries = [
-        ...state.timeline.filter((entry) => isEntryOnDay(entry, day)),
-        ...activeMissions
-          .filter((mission) => !state.timeline.some((entry) => entry.missionId === mission.id))
-          .filter((mission) => day >= (mission.startDay ?? state.day) && day <= (mission.endDay ?? state.day + mission.remaining))
-          .map((mission) => ({
-            type: "contract",
-            status: "active",
-            title: mission.name,
-            detail: `执行中，预计第 ${mission.endDay} 天结束`,
-          })),
-        ...availableMissions
-          .filter((mission) => mission.expiresDay === day)
-          .map((mission) => ({
-            type: "contract",
-            status: "planned",
-            title: mission.name,
-            detail: "契约截止日",
-          })),
-      ];
-      return `
-        <article class="calendar-day ${day === state.day ? "today" : ""}">
-          <div class="calendar-day-head">
-            <strong>第 ${day} 天</strong>
-            <span>${day < state.day ? "已结束" : day === state.day ? "今天" : "计划"}</span>
-          </div>
-          <div class="calendar-events">
-            ${
-              entries.length > 0
-                ? entries.map(renderCalendarEntry).join("")
-                : `<p class="muted">暂无行动</p>`
-            }
-          </div>
-        </article>
-      `;
-    })
-    .join("");
-}
-
-function isEntryOnDay(entry, day) {
-  const start = entry.day ?? day;
-  const end = entry.endDay ?? start;
-  return day >= start && day <= end;
-}
-
-function renderCalendarEntry(entry) {
-  const label = {
-    active: "执行中",
-    done: "已完成",
-    failed: "失败",
-    missed: "错过",
-    planned: "计划",
-  }[entry.status] ?? "记录";
-  return `
-    <div class="calendar-event ${entry.status}">
-      <span>${label}</span>
-      <strong>${entry.title}</strong>
-      <p>${entry.detail ?? ""}</p>
-    </div>
-  `;
 }
 
 function renderBuildings() {
@@ -796,7 +724,6 @@ function renderFacilityAction(id, level, cost, disabled) {
   if (id === "blackMarket") {
     const rank = getFacilityRankLabel(level);
     const actions = [
-      ["supplies", "购买补给/杂物"],
       ["weapon", "购买武器"],
       ["armor", "购买防具"],
       ["mecha", "购买机甲"],
@@ -953,7 +880,7 @@ function handleFacilityUpgradeSpend(button) {
 
 function handleBlackMarketSpend(button) {
   const kind = button.dataset.buyBlackMarketItem;
-  const labels = { supplies: "黑市采购补给", weapon: "黑市购买武器", armor: "黑市购买防具", mecha: "黑市购买机甲" };
+  const labels = { weapon: "黑市购买武器", armor: "黑市购买防具", mecha: "黑市购买机甲" };
   const action = labels[kind] ?? "黑市采购";
   const cost = getCostFromText(button.textContent);
   if (!confirmGoldSpend(action, cost)) return false;

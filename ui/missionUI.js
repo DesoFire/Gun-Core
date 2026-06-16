@@ -164,7 +164,6 @@ function renderContractCard(id) {
       <section class="dossier-section wide">
         <h3>简报</h3>
         <p class="contract-brief">${mission.description}</p>
-        <div class="badge-row">${mission.tags.map((tag) => `<span class="badge">${tag}</span>`).join("")}</div>
       </section>
       <section class="dossier-section wide">
         <div class="card-header">

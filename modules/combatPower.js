@@ -15,15 +15,34 @@ export function calculateEquipmentCombatPower(character) {
 }
 
 export function calculateCharacterCombatPower(character) {
-  const basePower = character.combatPower ?? estimateBaseCombatPower(character);
-  return Math.max(1, Math.round(basePower + calculateEquipmentCombatPower(character) + getPositiveConditionCombatPower(character) + getClassDamagePowerBonus(character)));
+  return getCombatPowerBreakdown(character).rawTotal;
 }
 
 export function calculateEffectiveCharacterCombatPower(character) {
+  return getCombatPowerBreakdown(character).final;
+}
+
+export function getCombatPowerBreakdown(character) {
+  const base = character.combatPower ?? estimateBaseCombatPower(character);
+  const equipment = calculateEquipmentCombatPower(character);
+  const positive = getPositiveConditionCombatPower(character);
+  const classBonus = getClassDamagePowerBonus(character);
   const injuryPenalty = Math.round((character.wound ?? 0) * 4 * (1 - getWoundPenaltyReduction(character)));
   const stressPenalty = Math.floor((character.stress ?? 0) / 5);
-  const conditionPenalty = (character.conditions ?? []).reduce((sum, condition) => sum + (condition.powerPenalty ?? 0), 0);
-  return Math.max(1, calculateCharacterCombatPower(character) - injuryPenalty - stressPenalty - conditionPenalty);
+  const conditionPenalty = getNegativeConditionCombatPowerPenalty(character);
+  const rawTotal = Math.max(1, Math.round(base + equipment + positive + classBonus));
+  const final = Math.max(1, Math.round(rawTotal - injuryPenalty - stressPenalty - conditionPenalty));
+  return {
+    base,
+    equipment,
+    positive,
+    classBonus,
+    injuryPenalty,
+    stressPenalty,
+    conditionPenalty,
+    rawTotal,
+    final,
+  };
 }
 
 export function calculateTeamCombatPower(roster, memberIds) {
@@ -61,6 +80,10 @@ function hasLostBothArms(character) {
 
 function getPositiveConditionCombatPower(character) {
   return (character.positiveConditions ?? []).reduce((sum, condition) => sum + (condition.powerBonus ?? 0), 0);
+}
+
+function getNegativeConditionCombatPowerPenalty(character) {
+  return (character.conditions ?? []).reduce((sum, condition) => sum + (condition.powerPenalty ?? 0), 0);
 }
 
 function getClassDamagePowerBonus(character) {

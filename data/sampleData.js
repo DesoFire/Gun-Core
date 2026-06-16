@@ -48,7 +48,6 @@ export const characterClasses = {
     category: "combat",
     tags: ["战斗", "动能"],
     baseCombatPower: 28,
-    maxHp: 32,
     effects: { damageTypePowerBonus: { type: "动能", value: 3 } },
   },
   marksman: {
@@ -56,7 +55,6 @@ export const characterClasses = {
     category: "combat",
     tags: ["战斗", "切割"],
     baseCombatPower: 26,
-    maxHp: 26,
     effects: { belowMaxTeamChanceBonus: 5 },
   },
   demolisher: {
@@ -64,7 +62,6 @@ export const characterClasses = {
     category: "combat",
     tags: ["战斗", "爆风"],
     baseCombatPower: 25,
-    maxHp: 28,
     effects: { damageTypePowerBonus: { type: "爆风", value: 4 }, tagMissionChanceBonus: { tag: "破坏", value: 5 } },
   },
   guard: {
@@ -72,7 +69,6 @@ export const characterClasses = {
     category: "combat",
     tags: ["战斗", "守卫"],
     baseCombatPower: 27,
-    maxHp: 34,
     effects: { teamDeathRiskReduction: 1 },
   },
   heavy: {
@@ -80,7 +76,6 @@ export const characterClasses = {
     category: "survival",
     tags: ["生存", "守卫"],
     baseCombatPower: 25,
-    maxHp: 38,
     effects: { armorDeathRiskMultiplier: 0.5 },
   },
   veteran: {
@@ -88,7 +83,6 @@ export const characterClasses = {
     category: "survival",
     tags: ["生存", "战斗"],
     baseCombatPower: 25,
-    maxHp: 30,
     effects: { successStressReduction: 2 },
   },
   evac: {
@@ -96,7 +90,6 @@ export const characterClasses = {
     category: "survival",
     tags: ["生存", "潜入"],
     baseCombatPower: 23,
-    maxHp: 29,
     effects: { failureDeathRiskReduction: 3 },
   },
   painbearer: {
@@ -104,7 +97,6 @@ export const characterClasses = {
     category: "survival",
     tags: ["生存"],
     baseCombatPower: 24,
-    maxHp: 32,
     effects: { woundPenaltyReduction: 0.3 },
   },
   scout: {
@@ -112,7 +104,6 @@ export const characterClasses = {
     category: "intel",
     tags: ["侦察", "潜入"],
     baseCombatPower: 22,
-    maxHp: 26,
     effects: { powerIntelBonus: 1 },
   },
   listener: {
@@ -120,7 +111,6 @@ export const characterClasses = {
     category: "intel",
     tags: ["侦察", "调查"],
     baseCombatPower: 20,
-    maxHp: 24,
     effects: { investigateDiscount: 0.15 },
   },
   counterAmbush: {
@@ -128,7 +118,6 @@ export const characterClasses = {
     category: "intel",
     tags: ["侦察", "生存"],
     baseCombatPower: 23,
-    maxHp: 27,
     effects: { ambushDamageReduction: 0.25 },
   },
   analyst: {
@@ -136,7 +125,6 @@ export const characterClasses = {
     category: "intel",
     tags: ["调查", "支援"],
     baseCombatPower: 19,
-    maxHp: 23,
     effects: { requirementMatchChanceBonus: 4 },
   },
   medic: {
@@ -144,7 +132,6 @@ export const characterClasses = {
     category: "logistics",
     tags: ["医疗", "支援"],
     baseCombatPower: 20,
-    maxHp: 25,
     effects: { teamWoundRiskReduction: 5, treatmentDiscount: 0.2 },
   },
   engineer: {
@@ -152,7 +139,6 @@ export const characterClasses = {
     category: "logistics",
     tags: ["支援", "装备"],
     baseCombatPower: 21,
-    maxHp: 26,
     effects: { armorDeathRiskBonus: 1, facilityDiscount: 0.05 },
   },
   scavenger: {
@@ -160,7 +146,6 @@ export const characterClasses = {
     category: "logistics",
     tags: ["回收", "支援"],
     baseCombatPower: 21,
-    maxHp: 25,
     effects: { lootChanceBonus: 20 },
   },
   broker: {
@@ -168,7 +153,6 @@ export const characterClasses = {
     category: "logistics",
     tags: ["交易", "支援"],
     baseCombatPower: 18,
-    maxHp: 23,
     effects: { marketDiscount: 0.1, marketRefreshDiscount: 0.1 },
   },
   anomalySpecialist: {
@@ -176,7 +160,6 @@ export const characterClasses = {
     category: "abnormal",
     tags: ["异常", "调查"],
     baseCombatPower: 21,
-    maxHp: 24,
     effects: { damageTypeConditionReduction: { type: "异源", value: 20 } },
   },
   purifier: {
@@ -184,7 +167,6 @@ export const characterClasses = {
     category: "abnormal",
     tags: ["异常", "医疗"],
     baseCombatPower: 20,
-    maxHp: 25,
     effects: { conditionSeverityReduction: ["异源", "腐蚀", "中毒"] },
   },
   dreamRecorder: {
@@ -192,7 +174,6 @@ export const characterClasses = {
     category: "abnormal",
     tags: ["异常", "精神"],
     baseCombatPower: 18,
-    maxHp: 22,
     effects: { mentalBreakHeavyReduction: 20 },
   },
   forbiddenScholar: {
@@ -200,7 +181,6 @@ export const characterClasses = {
     category: "abnormal",
     tags: ["异常", "调查"],
     baseCombatPower: 19,
-    maxHp: 22,
     effects: { abnormalMissionChanceBonus: 8, stressGainFlat: 2 },
   },
   rookie: {
@@ -208,7 +188,6 @@ export const characterClasses = {
     category: "growth",
     tags: ["成长"],
     baseCombatPower: 17,
-    maxHp: 24,
     effects: { growthChanceBonus: 15, failureStressBonus: 2 },
   },
   apprentice: {
@@ -216,7 +195,6 @@ export const characterClasses = {
     category: "growth",
     tags: ["成长", "支援"],
     baseCombatPower: 18,
-    maxHp: 23,
     effects: { extraEnhancementPointChance: 20 },
   },
   deserter: {
@@ -224,7 +202,6 @@ export const characterClasses = {
     category: "growth",
     tags: ["成长", "生存"],
     baseCombatPower: 19,
-    maxHp: 25,
     effects: { failureDeathRiskReduction: 3, initialStressBonus: 10 },
   },
   debtor: {
@@ -232,7 +209,6 @@ export const characterClasses = {
     category: "growth",
     tags: ["成长", "交易"],
     baseCombatPower: 20,
-    maxHp: 24,
     effects: { wageReduction: 0.15, stressGainFlat: 1 },
   },
 };
@@ -295,14 +271,6 @@ export const wealthCollections = [
 ];
 
 export const facilityRanks = ["F", "E", "D", "C", "B", "A", "S"];
-
-export const blackMarketSupplyPool = [
-  { name: "压缩饮水包", type: "水", tags: ["补给", "生存"], note: "口感像塑料管道里的雨，但至少能喝。" },
-  { name: "高热量糊砖", type: "食物", tags: ["补给", "生存"], note: "三口一顿，五顿开始怀疑人生。" },
-  { name: "旧式战术背包", type: "背包", tags: ["支援", "生存"], note: "带血迹的地方已经礼貌性洗过。" },
-  { name: "战利品封装箱", type: "战利品", tags: ["交易", "黑市"], note: "内容不保证合法，但保证有人愿意收。" },
-  { name: "一次性滤水芯", type: "杂物", tags: ["补给"], note: "能过滤水，也能过滤一部分乐观。" },
-];
 
 export const mechaFrames = [
   { name: "矿区搬运改机", role: "工程", tags: ["支援", "生存"], note: "原本用于搬矿，现在偶尔搬敌人。" },

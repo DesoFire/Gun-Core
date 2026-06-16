@@ -1,5 +1,4 @@
-import {
-  blackMarketSupplyPool,
+﻿import {
   buildings,
   facilityRanks,
   mechaFrames,
@@ -25,7 +24,7 @@ export function calculateDailyExpenseBreakdown(state = getState()) {
 
 export function calculateDailySupplyConsumption(state = getState()) {
   return (state.roster ?? [])
-    .filter((character) => character.status !== "阵亡")
+    .filter((character) => !isDeadStatus(character.status))
     .reduce((sum, character) => sum + calculateLivingSupplyCost(character), 0);
 }
 
@@ -48,7 +47,7 @@ export function calculateSecrecyExpenseItems(state = getState()) {
     });
   }
   state.roster
-    .filter((character) => character.status !== "阵亡" && (character.personalReputation ?? 0) > 0)
+    .filter((character) => !isDeadStatus(character.status) && (character.personalReputation ?? 0) > 0)
     .forEach((character) => {
       items.push({
         id: character.id,
@@ -101,7 +100,7 @@ export function approveSecrecyExpenses(paidIds = []) {
 }
 
 export function calculateDailyExpenseBreakdownFromDraft(draft) {
-  const livingRoster = draft.roster.filter((character) => character.status !== "阵亡");
+  const livingRoster = draft.roster.filter((character) => !isDeadStatus(character.status));
   const wageItems = livingRoster
     .filter((character) => character.status === "待命")
     .map((character) => ({
@@ -118,21 +117,25 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
     status: character.status,
     cost: calculateLivingSupplyCost(character),
   }));
-  const equipmentItems = livingRoster.flatMap((character) =>
+  const equippedEquipmentItems = livingRoster.flatMap((character) =>
     Object.entries(character.equipment ?? {})
-      .filter(([, item]) => item && (item.itemCategory === "weapon" || item.itemCategory === "armor" || item.slot === "weapon" || item.slot === "armor"))
-      .map(([slot, item]) => ({
-        id: item.id,
+      .filter(([, item]) => isEquipmentItem(item))
+      .map(([slot, item]) => createEquipmentExpenseItem(item, {
         characterId: character.id,
         characterName: character.name,
+        location: character.name,
         slot,
-        slotLabel: slot === "weapon" ? "武器" : "防具",
-        itemName: item.name,
-        rarity: item.rarity ?? "F",
-        type: item.damageType ?? item.protectionType ?? item.type ?? "未知",
-        cost: calculateEquipmentMaintenanceCost(item),
       }))
   );
+  const warehouseEquipmentItems = (draft.inventory ?? [])
+    .filter(isEquipmentItem)
+    .map((item) => createEquipmentExpenseItem(item, {
+      characterId: null,
+      characterName: "仓库",
+      location: "仓库",
+      slot: item.slot ?? item.itemCategory,
+    }));
+  const equipmentItems = [...equippedEquipmentItems, ...warehouseEquipmentItems];
   const facilityItems = Object.entries(draft.buildings)
     .filter(([, level]) => level > 0)
     .map(([id, level]) => ({
@@ -162,7 +165,7 @@ export function identityFee(character) {
   const rankIndex = Math.max(0, mercenaryRanks.indexOf(character.rank));
   const config = economyConfig.dailyExpenses.wages;
   const rankWage = config.rankDailyWage?.[rankIndex] ?? config.base + rankIndex * config.perRank;
-  return rankWage + (character.personalReputation ?? 0) * (config.perPersonalReputation ?? 0) + (character.isPlayer ? config.playerBonus : 0);
+  return rankWage + (character.personalReputation ?? 0) * (config.perPersonalReputation ?? 0);
 }
 
 export function upgradeBuilding(id) {
@@ -179,15 +182,9 @@ export function upgradeBuilding(id) {
     if (draft.gold < cost) return;
     draft.gold -= cost;
     draft.buildings[id] = nextLevel;
-    draft.timeline.push({
-      id: createId(),
-      day: draft.day,
-      type: "facility",
-      title: id === "defenses" ? `${building.name} x${nextLevel}` : `${building.name} ${getFacilityRankLabel(nextLevel)}`,
-      status: "done",
-      detail: "基地建设完成。",
-    });
-    draft.log.push(id === "defenses" ? `第 ${draft.day} 天：修建了第 ${nextLevel} 座${building.name}。` : `第 ${draft.day} 天：${building.name} 升到了 ${getFacilityRankLabel(nextLevel)}。`);
+    draft.log.push(id === "defenses"
+      ? `第 ${draft.day} 天：修建了第 ${nextLevel} 座${building.name}。`
+      : `第 ${draft.day} 天：${building.name} 升到了 ${getFacilityRankLabel(nextLevel)} 级。`);
   });
 }
 
@@ -198,20 +195,15 @@ export function buyBlackMarketItem(kind) {
     const cost = getBlackMarketItemCost(kind, rank);
     if (draft.gold < cost) return;
     const item = createBlackMarketItem(kind, rank);
+    if (!item) return;
+    item.purchasePrice = cost;
+    item.originalPrice = cost;
     draft.gold -= cost;
     if (kind === "mecha") {
       draft.mechs.unshift(item);
     } else {
       draft.inventory.unshift(item);
     }
-    draft.timeline.push({
-      id: createId(),
-      day: draft.day,
-      type: "facility",
-      title: "黑市采购",
-      status: "done",
-      detail: `购入 ${item.name}。`,
-    });
     draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金，从 ${rank} 级黑市购入 ${item.name}。`);
   });
 }
@@ -225,7 +217,7 @@ export function hospitalTreatMercenaries() {
     if (draft.gameStatus !== "active" || (draft.buildings.hospital ?? 0) <= 0) return;
     const plan = createHospitalTreatmentPlan(draft);
     if (plan.entries.length === 0) {
-      draft.log.push(`第 ${draft.day} 天：医疗中心没有找到需要处理的伤病佣兵。`);
+      draft.log.push(`第 ${draft.day} 天：医疗中心没有找到需要处理伤病的佣兵。`);
       return;
     }
     if (draft.gold < plan.cost) return;
@@ -236,16 +228,7 @@ export function hospitalTreatMercenaries() {
       character.conditions = (character.conditions ?? []).filter((entry) => entry.id !== condition.id);
       character.wound = Math.max(0, (character.wound ?? 0) - economyConfig.facilities.hospitalWoundRecoveryOnSuccess);
       character.stress = Math.max(0, (character.stress ?? 0) - economyConfig.facilities.hospitalStressRecoveryOnSuccess);
-      character.hp = Math.min(character.maxHp, (character.hp ?? character.maxHp) + 12);
       cured += 1;
-    });
-    draft.timeline.push({
-      id: createId(),
-      day: draft.day,
-      type: "facility",
-      title: "医疗中心治疗",
-      status: "done",
-      detail: `尝试处理 ${plan.entries.length} 个负面状态，成功 ${cured} 个。`,
     });
     draft.log.push(`第 ${draft.day} 天：支付 ${plan.cost} 金，医疗中心尝试治疗 ${plan.entries.length} 个负面状态，成功 ${cured} 个。`);
   });
@@ -294,7 +277,7 @@ export function payDailyUpkeep(draft) {
   const shortage = cost - draft.gold;
   draft.gold = 0;
   const shortageConfig = economyConfig.dailyExpenses.shortage;
-  draft.roster.filter((character) => character.status !== "阵亡").forEach((character) => {
+  draft.roster.filter((character) => !isDeadStatus(character.status)).forEach((character) => {
     character.stress += shortageConfig.stress;
   });
   draft.log.push(`第 ${draft.day} 天：维护费用缺口 ${shortage} 金，资金清零。隐秘值不受每日支出影响。`);
@@ -335,7 +318,7 @@ function createHospitalTreatmentPlan(draft) {
   const successChance = getHospitalSuccessChance(level);
   const entries = [];
   draft.roster
-    .filter((character) => character.status !== "阵亡")
+    .filter((character) => !isDeadStatus(character.status))
     .forEach((character) => {
       (character.conditions ?? [])
         .filter((condition) => canHospitalTreatSeverity(condition.severity, allowedSeverity))
@@ -388,29 +371,39 @@ function calculateEquipmentMaintenanceCost(item) {
   return base + rankIndex * config.perRank;
 }
 
+function isEquipmentItem(item) {
+  return Boolean(item && (item.itemCategory === "weapon" || item.itemCategory === "armor" || item.slot === "weapon" || item.slot === "armor"));
+}
+
+function createEquipmentExpenseItem(item, context = {}) {
+  const slot = context.slot ?? item.slot ?? item.itemCategory;
+  return {
+    id: item.id,
+    characterId: context.characterId ?? null,
+    characterName: context.characterName ?? context.location ?? "仓库",
+    location: context.location ?? context.characterName ?? "仓库",
+    slot,
+    slotLabel: slot === "weapon" || item.itemCategory === "weapon" ? "武器" : "防具",
+    itemName: item.name,
+    rarity: item.rarity ?? "F",
+    type: item.damageType ?? item.protectionType ?? item.type ?? "未知",
+    cost: calculateEquipmentMaintenanceCost(item),
+  };
+}
+
 function sumCosts(items) {
   return items.reduce((sum, item) => sum + (item.cost ?? 0), 0);
+}
+
+function isDeadStatus(status) {
+  return status === "阵亡" || status === "闃典骸";
 }
 
 function createBlackMarketItem(kind, rank) {
   if (kind === "weapon") return generateWeaponItem({ rarity: rank });
   if (kind === "armor") return generateArmorItem({ rarity: rank });
   if (kind === "mecha") return createRankedMecha(rank);
-  return createRankedSupply(rank);
-}
-
-function createRankedSupply(rank) {
-  const item = randomItem(blackMarketSupplyPool);
-  const quantityRange = rank === "F" ? economyConfig.blackMarket.supplyQuantityLowRank : economyConfig.blackMarket.supplyQuantityHighRank;
-  const quantity = randomNumber(...quantityRange);
-  return {
-    id: createId(),
-    ...item,
-    name: `${rank}级 ${item.name}`,
-    rarity: rank,
-    quantity,
-    itemCategory: "supply",
-  };
+  return null;
 }
 
 function createRankedMecha(rank) {
@@ -418,7 +411,7 @@ function createRankedMecha(rank) {
   return {
     id: createId(),
     ...frame,
-    name: `${rank}级 ${frame.name}`,
+    name: `${rank}级${frame.name}`,
     rarity: rank,
     condition: 100,
     maintenance: 20 + Math.max(0, facilityRanks.indexOf(rank)) * 18,

@@ -1,4 +1,5 @@
-import { getInventoryItem } from "../modules/inventory.js";
+import { getInventoryItem, getItemSellValue, sellInventoryItem } from "../modules/inventory.js";
+import { confirmResourceSpend, showSpendFailure, showToast } from "../js/notifications.js";
 
 export function initWeaponUI() {
   document.addEventListener("click", (event) => {
@@ -6,6 +7,8 @@ export function initWeaponUI() {
     if (openButton) openWeaponDetail(openButton.dataset.openWeapon);
     const closeButton = event.target.closest("[data-close-weapon]");
     if (closeButton) document.querySelector("#weapon-dialog").close();
+    const sellButton = event.target.closest("[data-sell-weapon]");
+    if (sellButton) handleSellWeapon(sellButton.dataset.sellWeapon);
   });
 }
 
@@ -31,6 +34,7 @@ export function renderWeaponSummaryLine(weapon) {
 function openWeaponDetail(id) {
   const weapon = getInventoryItem(id);
   if (!weapon) return;
+  const sellValue = getItemSellValue(weapon);
   document.querySelector("#weapon-dossier").innerHTML = `
     <div class="dossier-top">
       <div>
@@ -47,9 +51,25 @@ function openWeaponDetail(id) {
           <div class="field"><span>等级</span><strong>${weapon.rarity}</strong></div>
           <div class="field"><span>战斗力</span><strong>+${weapon.power ?? 0}</strong></div>
           <div class="field"><span>伤害类型</span><strong>${weapon.damageType ?? "未知"}</strong></div>
+          <div class="field"><span>回收价</span><strong>${sellValue} 金</strong></div>
         </div>
+        <button class="danger-button full-width-button" data-sell-weapon="${weapon.id}" type="button">回收武器</button>
       </section>
     </div>
   `;
   document.querySelector("#weapon-dialog").showModal();
+}
+
+function handleSellWeapon(id) {
+  const weapon = getInventoryItem(id);
+  if (!weapon) return;
+  const value = getItemSellValue(weapon);
+  if (!confirmResourceSpend(`回收武器：${weapon.name}`, value, "可获得金币")) return;
+  const result = sellInventoryItem(id);
+  if (!result.ok) {
+    showSpendFailure("回收武器", "回收没有完成。");
+    return;
+  }
+  document.querySelector("#weapon-dialog").close();
+  showToast(`回收完成：获得 ${result.value} 金。`, "good");
 }

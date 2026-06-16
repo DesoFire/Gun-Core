@@ -237,22 +237,17 @@ export const economyConfig = {
   blackMarket: {
     // 黑市物品价格：base[kind] + rankIndex * perRank[kind]。
     baseCost: {
-      supplies: 26,
       weapon: 58,
       armor: 46,
       mecha: 150,
       fallback: 40,
     },
     perRank: {
-      supplies: 14,
       weapon: 14,
       armor: 14,
       mecha: 45,
       fallback: 14,
     },
-    // 黑市补给/杂物的数量。F 级较少，E-S 级较多。
-    supplyQuantityLowRank: [2, 4],
-    supplyQuantityHighRank: [4, 8],
     // 黑市武器战斗力：参考同级佣兵战力，再乘 0.5-1.5。
     weaponPowerReferenceByRank: { F: 24, E: 28, D: 36, C: 52, B: 84, A: 148, S: 276 },
     weaponPowerMultiplierMin: 0.3,

@@ -1,4 +1,4 @@
-import {
+﻿import {
   careerCategories,
   characterClasses,
   creeds,
@@ -37,15 +37,10 @@ export function getCharacterClasses() {
   return characterClasses;
 }
 
-export function hasPlayerCharacter() {
-  return getState().roster.some((character) => character.isPlayer);
-}
-
-export function createMercenary(classId = randomItem(Object.keys(characterClasses)), isPlayer = false, customName = "") {
+export function createMercenary(classId = randomItem(Object.keys(characterClasses)), customName = "") {
   const resolvedClassId = characterClasses[classId] ? classId : randomItem(Object.keys(characterClasses));
   const baseClass = characterClasses[resolvedClassId];
   const category = careerCategories[baseClass.category];
-  const maxHp = baseClass.maxHp + randomNumber(-2, 3);
   return {
     id: createId(),
     name: customName || createRandomName(),
@@ -54,11 +49,7 @@ export function createMercenary(classId = randomItem(Object.keys(characterClasse
     className: baseClass.name,
     careerCategory: baseClass.category,
     careerCategoryName: category?.name ?? "未分类",
-    level: 0,
-    xp: 0,
-    hp: maxHp,
-    maxHp,
-    personalReputation: isPlayer ? 3 : randomNumber(0, 2),
+    personalReputation: randomNumber(0, 2),
     rank: "无",
     dossier: createDossier(),
     contractRecord: { completed: 0, failed: 0, survived: 0 },
@@ -67,23 +58,10 @@ export function createMercenary(classId = randomItem(Object.keys(characterClasse
     signingMultiplier: randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax),
     stress: randomNumber(0, 8),
     wound: 0,
-    isPlayer,
-    tags: [...new Set([...(category?.tags ?? []), ...baseClass.tags])],
     equipment: createEmptyEquipment(),
     combatPower: baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0) + randomNumber(-3, 4),
     status: "待命",
   };
-}
-
-export function createCharacter(data) {
-  const character = createMercenary(data.classId, Boolean(data.isPlayer), data.name);
-  updateState((draft) => {
-    if (draft.gameStatus !== "active") return;
-    draft.roster.unshift(character);
-    normalizeCharacterAvatars(draft);
-    draft.log.push(`第 ${draft.day} 天：${character.name} 成为了你的代表角色。`);
-  });
-  return character;
 }
 
 export function updateCharacter(id, data) {
@@ -167,7 +145,7 @@ export function spendEnhancementPoint(characterId) {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     const character = draft.roster.find((item) => item.id === characterId);
-    if (!character || character.status === "阵亡" || (draft.enhancementPoints ?? 0) <= 0) return;
+    if (!character || isDeadStatus(character.status) || (draft.enhancementPoints ?? 0) <= 0) return;
 
     draft.enhancementPoints -= 1;
     const gain = getPromotionCombatPowerGain(character.rank);
@@ -187,7 +165,7 @@ export function eraseMercenaryReputation(characterId) {
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     const character = draft.roster.find((item) => item.id === characterId);
-    if (!character || character.status === "阵亡") return;
+    if (!character || isDeadStatus(character.status)) return;
     const reputation = Math.max(0, character.personalReputation ?? 0);
     const cost = reputation * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint;
     result = { ok: false, cost };
@@ -201,19 +179,24 @@ export function eraseMercenaryReputation(characterId) {
   return result;
 }
 
+
 export function dismissMercenary(characterId) {
   let dismissed = null;
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     const character = draft.roster.find((item) => item.id === characterId);
-    if (!character || character.isPlayer || character.status !== "待命") return;
+    if (!character) return;
+    if (character.status !== "待命" && !isDeadStatus(character.status)) return;
 
+    const wasDead = isDeadStatus(character.status);
     Object.values(character.equipment ?? {})
       .filter(Boolean)
       .forEach((item) => draft.inventory.push(item));
     if (draft.unpaidSecrecy?.mercenaries) delete draft.unpaidSecrecy.mercenaries[character.id];
     draft.roster = draft.roster.filter((item) => item.id !== characterId);
-    draft.log.push(`第 ${draft.day} 天：${character.name} 被解雇，装备已收回仓库。`);
+    draft.log.push(wasDead
+      ? `第 ${draft.day} 天：${character.name} 的尸体已被妥善处理，装备已收回仓库。`
+      : `第 ${draft.day} 天：${character.name} 被解雇，装备已收回仓库。`);
     dismissed = character;
   });
   return dismissed;
@@ -223,6 +206,10 @@ function canCharacterUseSlot(character, slot) {
   if (slot !== "weapon") return true;
   const limbs = new Set((character.conditions ?? []).map((condition) => condition.limb).filter(Boolean));
   return !(limbs.has("leftArm") && limbs.has("rightArm"));
+}
+
+function isDeadStatus(status) {
+  return status === "阵亡" || status === "闃典骸";
 }
 
 export function recruitCost(character) {
@@ -240,7 +227,7 @@ export function getMercenaryLimit(state = getState()) {
 }
 
 export function getLivingMercenaryCount(state = getState()) {
-  return (state.roster ?? []).filter((character) => character.status !== "阵亡").length;
+  return (state.roster ?? []).filter((character) => !isDeadStatus(character.status)).length;
 }
 
 export function getEquipmentSlots() {
@@ -250,10 +237,11 @@ export function getEquipmentSlots() {
 export function normalizeCharacter(character) {
   if (character.personalReputation == null && character.notoriety != null) character.personalReputation = character.notoriety;
   delete character.notoriety;
-  character.personalReputation ??= character.isPlayer ? 3 : 1;
+  character.personalReputation ??= 1;
+  delete character.isPlayer;
   character.rank = normalizeRank(character);
-  character.level = Math.max(0, mercenaryRanks.indexOf(character.rank));
-  character.xp ??= 0;
+  delete character.level;
+  delete character.xp;
   delete character.traits;
   character.positiveConditions ??= [];
   character.dossier ??= createDossier();
@@ -265,7 +253,6 @@ export function normalizeCharacter(character) {
   character.wound ??= 0;
   character.stress ??= 0;
   character.status ??= "待命";
-  character.tags ??= [];
   const baseClass = characterClasses[character.classId] ?? characterClasses.assault;
   const category = careerCategories[baseClass.category];
   character.classId = characterClasses[character.classId] ? character.classId : "assault";
@@ -273,8 +260,8 @@ export function normalizeCharacter(character) {
   character.careerCategory = baseClass.category;
   character.careerCategoryName = category?.name ?? "未分类";
   character.combatPower ??= baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0);
-  character.maxHp ??= baseClass.maxHp ?? 24;
-  character.hp ??= Math.max(1, character.maxHp - character.wound * 4);
+  delete character.maxHp;
+  delete character.hp;
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
   character.equipment = normalizeEquipmentSlots(character.equipment);
   return character;
@@ -297,7 +284,7 @@ export function renderCharacterDossier(character) {
         <div class="field"><span>年龄</span><strong>${character.dossier.age}</strong></div>
         <div class="field"><span>性格</span><strong>${character.dossier.personality}</strong></div>
         <div class="field"><span>出身</span><strong>${character.dossier.origin}</strong></div>
-        <div class="field"><span>法理状态</span><strong>${character.isPlayer ? "被重点伪造" : "临时有效"}</strong></div>
+        <div class="field"><span>法理状态</span><strong>临时有效</strong></div>
       </div>
     </section>
     <section class="dossier-section">
@@ -321,6 +308,7 @@ export function renderCharacterDossier(character) {
     </section>
   `;
 }
+
 
 function createDossier() {
   return {
@@ -370,6 +358,5 @@ function normalizeEquipmentSlots(equipment) {
 
 function normalizeRank(character) {
   if (mercenaryRanks.includes(character.rank)) return character.rank;
-  if (typeof character.level === "number") return mercenaryRanks[Math.min(character.level, mercenaryRanks.length - 1)] ?? "无";
   return calculateRank(character);
 }
