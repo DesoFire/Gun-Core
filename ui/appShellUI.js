@@ -24,6 +24,7 @@ export function renderAppShell(root) {
     </nav>
 
     <button id="global-log-toggle" class="global-log-toggle" type="button" aria-controls="global-log-sidebar" aria-expanded="false">日志</button>
+    <button id="base-status-toggle" class="base-status-toggle" type="button" aria-controls="base-status-sidebar" aria-expanded="false">状态</button>
     <aside id="global-log-sidebar" class="global-log-sidebar" aria-label="行动日志" hidden>
       <div class="global-log-header">
         <div>
@@ -33,6 +34,21 @@ export function renderAppShell(root) {
         <button id="global-log-close" class="ghost-button" type="button">关闭</button>
       </div>
       <div id="global-log-list" class="global-log-list"></div>
+    </aside>
+
+    <aside id="base-status-sidebar" class="base-status-sidebar" aria-label="基地状态" hidden>
+      <div class="global-log-header">
+        <div>
+          <strong>基地状态</strong>
+          <p class="muted">随时查看基地的关键运营数据。</p>
+        </div>
+        <button id="base-status-close" class="ghost-button" type="button">关闭</button>
+      </div>
+      <div class="base-status-header">
+        <strong>基地状态</strong>
+        <span id="base-status-day" class="badge">第 1 天</span>
+      </div>
+      <div id="base-status-grid" class="base-status-grid"></div>
     </aside>
 
     <main class="dashboard">
@@ -141,14 +157,6 @@ export function renderAppShell(root) {
 
     </main>
 
-    <aside id="base-status-dashboard" class="base-status-dashboard" aria-label="基地状态仪表盘">
-      <div class="base-status-header">
-        <strong>基地状态</strong>
-        <span id="base-status-day" class="badge">第 1 天</span>
-      </div>
-      <div id="base-status-grid" class="base-status-grid"></div>
-    </aside>
-
     <dialog id="mercenary-dialog" class="dialog dossier-dialog">
       <div class="dossier" id="mercenary-dossier"></div>
     </dialog>
@@ -220,6 +228,20 @@ export function renderAppShell(root) {
           <button id="settlement-close" class="ghost-button dialog-close-button" aria-label="关闭" title="关闭" type="button">关闭</button>
         </div>
         <div id="settlement-content" class="settlement-content"></div>
+      </div>
+    </dialog>
+
+    <dialog id="expense-approval-dialog" class="dialog settlement-dialog">
+      <div class="settlement-card">
+        <div class="dossier-top settlement-top">
+          <div>
+            <div class="dossier-code">DAILY EXPENSE BRIEF</div>
+            <h2 class="dossier-title">收支简报</h2>
+            <p id="expense-approval-summary" class="muted">等待结算。</p>
+          </div>
+          <button id="expense-approval-close" class="ghost-button dialog-close-button" aria-label="关闭" title="关闭" type="button">关闭</button>
+        </div>
+        <div id="expense-approval-content" class="settlement-content"></div>
       </div>
     </dialog>
   `;

@@ -36,7 +36,6 @@ import { economyConfig } from "../data/economyConfig.js";
 import { calculateCharacterCombatPower, getInjuryState, getPressureState } from "../modules/combatPower.js";
 
 let router = null;
-let pendingExpenseApproval = false;
 let lastRenderedSettlementId = null;
 
 function init() {
@@ -58,10 +57,15 @@ function bindGlobalActions() {
   document.querySelector("#advance-day").addEventListener("click", requestAdvanceDayApproval);
   document.querySelector("#organization-name").addEventListener("click", editOrganizationName);
   initGlobalLogSidebar();
+  initBaseStatusSidebar();
   document.querySelector("#global-log-close").addEventListener("click", () => {
     closeGlobalLogSidebar();
   });
+  document.querySelector("#base-status-close").addEventListener("click", () => {
+    closeBaseStatusSidebar();
+  });
   document.querySelector("#settlement-close").addEventListener("click", closeSettlementDialog);
+  document.querySelector("#expense-approval-close").addEventListener("click", closeExpenseApprovalDialog);
   document.querySelector("#save-game").addEventListener("click", () => {
     saveState();
     updateState((draft) => {
@@ -117,10 +121,7 @@ function renderApp() {
 function requestAdvanceDayApproval() {
   const state = getState();
   if (state.gameStatus !== "active") return;
-  pendingExpenseApproval = true;
-  router?.switchTab("expenses");
-  renderExpenses();
-  showToast("请在支出页确认今日支出，批准后才会进入下一天。", "good");
+  openExpenseApprovalDialog();
 }
 
 function initGlobalLogSidebar() {
@@ -130,6 +131,7 @@ function initGlobalLogSidebar() {
     const isOpen = sidebar?.classList.toggle("open");
     if (sidebar) sidebar.hidden = !isOpen;
     toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    if (isOpen) closeBaseStatusSidebar();
   });
 }
 
@@ -138,6 +140,24 @@ function closeGlobalLogSidebar() {
   sidebar?.classList.remove("open");
   if (sidebar) sidebar.hidden = true;
   document.querySelector("#global-log-toggle")?.setAttribute("aria-expanded", "false");
+}
+
+function initBaseStatusSidebar() {
+  const toggle = document.querySelector("#base-status-toggle");
+  toggle?.addEventListener("click", () => {
+    const sidebar = document.querySelector("#base-status-sidebar");
+    const isOpen = sidebar?.classList.toggle("open");
+    if (sidebar) sidebar.hidden = !isOpen;
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    if (isOpen) closeGlobalLogSidebar();
+  });
+}
+
+function closeBaseStatusSidebar() {
+  const sidebar = document.querySelector("#base-status-sidebar");
+  sidebar?.classList.remove("open");
+  if (sidebar) sidebar.hidden = true;
+  document.querySelector("#base-status-toggle")?.setAttribute("aria-expanded", "false");
 }
 
 function renderGlobalLog() {
@@ -188,6 +208,96 @@ function renderResources() {
   ]
     .map(([label, value]) => `<div class="base-status-card"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
+}
+
+function openExpenseApprovalDialog() {
+  const state = getState();
+  const breakdown = calculateDailyExpenseBreakdown(state);
+  const secrecyItems = calculateSecrecyExpenseItems(state);
+  const secrecyDue = isSecrecyBillingDay(state.day);
+  const summary = document.querySelector("#expense-approval-summary");
+  const content = document.querySelector("#expense-approval-content");
+  const dialog = document.querySelector("#expense-approval-dialog");
+  if (!summary || !content || !dialog) return;
+
+  const secrecyTotal = secrecyDue ? secrecyItems.reduce((sum, item) => sum + item.cost, 0) : 0;
+  const total = breakdown.total + secrecyTotal;
+  summary.textContent = `第 ${state.day} 天结束前结算。当前资金 ${state.gold} 金，预计总支出 ${total} 金。`;
+  content.innerHTML = `
+    <section class="settlement-summary-grid">
+      <article class="settlement-stat">
+        <span>基地日支出</span>
+        <strong>${breakdown.total}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>隐秘费用</span>
+        <strong>${secrecyTotal}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>总计</span>
+        <strong>${total}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>当前资金</span>
+        <strong>${state.gold}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>补给库存</span>
+        <strong>${state.supplies ?? 0}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>待命佣兵</span>
+        <strong>${state.roster.filter((character) => character.status === "待命").length}</strong>
+      </article>
+    </section>
+    <section class="dossier-section">
+      <h3>支出模块</h3>
+      <div class="compact-field-list">
+        <div class="field"><span>佣兵工资</span><strong>${breakdown.wages.total} 金</strong></div>
+        <div class="field"><span>生活补给</span><strong>${calculateDailySupplyConsumption(state)} 份/天</strong></div>
+        <div class="field"><span>装备养护</span><strong>${breakdown.equipment.total} 金</strong></div>
+        <div class="field"><span>设施维持</span><strong>${breakdown.facilities.total + breakdown.base.total} 金</strong></div>
+        <div class="field"><span>隐秘费用</span><strong>${secrecyDue ? `${secrecyTotal} 金` : "本日无需支付"}</strong></div>
+      </div>
+    </section>
+    ${
+      secrecyDue && secrecyItems.length > 0
+        ? `
+          <section class="dossier-section">
+            <h3>本月隐秘费用</h3>
+            <div class="expense-line-list">
+              ${secrecyItems.map(renderSecrecyExpenseLine).join("")}
+            </div>
+          </section>
+        `
+        : ""
+    }
+    <div class="dialog-actions">
+      <button id="expense-approval-confirm" class="approve-button" type="button">确认支出并进入下一天</button>
+    </div>
+  `;
+
+  const confirmButton = content.querySelector("#expense-approval-confirm");
+  confirmButton?.addEventListener("click", () => {
+    const before = getState();
+    const currentBreakdown = calculateDailyExpenseBreakdown(before);
+    const currentSecrecyItems = calculateSecrecyExpenseItems(before);
+    const currentSecrecyDue = isSecrecyBillingDay(before.day);
+    const paidSecrecyIds = [...content.querySelectorAll("[data-secrecy-pay]:checked")].map((input) => input.value);
+    const finalCost = currentBreakdown.total + (currentSecrecyDue ? currentSecrecyItems.filter((item) => paidSecrecyIds.includes(item.id)).reduce((sum, item) => sum + item.cost, 0) : 0);
+    if (!confirmResourceSpend("确认今日支出并进入下一天", finalCost)) return;
+    if (currentSecrecyDue) approveSecrecyExpenses(paidSecrecyIds);
+    advanceDay();
+    const after = getState();
+    showToast(`已进入第 ${after.day} 天。本次结算支出 ${finalCost} 金，剩余 ${after.gold} 金。`, "good");
+    closeExpenseApprovalDialog();
+  });
+
+  dialog.showModal();
+}
+
+function closeExpenseApprovalDialog() {
+  document.querySelector("#expense-approval-dialog")?.close();
 }
 
 function renderSettlementDialog() {
@@ -287,50 +397,27 @@ function renderExpenses() {
   if (!totalBadge || !summaryGrid || !list) return;
 
   totalBadge.textContent = `${breakdown.total} 金/天`;
-  summaryGrid.innerHTML = [
-    ["佣兵工资", `${breakdown.wages.total} 金`, `${breakdown.wages.items.length} 名待命`],
-    ["生活补给", `${calculateDailySupplyConsumption(state)} 份/天`, `库存 ${state.supplies}`],
-    ["装备养护", `${breakdown.equipment.total} 金`, `${breakdown.equipment.items.length} 件装备`],
-    ["设施维持", `${breakdown.facilities.total + breakdown.base.total} 金`, `${breakdown.facilities.items.length} 座设施`],
-  ]
-    .map(
-      ([label, value, note]) => `
-        <article class="expense-summary-card">
-          <span>${label}</span>
-          <strong>${value}</strong>
-          <p class="muted">${note}</p>
-        </article>
-      `
-    )
-    .join("");
+  summaryGrid.innerHTML = "";
 
   list.innerHTML = [
-    renderExpenseSection("佣兵工资", "仅待命佣兵按日支付；执行契约期间暂不支付，归来后补发。", breakdown.wages.items, renderWageExpenseLine, breakdown.wages.total),
+    renderExpenseCard("佣兵工资", `${breakdown.wages.items.length} 名待命佣兵`, "仅待命佣兵按日支付；执行契约期间暂不支付，归来后补发。", breakdown.wages.items, renderWageExpenseLine, `${breakdown.wages.total} 金`),
     renderSupplyExpenseSection(state, breakdown.supplies),
-    renderExpenseSection("武器防具养护", "已装备的武器和防具每天都要维护，等级越高费用越高。", breakdown.equipment.items, renderEquipmentExpenseLine, breakdown.equipment.total),
-    renderExpenseSection("基础设施维持", "基地基础开销加已解锁设施维持费。", [...breakdown.base.items, ...breakdown.facilities.items], renderFacilityExpenseLine, breakdown.base.total + breakdown.facilities.total),
-    renderSecrecyExpenseSection(secrecyItems, unpaidSecrecy, secrecyDue),
-    renderExpenseApprovalPanel(state, breakdown),
+    renderExpenseCard("武器防具养护", `${breakdown.equipment.items.length} 件装备`, "已装备的武器和防具每天都要维护，等级越高费用越高。", breakdown.equipment.items, renderEquipmentExpenseLine, `${breakdown.equipment.total} 金`),
+    renderExpenseCard("基础设施维持", `${breakdown.facilities.items.length} 座设施`, "基地基础开销加已解锁设施维持费。", [...breakdown.base.items, ...breakdown.facilities.items], renderFacilityExpenseLine, `${breakdown.base.total + breakdown.facilities.total} 金`),
+    renderSecrecyExpenseCard(secrecyItems, unpaidSecrecy, secrecyDue),
   ].join("");
 
-  list.querySelectorAll("[data-confirm-expenses]").forEach((button) => {
+  list.querySelectorAll("[data-expense-card]").forEach((button) => {
     button.addEventListener("click", () => {
-      const before = getState();
-      const approvedCost = breakdown.total;
-      const previousDay = before.day;
-      const paidSecrecyIds = [...list.querySelectorAll("[data-secrecy-pay]:checked")].map((input) => input.value);
-      if (!confirmResourceSpend("批准今日支出并进入下一天", approvedCost)) return;
-      if (isSecrecyBillingDay(before.day)) approveSecrecyExpenses(paidSecrecyIds);
-      pendingExpenseApproval = false;
-      advanceDay();
-      const after = getState();
-      const spent = Math.min(before.gold, approvedCost);
-      showToast(`已进入第 ${after.day} 天。本次批准支出 ${approvedCost} 金，实际支付 ${spent} 金，剩余 ${after.gold} 金。`, "good");
+      toggleExpenseCard(button.dataset.expenseCard);
     });
   });
   list.querySelectorAll("[data-buy-supplies]").forEach((button) => {
     button.addEventListener("click", () => {
-      const quantity = Number(button.dataset.buySupplies);
+      const requested = window.prompt("输入要购买的补给数量", "10");
+      if (requested == null) return;
+      const quantity = Math.max(0, Math.floor(Number(requested) || 0));
+      if (quantity <= 0) return;
       const cost = getSupplyPurchaseCost(quantity);
       if (!confirmGoldSpend(`购买 ${quantity} 份补给`, cost)) return;
       const before = getState();
@@ -346,43 +433,26 @@ function renderExpenses() {
   });
 }
 
-function renderExpenseApprovalPanel(state, breakdown) {
-  return `
-    <section class="expense-section expense-approval-section">
-      <div>
-        <h3>每日结算批准</h3>
-        <p class="muted">${
-          pendingExpenseApproval
-            ? `确认支付当前每日支出 ${breakdown.total} 金。当前资金 ${state.gold} 金。`
-            : "点击顶部“推进一天”后，需要在这里批准支出。"
-        }</p>
-      </div>
-      <button class="approve-button" data-confirm-expenses ${pendingExpenseApproval && state.gameStatus === "active" ? "" : "disabled"} type="button">
-        批准支出并进入下一天
-      </button>
-    </section>
-  `;
-}
-
-function renderSecrecyExpenseSection(items, unpaidSecrecy, secrecyDue) {
+function renderSecrecyExpenseCard(items, unpaidSecrecy, secrecyDue) {
   const total = items.reduce((sum, item) => sum + item.cost, 0);
   return `
-    <section class="expense-section">
-      <div class="card-header">
+    <section class="expense-card-shell">
+      <button class="expense-card-header" data-expense-card="secrecy" type="button">
         <div>
           <h3>隐秘费用</h3>
-          <p class="muted">${
-            secrecyDue
-              ? "月初结算。可任意勾选支付对象；未支付的声望会永久累计为未遮掩声望，并立即降低隐秘值。"
-              : `本日无需结算。当前永久未遮掩声望 ${unpaidSecrecy}，每日遇袭率由隐秘值决定。`
-          }</p>
+          <p class="muted">${secrecyDue ? `${items.length} 个支付对象` : `未遮掩声望 ${unpaidSecrecy}`}</p>
         </div>
         <span class="badge">${secrecyDue ? `${total} 金/月` : `未遮掩 ${unpaidSecrecy}`}</span>
-      </div>
-      <div class="expense-line-list">
+      </button>
+      <div class="expense-card-detail" data-expense-detail="secrecy" hidden>
+        <p class="muted">${
+          secrecyDue
+            ? "月初结算。可任意勾选支付对象；未支付的声望会永久累计为未遮掩声望，并立即降低隐秘值。"
+            : `本日无需结算。当前永久未遮掩声望 ${unpaidSecrecy}，每日遇袭率由隐秘值决定。`
+        }</p>
         ${
           secrecyDue && items.length > 0
-            ? items.map(renderSecrecyExpenseLine).join("")
+            ? `<div class="expense-line-list">${items.map(renderSecrecyExpenseLine).join("")}</div>`
             : `<p class="muted">${secrecyDue ? "暂无需要遮掩的声望" : "隐秘费每 30 天结算一次，第 1 天不收。"}</p>`
         }
       </div>
@@ -403,27 +473,23 @@ function renderSecrecyExpenseLine(item) {
 function renderSupplyExpenseSection(state, supplies) {
   const dailyConsumption = calculateDailySupplyConsumption(state);
   const daysLeft = dailyConsumption > 0 ? Math.floor((state.supplies ?? 0) / dailyConsumption) : 0;
-  const options = economyConfig.dailyExpenses.livingSupplies.purchaseTiers ?? [{ quantity: 1, cost: 1 }];
   return `
-    <section class="expense-section">
-      <div class="card-header">
+    <section class="expense-card-shell">
+      <button class="expense-card-header" data-expense-card="supplies" type="button">
         <div>
           <h3>生活补给</h3>
-          <p class="muted">库存 ${state.supplies ?? 0}，每日消耗 ${dailyConsumption}，约可维持 ${daysLeft} 天。高等级佣兵消耗更多补给。</p>
+          <p class="muted">库存 ${state.supplies ?? 0} · 可维持 ${daysLeft} 天</p>
         </div>
         <span class="badge">${dailyConsumption} 份/天</span>
-      </div>
-      <div class="button-row">
-        ${options
-          .map(({ quantity, cost }) => {
-            return `<button class="ghost-button" data-buy-supplies="${quantity}" ${state.gold >= cost ? "" : "disabled"} type="button">购买 ${quantity} · ${cost} 金</button>`;
-          })
-          .join("")}
-      </div>
-      <div class="expense-line-list">
+      </button>
+      <div class="expense-card-detail" data-expense-detail="supplies" hidden>
+        <p class="muted">库存 ${state.supplies ?? 0}，每日消耗 ${dailyConsumption}，约可维持 ${daysLeft} 天。高等级佣兵消耗更多补给。</p>
+        <div class="button-row">
+          <button class="ghost-button" data-buy-supplies="manual" ${state.gameStatus !== "active" ? "disabled" : ""} type="button">购买补给</button>
+        </div>
         ${
           supplies.items.length > 0
-            ? supplies.items.map(renderSupplyExpenseLine).join("")
+            ? `<div class="expense-line-list">${supplies.items.map(renderSupplyExpenseLine).join("")}</div>`
             : `<p class="muted">暂无支出</p>`
         }
       </div>
@@ -431,25 +497,33 @@ function renderSupplyExpenseSection(state, supplies) {
   `;
 }
 
-function renderExpenseSection(title, description, items, renderLine, total) {
+function renderExpenseCard(title, subtitle, description, items, renderLine, totalText) {
+  const key = title;
   return `
-    <section class="expense-section">
-      <div class="card-header">
+    <section class="expense-card-shell">
+      <button class="expense-card-header" data-expense-card="${key}" type="button">
         <div>
           <h3>${title}</h3>
-          <p class="muted">${description}</p>
+          <p class="muted">${subtitle}</p>
         </div>
-        <span class="badge">${total} 金</span>
-      </div>
-      <div class="expense-line-list">
+        <span class="badge">${totalText}</span>
+      </button>
+      <div class="expense-card-detail" data-expense-detail="${key}" hidden>
+        <p class="muted">${description}</p>
         ${
           items.length > 0
-            ? items.map(renderLine).join("")
+            ? `<div class="expense-line-list">${items.map(renderLine).join("")}</div>`
             : `<p class="muted">暂无支出</p>`
         }
       </div>
     </section>
   `;
+}
+
+function toggleExpenseCard(key) {
+  const detail = document.querySelector(`[data-expense-detail="${CSS.escape(key)}"]`);
+  if (!detail) return;
+  detail.hidden = !detail.hidden;
 }
 
 function renderWageExpenseLine(item) {
