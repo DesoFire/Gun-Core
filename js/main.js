@@ -15,7 +15,9 @@ import {
   getFacilityUpgradeCost,
   getSupplyPurchaseCost,
   hospitalTreatMercenaries,
+  infirmaryTreatMercenaries,
   calculateHospitalTreatmentPlan,
+  calculateInfirmaryTreatmentPlan,
   approveSecrecyExpenses,
   isSecrecyBillingDay,
   upgradeBuilding,
@@ -31,7 +33,7 @@ import { initWeaponUI } from "../ui/weaponUI.js";
 import { buyWealthItem, getWealthCollections, getWealthProgress } from "../modules/wealth.js";
 import { confirmResourceSpend, showInsufficientFunds, showSpendFailure, showSpendSuccess, showToast } from "./notifications.js";
 import { economyConfig } from "../data/economyConfig.js";
-import { calculateCharacterCombatPower } from "../modules/combatPower.js";
+import { calculateCharacterCombatPower, getInjuryState, getPressureState } from "../modules/combatPower.js";
 
 let router = null;
 let pendingExpenseApproval = false;
@@ -691,8 +693,8 @@ function renderOverview() {
   const state = getState();
   const activeContracts = state.missions.filter((mission) => mission.status === "active");
   const availableContracts = state.missions.filter((mission) => mission.status === "available");
-  const wounded = state.roster.filter((character) => character.wound > 0);
-  const stressed = state.roster.filter((character) => character.stress >= 10);
+  const wounded = state.roster.filter((character) => getInjuryState(character).points > 0);
+  const stressed = state.roster.filter((character) => getPressureState(character).points >= 5);
   const availableRoster = state.roster.filter((character) => character.status === "待命");
   const livingRoster = state.roster.filter((character) => character.status !== "阵亡");
   const activeRoster = livingRoster.filter((character) => character.status !== "待命");
@@ -801,7 +803,13 @@ function renderBuildings() {
   container.querySelectorAll("[data-hospital-treat]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      handleHospitalSpend(button);
+      handleTreatmentSpend(button, "hospital");
+    });
+  });
+  container.querySelectorAll("[data-infirmary-treat]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      handleTreatmentSpend(button, "infirmary");
     });
   });
 }
@@ -828,7 +836,11 @@ function renderFacilityAction(id, level, cost, disabled) {
   }
   if (id === "hospital") {
     const plan = calculateHospitalTreatmentPlan(state);
-    return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" || plan.entries.length === 0 ? "disabled" : ""}>治疗负面状态 · ${plan.cost} 金</button>${upgradeButton}`;
+    return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" || plan.entries.length === 0 ? "disabled" : ""}>治疗物理伤病 · ${plan.cost} 金</button>${upgradeButton}`;
+  }
+  if (id === "infirmary") {
+    const plan = calculateInfirmaryTreatmentPlan(state);
+    return `<button class="primary-button" data-infirmary-treat ${state.gameStatus !== "active" || plan.entries.length === 0 ? "disabled" : ""}>处理心理负面状态 · ${plan.cost} 金</button>${upgradeButton}`;
   }
   return upgradeButton;
 }
@@ -855,12 +867,15 @@ function openFacilityDialog(id) {
     blackMarket: `只能买到当前黑市评级的商品。当前可购买 ${rank}级补给、武器、防具与机甲。`,
     hospital: (() => {
       const plan = calculateHospitalTreatmentPlan(state);
-      return `按可治疗的负面状态数量收费。当前可处理 ${plan.entries.length} 个负面状态，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可治疗${formatSeverityLabel(plan.allowedSeverity)}状态。`;
+      return `按单个佣兵身上的单个物理负面状态收费。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点伤势标签。`;
+    })(),
+    infirmary: (() => {
+      const plan = calculateInfirmaryTreatmentPlan(state);
+      return `按单个佣兵身上的单个心理负面状态收费。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点压力标签。`;
     })(),
     defenses: `基地遭遇突袭时提供额外战斗力。当前已建 ${level} 座，防御战斗力 +${(state.buildings.defenses ?? 0) * economyConfig.facilities.defensePowerPerLevel}。`,
     tavern: "提高招募池规模，便于寻找更多候选佣兵。",
     barracks: `提高可雇佣佣兵上限。当前上限 ${economyConfig.facilities.baseMercenaryLimit + (state.buildings.barracks ?? 0) * economyConfig.facilities.barracksMercenaryLimitPerLevel} 人，每升 1 级 +${economyConfig.facilities.barracksMercenaryLimitPerLevel}。`,
-    infirmary: "每日推进时自动降低佣兵压力，但方式不体面，也不干净。",
     intel: `每级降低调查契约情报费用 ${Math.round(economyConfig.facilities.intelInvestigationDiscountPerLevel * 100)}%，总折扣仍受调查折扣上限限制。`,
   }[id] ?? "基础设施效果待扩展。";
 
@@ -930,7 +945,12 @@ function openFacilityDialog(id) {
   });
   dialog.querySelectorAll("[data-hospital-treat]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (handleHospitalSpend(button)) dialog.close();
+      if (handleTreatmentSpend(button, "hospital")) dialog.close();
+    });
+  });
+  dialog.querySelectorAll("[data-infirmary-treat]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (handleTreatmentSpend(button, "infirmary")) dialog.close();
     });
   });
 }
@@ -988,21 +1008,21 @@ function handleBlackMarketSpend(button) {
   return true;
 }
 
-function handleHospitalSpend(button) {
-  const action = "医疗中心治疗";
+function handleTreatmentSpend(button, facilityId) {
+  const action = facilityId === "infirmary" ? "娱乐中心处理" : "医疗中心治疗";
   const cost = getCostFromText(button.textContent);
   if (!confirmGoldSpend(action, cost)) return false;
   const before = getState();
   const beforeConditions = before.roster.reduce((sum, character) => sum + (character.conditions?.length ?? 0), 0);
   const beforeGold = before.gold;
-  hospitalTreatMercenaries();
+  const result = facilityId === "infirmary" ? infirmaryTreatMercenaries() : hospitalTreatMercenaries();
   const after = getState();
   const afterConditions = after.roster.reduce((sum, character) => sum + (character.conditions?.length ?? 0), 0);
   if (after.gold >= beforeGold) {
     showSpendFailure(action, getGoldFailureReason(beforeGold, cost));
     return false;
   }
-  const cured = beforeConditions - afterConditions;
+  const cured = result?.cured ?? beforeConditions - afterConditions;
   const curedText = cured > 0 ? `，治愈 ${cured} 个负面状态` : "，本次没有治愈负面状态";
   showToast(`${action}完成，花费 ${beforeGold - after.gold} 金${curedText}，剩余 ${after.gold} 金。`, cured > 0 ? "good" : "warning");
   return true;

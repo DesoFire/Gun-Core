@@ -14,7 +14,7 @@ export const careerCategories = {
     name: "生存类",
     description: "降低死亡、受伤和长期压力。",
     tags: ["生存"],
-    effects: { deathRiskReduction: 2, stressGainReduction: 0.1 },
+    effects: { deathRiskReduction: 2, mentalConditionRiskReduction: 0.1 },
   },
   intel: {
     name: "情报类",
@@ -83,7 +83,7 @@ export const characterClasses = {
     category: "survival",
     tags: ["生存", "战斗"],
     baseCombatPower: 25,
-    effects: { successStressReduction: 2 },
+    effects: { mentalConditionRiskReduction: 0.08 },
   },
   evac: {
     name: "撤离专家",
@@ -181,14 +181,14 @@ export const characterClasses = {
     category: "abnormal",
     tags: ["异常", "调查"],
     baseCombatPower: 19,
-    effects: { abnormalMissionChanceBonus: 8, stressGainFlat: 2 },
+    effects: { abnormalMissionChanceBonus: 8, mentalConditionRiskBonus: 2 },
   },
   rookie: {
     name: "新血",
     category: "growth",
     tags: ["成长"],
     baseCombatPower: 17,
-    effects: { growthChanceBonus: 15, failureStressBonus: 2 },
+    effects: { growthChanceBonus: 15, mentalConditionRiskBonus: 2 },
   },
   apprentice: {
     name: "学徒",
@@ -202,14 +202,14 @@ export const characterClasses = {
     category: "growth",
     tags: ["成长", "生存"],
     baseCombatPower: 19,
-    effects: { failureDeathRiskReduction: 3, initialStressBonus: 10 },
+    effects: { failureDeathRiskReduction: 3, mentalConditionRiskBonus: 2 },
   },
   debtor: {
     name: "负债者",
     category: "growth",
     tags: ["成长", "交易"],
     baseCombatPower: 20,
-    effects: { wageReduction: 0.15, stressGainFlat: 1 },
+    effects: { wageReduction: 0.15, mentalConditionRiskBonus: 1 },
   },
 };
 
@@ -342,88 +342,88 @@ export const promotionChances = {
 
 export const positiveConditions = [
   // 轻度：来自一次训练、一次幸存或一次小小的自我修复，提供温和但稳定的收益。
-  { name: "手感回暖", severity: "light", description: "他重新找回了扣下扳机前那半秒的判断。", tags: ["战斗"], powerBonus: 3, deathRiskReduction: 0, stressRecoveryBonus: 0 },
-  { name: "睡过一个整觉", severity: "light", description: "没有梦见战场，这在事务所里已经算奢侈品。", tags: ["恢复"], powerBonus: 1, deathRiskReduction: 0, stressRecoveryBonus: 1 },
-  { name: "临场冷静", severity: "light", description: "他学会了先数三秒，再决定要不要冲出去。", tags: ["心理"], powerBonus: 2, deathRiskReduction: 1, stressRecoveryBonus: 0 },
-  { name: "装备熟悉", severity: "light", description: "枪、护甲和身体终于不再互相嫌弃。", tags: ["装备"], powerBonus: 3, deathRiskReduction: 0, stressRecoveryBonus: 0 },
-  { name: "撤离意识", severity: "light", description: "活着回来不再只是运气，也是一种技术。", tags: ["生存"], powerBonus: 1, deathRiskReduction: 1, stressRecoveryBonus: 0 },
+  { name: "手感回暖", severity: "light", description: "他重新找回了扣下扳机前那半秒的判断。", tags: ["战斗"], powerBonus: 3, deathRiskReduction: 0 },
+  { name: "睡过一个整觉", severity: "light", description: "没有梦见战场，这在事务所里已经算奢侈品。", tags: ["恢复"], powerBonus: 1, deathRiskReduction: 0 },
+  { name: "临场冷静", severity: "light", description: "他学会了先数三秒，再决定要不要冲出去。", tags: ["心理"], powerBonus: 2, deathRiskReduction: 1 },
+  { name: "装备熟悉", severity: "light", description: "枪、护甲和身体终于不再互相嫌弃。", tags: ["装备"], powerBonus: 3, deathRiskReduction: 0 },
+  { name: "撤离意识", severity: "light", description: "活着回来不再只是运气，也是一种技术。", tags: ["生存"], powerBonus: 1, deathRiskReduction: 1 },
 
   // 中度：角色开始形成可依赖的作战习惯，能明显改变一次派遣的风险。
-  { name: "稳定火线", severity: "medium", description: "混乱没有减少，只是他不再跟着混乱移动。", tags: ["战斗"], powerBonus: 6, deathRiskReduction: 1, stressRecoveryBonus: 0 },
-  { name: "团队锚点", severity: "medium", description: "有人看着他，就会下意识相信队伍还有路可退。", tags: ["团队"], powerBonus: 4, deathRiskReduction: 1, stressRecoveryBonus: 1 },
-  { name: "疼痛管理", severity: "medium", description: "不是不痛，而是他知道怎样不让疼痛替自己做决定。", tags: ["生存"], powerBonus: 4, deathRiskReduction: 2, stressRecoveryBonus: 0 },
-  { name: "危险嗅觉", severity: "medium", description: "简报没写的东西，他会先皱眉。", tags: ["侦察"], powerBonus: 5, deathRiskReduction: 2, stressRecoveryBonus: 0 },
-  { name: "战后整理", severity: "medium", description: "每次回来都把恐惧归档，虽然档案柜越来越满。", tags: ["恢复"], powerBonus: 2, deathRiskReduction: 0, stressRecoveryBonus: 2 },
+  { name: "稳定火线", severity: "medium", description: "混乱没有减少，只是他不再跟着混乱移动。", tags: ["战斗"], powerBonus: 6, deathRiskReduction: 1 },
+  { name: "团队锚点", severity: "medium", description: "有人看着他，就会下意识相信队伍还有路可退。", tags: ["团队"], powerBonus: 4, deathRiskReduction: 1 },
+  { name: "疼痛管理", severity: "medium", description: "不是不痛，而是他知道怎样不让疼痛替自己做决定。", tags: ["生存"], powerBonus: 4, deathRiskReduction: 2 },
+  { name: "危险嗅觉", severity: "medium", description: "简报没写的东西，他会先皱眉。", tags: ["侦察"], powerBonus: 5, deathRiskReduction: 2 },
+  { name: "战后整理", severity: "medium", description: "每次回来都把恐惧归档，虽然档案柜越来越满。", tags: ["恢复"], powerBonus: 2, deathRiskReduction: 0 },
 
   // 重度：少见的强正面状态，代表角色在残酷循环中长出了很硬的东西。
-  { name: "死线直觉", severity: "heavy", description: "他不能预知死亡，但能听见死亡换弹匣的声音。", tags: ["生存"], powerBonus: 8, deathRiskReduction: 3, stressRecoveryBonus: 0 },
-  { name: "火力统御", severity: "heavy", description: "他不只是开火，他让整条火线知道该往哪里塌。", tags: ["战斗"], powerBonus: 10, deathRiskReduction: 1, stressRecoveryBonus: 0 },
-  { name: "灾后清醒", severity: "heavy", description: "见过太多坏结局后，他反而更擅长留下一个不那么坏的。", tags: ["心理"], powerBonus: 6, deathRiskReduction: 2, stressRecoveryBonus: 2 },
-  { name: "幸存者技艺", severity: "heavy", description: "他把所有差点死掉的瞬间，都磨成了下一次活下来的工具。", tags: ["生存"], powerBonus: 7, deathRiskReduction: 3, stressRecoveryBonus: 1 },
+  { name: "死线直觉", severity: "heavy", description: "他不能预知死亡，但能听见死亡换弹匣的声音。", tags: ["生存"], powerBonus: 8, deathRiskReduction: 3 },
+  { name: "火力统御", severity: "heavy", description: "他不只是开火，他让整条火线知道该往哪里塌。", tags: ["战斗"], powerBonus: 10, deathRiskReduction: 1 },
+  { name: "灾后清醒", severity: "heavy", description: "见过太多坏结局后，他反而更擅长留下一个不那么坏的。", tags: ["心理"], powerBonus: 6, deathRiskReduction: 2 },
+  { name: "幸存者技艺", severity: "heavy", description: "他把所有差点死掉的瞬间，都磨成了下一次活下来的工具。", tags: ["生存"], powerBonus: 7, deathRiskReduction: 3 },
 ];
 
 export const negativeConditions = [
   // 轻度：可治疗、可继续出战，但会把人一点点磨坏。
-  { name: "轻度骨折", category: "physical", severity: "light", description: "骨头还在原位，只是每一步都在提醒他别再相信简报。", tags: ["骨折"], stress: 4, wound: 1, powerPenalty: 5, deathRiskModifier: 1 },
-  { name: "肋骨裂伤", category: "physical", severity: "light", description: "呼吸、咳嗽和开枪都开始收费。", tags: ["骨折"], stress: 4, wound: 1, powerPenalty: 4, deathRiskModifier: 1 },
-  { name: "肩关节脱位", category: "physical", severity: "light", description: "还能抬枪，但每次抬枪都像在重新签合同。", tags: ["肢体"], stress: 5, wound: 1, powerPenalty: 6, deathRiskModifier: 1 },
-  { name: "脚踝扭伤", category: "physical", severity: "light", description: "撤离路线突然变得很长。", tags: ["肢体"], stress: 4, wound: 1, powerPenalty: 4, deathRiskModifier: 1 },
-  { name: "轻度烧伤", category: "physical", severity: "light", description: "皮肤记住了火，睡眠会负责重播。", tags: ["烧伤"], damageTypes: ["燃烧", "能量"], stress: 5, wound: 1, powerPenalty: 5, deathRiskModifier: 1 },
-  { name: "电击灼痕", category: "physical", severity: "light", description: "神经像接触不良的线路。", tags: ["电磁"], damageTypes: ["电磁", "能量"], stress: 5, wound: 1, powerPenalty: 5, deathRiskModifier: 1 },
-  { name: "轻度中毒", category: "physical", severity: "light", description: "血液报告比任务报告更诚实。", tags: ["中毒"], damageTypes: ["腐蚀"], stress: 5, wound: 1, powerPenalty: 4, deathRiskModifier: 1 },
-  { name: "爆震耳鸣", category: "physical", severity: "light", description: "世界安静不下来，哪怕战斗已经结束。", tags: ["爆风"], damageTypes: ["爆风"], stress: 6, wound: 1, powerPenalty: 5, deathRiskModifier: 1 },
-  { name: "切割裂伤", category: "physical", severity: "light", description: "缝合得住肉，缝不住手抖。", tags: ["切割"], damageTypes: ["切割"], stress: 5, wound: 1, powerPenalty: 5, deathRiskModifier: 1 },
+  { name: "轻度骨折", category: "physical", severity: "light", description: "骨头还在原位，只是每一步都在提醒他别再相信简报。", tags: ["骨折"], woundPoints: 2, deathRiskModifier: 1 },
+  { name: "肋骨裂伤", category: "physical", severity: "light", description: "呼吸、咳嗽和开枪都开始收费。", tags: ["骨折"], woundPoints: 3, deathRiskModifier: 1 },
+  { name: "肩关节脱位", category: "physical", severity: "light", description: "还能抬枪，但每次抬枪都像在重新签合同。", tags: ["肢体"], woundPoints: 2, deathRiskModifier: 1 },
+  { name: "脚踝扭伤", category: "physical", severity: "light", description: "撤离路线突然变得很长。", tags: ["肢体"], woundPoints: 1, deathRiskModifier: 1 },
+  { name: "轻度烧伤", category: "physical", severity: "light", description: "皮肤记住了火，睡眠会负责重播。", tags: ["烧伤"], damageTypes: ["燃烧", "能量"], woundPoints: 1, deathRiskModifier: 1 },
+  { name: "电击灼痕", category: "physical", severity: "light", description: "神经像接触不良的线路。", tags: ["电磁"], damageTypes: ["电磁", "能量"], woundPoints: 2, deathRiskModifier: 1 },
+  { name: "轻度中毒", category: "physical", severity: "light", description: "血液报告比任务报告更诚实。", tags: ["中毒"], damageTypes: ["腐蚀"], woundPoints: 1, deathRiskModifier: 1 },
+  { name: "爆震耳鸣", category: "physical", severity: "light", description: "世界安静不下来，哪怕战斗已经结束。", tags: ["爆风"], damageTypes: ["爆风"], woundPoints: 1, deathRiskModifier: 1 },
+  { name: "切割裂伤", category: "physical", severity: "light", description: "缝合得住肉，缝不住手抖。", tags: ["切割"], damageTypes: ["切割"], woundPoints: 2, deathRiskModifier: 1 },
 
   // 中度：明显改变角色可用性，医院和休整开始有战略价值。
-  { name: "重度骨折", category: "physical", severity: "medium", description: "骨骼结构还在，但已经不适合被称为完整。", tags: ["骨折"], stress: 10, wound: 2, powerPenalty: 14, deathRiskModifier: 4 },
-  { name: "粉碎性骨折", category: "physical", severity: "medium", description: "医生看了片子以后沉默了一会儿。", tags: ["骨折"], damageTypes: ["动能", "爆风"], stress: 12, wound: 2, powerPenalty: 16, deathRiskModifier: 5 },
-  { name: "内出血", category: "physical", severity: "medium", description: "外表还算体面，体内已经在撤退。", tags: ["出血"], damageTypes: ["动能", "爆风"], stress: 12, wound: 2, powerPenalty: 13, deathRiskModifier: 6 },
-  { name: "重度烧伤", category: "physical", severity: "medium", description: "防具没有融穿，但人不是防具的一部分。", tags: ["烧伤"], damageTypes: ["燃烧", "能量"], stress: 14, wound: 2, powerPenalty: 15, deathRiskModifier: 5 },
-  { name: "腐蚀创口", category: "physical", severity: "medium", description: "伤口边缘像被合同条款啃过。", tags: ["腐蚀"], damageTypes: ["腐蚀"], stress: 12, wound: 2, powerPenalty: 13, deathRiskModifier: 5 },
-  { name: "神经紊乱", category: "physical", severity: "medium", description: "反应慢半拍，恐惧快半拍。", tags: ["电磁"], damageTypes: ["电磁"], stress: 13, wound: 1, powerPenalty: 12, deathRiskModifier: 4 },
-  { name: "精神污染", category: "physical", severity: "medium", description: "他开始记得一些自己没有经历过的战场。", tags: ["异源"], damageTypes: ["异源"], stress: 16, wound: 1, powerPenalty: 14, deathRiskModifier: 4 },
-  { name: "重度中毒", category: "physical", severity: "medium", description: "呼吸仍在进行，只是每次都像系统错误。", tags: ["中毒"], damageTypes: ["腐蚀"], stress: 14, wound: 2, powerPenalty: 14, deathRiskModifier: 6 },
-  { name: "战场感染", category: "physical", severity: "medium", description: "撤回来的是佣兵，也是培养皿。", tags: ["感染"], stress: 12, wound: 2, powerPenalty: 12, deathRiskModifier: 5 },
+  { name: "重度骨折", category: "physical", severity: "medium", description: "骨骼结构还在，但已经不适合被称为完整。", tags: ["骨折"], woundPoints: 5, deathRiskModifier: 4 },
+  { name: "粉碎性骨折", category: "physical", severity: "medium", description: "医生看了片子以后沉默了一会儿。", tags: ["骨折"], damageTypes: ["动能", "爆风"], woundPoints: 5, deathRiskModifier: 5 },
+  { name: "内出血", category: "physical", severity: "medium", description: "外表还算体面，体内已经在撤退。", tags: ["出血"], damageTypes: ["动能", "爆风"], woundPoints: 6, deathRiskModifier: 6 },
+  { name: "重度烧伤", category: "physical", severity: "medium", description: "防具没有融穿，但人不是防具的一部分。", tags: ["烧伤"], damageTypes: ["燃烧", "能量"], woundPoints: 5, deathRiskModifier: 5 },
+  { name: "腐蚀创口", category: "physical", severity: "medium", description: "伤口边缘像被合同条款啃过。", tags: ["腐蚀"], damageTypes: ["腐蚀"], woundPoints: 3, deathRiskModifier: 5 },
+  { name: "神经紊乱", category: "physical", severity: "medium", description: "反应慢半拍，恐惧快半拍。", tags: ["电磁"], damageTypes: ["电磁"], woundPoints: 4, deathRiskModifier: 4 },
+  { name: "精神污染", category: "physical", severity: "medium", description: "他开始记得一些自己没有经历过的战场。", tags: ["异源"], damageTypes: ["异源"], woundPoints: 0, deathRiskModifier: 4 },
+  { name: "重度中毒", category: "physical", severity: "medium", description: "呼吸仍在进行，只是每次都像系统错误。", tags: ["中毒"], damageTypes: ["腐蚀"], woundPoints: 5, deathRiskModifier: 6 },
+  { name: "战场感染", category: "physical", severity: "medium", description: "撤回来的是佣兵，也是培养皿。", tags: ["感染"], woundPoints: 3, deathRiskModifier: 5 },
 
   // 重度：长期或永久损伤。名字可以很多，效果保持少数模板，便于以后维护。
-  { name: "失去左手", category: "physical", severity: "heavy", description: "他还会本能地去摸不存在的扳机。", tags: ["断肢", "左手"], limb: "leftArm", stress: 24, wound: 3, powerPenalty: 18, deathRiskModifier: 8 },
-  { name: "失去右手", category: "physical", severity: "heavy", description: "惯用手留在了合同现场，赔偿条款没有写它。", tags: ["断肢", "右手"], limb: "rightArm", stress: 28, wound: 3, powerPenalty: 22, deathRiskModifier: 9 },
-  { name: "左臂截断", category: "physical", severity: "heavy", description: "伤口愈合后，空缺仍然每天上班。", tags: ["断肢", "左手"], limb: "leftArm", stress: 26, wound: 3, powerPenalty: 20, deathRiskModifier: 9 },
-  { name: "右臂截断", category: "physical", severity: "heavy", description: "他学会了用另一只手签收医药账单。", tags: ["断肢", "右手"], limb: "rightArm", stress: 30, wound: 3, powerPenalty: 24, deathRiskModifier: 10 },
-  { name: "失去左脚", category: "physical", severity: "heavy", description: "撤离不再是动作，是工程项目。", tags: ["断肢", "左脚"], limb: "leftLeg", stress: 24, wound: 3, powerPenalty: 18, deathRiskModifier: 8 },
-  { name: "失去右脚", category: "physical", severity: "heavy", description: "地图上的每一条线都变成了债务。", tags: ["断肢", "右脚"], limb: "rightLeg", stress: 24, wound: 3, powerPenalty: 18, deathRiskModifier: 8 },
-  { name: "重度器官损伤", category: "physical", severity: "heavy", description: "身体继续运行，但维护窗口变得很短。", tags: ["器官"], damageTypes: ["动能", "爆风", "能量"], stress: 26, wound: 3, powerPenalty: 24, deathRiskModifier: 12 },
-  { name: "深层灼伤", category: "physical", severity: "heavy", description: "火没有杀死他，只是把余生留给了疼痛。", tags: ["烧伤"], damageTypes: ["燃烧", "能量"], stress: 28, wound: 3, powerPenalty: 24, deathRiskModifier: 11 },
-  { name: "异源侵蚀", category: "physical", severity: "heavy", description: "医学报告拒绝使用完整句子。", tags: ["异源"], damageTypes: ["异源"], stress: 32, wound: 2, powerPenalty: 26, deathRiskModifier: 10 },
+  { name: "失去左手", category: "physical", severity: "heavy", description: "他还会本能地去摸不存在的扳机。", tags: ["断肢", "左手"], limb: "leftArm", woundPoints: 7, deathRiskModifier: 8 },
+  { name: "失去右手", category: "physical", severity: "heavy", description: "惯用手留在了合同现场，赔偿条款没有写它。", tags: ["断肢", "右手"], limb: "rightArm", woundPoints: 7, deathRiskModifier: 9 },
+  { name: "左臂截断", category: "physical", severity: "heavy", description: "伤口愈合后，空缺仍然每天上班。", tags: ["断肢", "左手"], limb: "leftArm", woundPoints: 9, deathRiskModifier: 9 },
+  { name: "右臂截断", category: "physical", severity: "heavy", description: "他学会了用另一只手签收医药账单。", tags: ["断肢", "右手"], limb: "rightArm", woundPoints: 9, deathRiskModifier: 10 },
+  { name: "失去左脚", category: "physical", severity: "heavy", description: "撤离不再是动作，是工程项目。", tags: ["断肢", "左脚"], limb: "leftLeg", woundPoints: 7, deathRiskModifier: 8 },
+  { name: "失去右脚", category: "physical", severity: "heavy", description: "地图上的每一条线都变成了债务。", tags: ["断肢", "右脚"], limb: "rightLeg", woundPoints: 7, deathRiskModifier: 8 },
+  { name: "重度器官损伤", category: "physical", severity: "heavy", description: "身体继续运行，但维护窗口变得很短。", tags: ["器官"], damageTypes: ["动能", "爆风", "能量"], woundPoints: 8, deathRiskModifier: 12 },
+  { name: "深层灼伤", category: "physical", severity: "heavy", description: "火没有杀死他，只是把余生留给了疼痛。", tags: ["烧伤"], damageTypes: ["燃烧", "能量"], woundPoints: 8, deathRiskModifier: 11 },
+  { name: "异源侵蚀", category: "physical", severity: "heavy", description: "医学报告拒绝使用完整句子。", tags: ["异源"], damageTypes: ["异源"], woundPoints: 6, deathRiskModifier: 10 },
 ];
 
 export const mentalConditions = [
   // 轻度精神疾病：不立刻毁掉角色，但会让压力管理变成长期成本。
-  { name: "战场梦魇", category: "mental", severity: "light", description: "睡眠变成另一份无人结算的合同。", tags: ["睡眠"], stress: 0, wound: 0, powerPenalty: 4, deathRiskModifier: 1 },
-  { name: "惊跳反应", category: "mental", severity: "light", description: "门声、脚步声、无线电噪声都会先于理智抵达。", tags: ["焦虑"], stress: 0, wound: 0, powerPenalty: 5, deathRiskModifier: 1 },
-  { name: "情感麻木", category: "mental", severity: "light", description: "他不是不在乎，只是系统暂时关闭了在乎。", tags: ["解离"], stress: 0, wound: 0, powerPenalty: 4, deathRiskModifier: 1 },
-  { name: "任务强迫", category: "mental", severity: "light", description: "不反复检查装备就无法相信自己还活着。", tags: ["强迫"], stress: 0, wound: 0, powerPenalty: 5, deathRiskModifier: 1 },
+  { name: "战场梦魇", category: "mental", severity: "light", description: "睡眠变成另一份无人结算的合同。", tags: ["睡眠"], stressPoints: 2, deathRiskModifier: 1 },
+  { name: "惊跳反应", category: "mental", severity: "light", description: "门声、脚步声、无线电噪声都会先于理智抵达。", tags: ["焦虑"], stressPoints: 2, deathRiskModifier: 1 },
+  { name: "情感麻木", category: "mental", severity: "light", description: "他不是不在乎，只是系统暂时关闭了在乎。", tags: ["解离"], stressPoints: 2, deathRiskModifier: 1 },
+  { name: "任务强迫", category: "mental", severity: "light", description: "不反复检查装备就无法相信自己还活着。", tags: ["强迫"], stressPoints: 4, deathRiskModifier: 1 },
 
   // 中度精神疾病：会明显影响战斗力和后续出战风险。
-  { name: "PTSD", category: "mental", severity: "medium", description: "枪声停了，脑子里的枪声没有停。", tags: ["创伤"], stress: 0, wound: 0, powerPenalty: 12, deathRiskModifier: 4 },
-  { name: "幸存者负罪", category: "mental", severity: "medium", description: "活下来成了另一种惩罚。", tags: ["创伤"], stress: 0, wound: 0, powerPenalty: 10, deathRiskModifier: 3 },
-  { name: "战术恐慌", category: "mental", severity: "medium", description: "下一次进场前，他会多看几眼撤离路线。", tags: ["恐慌"], stress: 0, wound: 0, powerPenalty: 12, deathRiskModifier: 4 },
-  { name: "暴力闪回", category: "mental", severity: "medium", description: "有些回忆不需要许可就会开火。", tags: ["闪回"], stress: 0, wound: 0, powerPenalty: 14, deathRiskModifier: 4 },
-  { name: "药物依赖", category: "mental", severity: "medium", description: "稳定不是状态，是消耗品。", tags: ["依赖"], stress: 0, wound: 0, powerPenalty: 10, deathRiskModifier: 3 },
-  { name: "贪婪冲动", category: "mental", severity: "medium", description: "他开始把每个危险角落都看成没登记的战利品。", tags: ["冲动", "贪婪"], stress: 0, wound: 0, powerPenalty: 8, deathRiskModifier: 5 },
-  { name: "胆怯回避", category: "mental", severity: "medium", description: "他仍然会出发，只是脚步永远慢半拍。", tags: ["恐惧", "回避"], stress: 0, wound: 0, powerPenalty: 13, deathRiskModifier: 2 },
-  { name: "暴食依赖", category: "mental", severity: "medium", description: "补给不再只是补给，而是堵住空洞的材料。", tags: ["依赖", "暴食"], stress: 0, wound: 0, powerPenalty: 9, deathRiskModifier: 3 },
-  { name: "性冲动失控", category: "mental", severity: "medium", description: "亲密和控制的边界被战场磨坏，留下很难处理的冲动。", tags: ["冲动", "失控"], stress: 0, wound: 0, powerPenalty: 10, deathRiskModifier: 4 },
+  { name: "PTSD", category: "mental", severity: "medium", description: "枪声停了，脑子里的枪声没有停。", tags: ["创伤"], stressPoints: 4, deathRiskModifier: 4 },
+  { name: "幸存者负罪", category: "mental", severity: "medium", description: "活下来成了另一种惩罚。", tags: ["创伤"], stressPoints: 4, deathRiskModifier: 3 },
+  { name: "战术恐慌", category: "mental", severity: "medium", description: "下一次进场前，他会多看几眼撤离路线。", tags: ["恐慌"], stressPoints: 3, deathRiskModifier: 4 },
+  { name: "暴力闪回", category: "mental", severity: "medium", description: "有些回忆不需要许可就会开火。", tags: ["闪回"], stressPoints: 3, deathRiskModifier: 4 },
+  { name: "药物依赖", category: "mental", severity: "medium", description: "稳定不是状态，是消耗品。", tags: ["依赖"], stressPoints: 3, deathRiskModifier: 3 },
+  { name: "贪婪冲动", category: "mental", severity: "medium", description: "他开始把每个危险角落都看成没登记的战利品。", tags: ["冲动", "贪婪"], stressPoints: 3, deathRiskModifier: 5 },
+  { name: "胆怯回避", category: "mental", severity: "medium", description: "他仍然会出发，只是脚步永远慢半拍。", tags: ["恐惧", "回避"], stressPoints: 3, deathRiskModifier: 2 },
+  { name: "暴食依赖", category: "mental", severity: "medium", description: "补给不再只是补给，而是堵住空洞的材料。", tags: ["依赖", "暴食"], stressPoints: 3, deathRiskModifier: 3 },
+  { name: "性冲动失控", category: "mental", severity: "medium", description: "亲密和控制的边界被战场磨坏，留下很难处理的冲动。", tags: ["冲动", "失控"], stressPoints: 3, deathRiskModifier: 4 },
 
   // 重度精神疾病：角色仍可存在，但应该让玩家感到继续压榨他的沉重代价。
-  { name: "心理崩溃", category: "mental", severity: "heavy", description: "他没有拒绝命令，他只是再也无法理解命令。", tags: ["崩溃"], stress: 0, wound: 0, powerPenalty: 24, deathRiskModifier: 8 },
-  { name: "严重解离", category: "mental", severity: "heavy", description: "身体回来了，人还滞留在任务现场。", tags: ["解离"], stress: 0, wound: 0, powerPenalty: 22, deathRiskModifier: 7 },
-  { name: "自毁倾向", category: "mental", severity: "heavy", description: "他开始把危险当成安静的捷径。", tags: ["自毁"], stress: 0, wound: 0, powerPenalty: 20, deathRiskModifier: 10 },
-  { name: "持续性幻觉", category: "mental", severity: "heavy", description: "敌人不再需要出现，战场会自己生成。", tags: ["幻觉"], stress: 0, wound: 0, powerPenalty: 24, deathRiskModifier: 9 },
-  { name: "施虐冲动", category: "mental", severity: "heavy", description: "他开始从别人的恐惧里确认自己还存在。", tags: ["冲动", "施虐"], stress: 0, wound: 0, powerPenalty: 18, deathRiskModifier: 11 },
-  { name: "掠夺成瘾", category: "mental", severity: "heavy", description: "任务目标和私人欲望混在一起，撤离命令越来越难听见。", tags: ["贪婪", "成瘾"], stress: 0, wound: 0, powerPenalty: 16, deathRiskModifier: 10 },
-  { name: "极端怯战", category: "mental", severity: "heavy", description: "他不是不想活，是已经无法相信任何前进方向通向活着。", tags: ["恐惧", "崩溃"], stress: 0, wound: 0, powerPenalty: 26, deathRiskModifier: 5 },
-  { name: "欲望紊乱", category: "mental", severity: "heavy", description: "战场把需求、占有和恐惧搅成一团，没人知道哪一个会先失控。", tags: ["冲动", "失控"], stress: 0, wound: 0, powerPenalty: 18, deathRiskModifier: 9 },
+  { name: "心理崩溃", category: "mental", severity: "heavy", description: "他没有拒绝命令，他只是再也无法理解命令。", tags: ["崩溃"], stressPoints: 6, deathRiskModifier: 8 },
+  { name: "严重解离", category: "mental", severity: "heavy", description: "身体回来了，人还滞留在任务现场。", tags: ["解离"], stressPoints: 6, deathRiskModifier: 7 },
+  { name: "自毁倾向", category: "mental", severity: "heavy", description: "他开始把危险当成安静的捷径。", tags: ["自毁"], stressPoints: 6, deathRiskModifier: 10 },
+  { name: "持续性幻觉", category: "mental", severity: "heavy", description: "敌人不再需要出现，战场会自己生成。", tags: ["幻觉"], stressPoints: 6, deathRiskModifier: 9 },
+  { name: "施虐冲动", category: "mental", severity: "heavy", description: "他开始从别人的恐惧里确认自己还存在。", tags: ["冲动", "施虐"], stressPoints: 5, deathRiskModifier: 11 },
+  { name: "掠夺成瘾", category: "mental", severity: "heavy", description: "任务目标和私人欲望混在一起，撤离命令越来越难听见。", tags: ["贪婪", "成瘾"], stressPoints: 5, deathRiskModifier: 10 },
+  { name: "极端怯战", category: "mental", severity: "heavy", description: "他不是不想活，是已经无法相信任何前进方向通向活着。", tags: ["恐惧", "崩溃"], stressPoints: 5, deathRiskModifier: 5 },
+  { name: "欲望紊乱", category: "mental", severity: "heavy", description: "战场把需求、占有和恐惧搅成一团，没人知道哪一个会先失控。", tags: ["冲动", "失控"], stressPoints: 6, deathRiskModifier: 9 },
 ];
 
 export const contractRequirementPool = {
@@ -470,7 +470,7 @@ export const contractRandomEvents = [
     appliesTo: ["Escort", "Transport", "Recon", "Search", "Recovery", "Hunt", "Raid", "Sabotage", "Extraction", "Defense", "Occupation", "Special"],
     title: "共享情报缓存",
     description: "路线上刚好有别队留下的标记。同行倒霉，贵司省钱。",
-    effect: { gold: 10, stealth: 0, stress: -1, reputation: 1 },
+    effect: { gold: 10, stealth: 0, reputation: 1 },
   },
   {
     id: "improvised-supply",
@@ -480,7 +480,7 @@ export const contractRandomEvents = [
     appliesTo: ["Transport", "Recovery", "Search", "Escort"],
     title: "临时补给",
     description: "车厢夹层里翻出一批没被记录的补给。账面上不存在的东西最好吃。",
-    effect: { gold: 16, stealth: 0, stress: -1, reputation: 0 },
+    effect: { gold: 16, stealth: 0, reputation: 0 },
   },
   {
     id: "clean-extract",
@@ -490,7 +490,7 @@ export const contractRandomEvents = [
     appliesTo: ["Recon", "Search", "Sabotage", "Special"],
     title: "干净撤离",
     description: "撤离点比预想中干净，连尾巴都没留下。战争偶尔也会忘记打卡。",
-    effect: { gold: 0, stealth: 2, stress: -2, reputation: 1 },
+    effect: { gold: 0, stealth: 2, reputation: 1 },
   },
   {
     id: "field-medkit",
@@ -500,7 +500,7 @@ export const contractRandomEvents = [
     appliesTo: ["Extraction", "Defense", "Escort"],
     title: "现场急救包",
     description: "尸体、残骸和医药包一起出现。今天的运气勉强算有人性。",
-    effect: { gold: 0, stealth: 0, stress: -3, wound: -1, reputation: 0 },
+    effect: { gold: 0, stealth: 0, reputation: 0 },
   },
   {
     id: "misread-map",
@@ -510,7 +510,7 @@ export const contractRandomEvents = [
     appliesTo: ["Escort", "Transport", "Search", "Recovery", "Raid", "Defense"],
     title: "地图误读",
     description: "导航像喝醉了一样，队伍多绕了半个战区。它坚持说这叫最优路径。",
-    effect: { gold: -8, stealth: 0, stress: 2, reputation: 0 },
+    effect: { gold: -8, stealth: 0, mentalInjury: 2, reputation: 0 },
   },
   {
     id: "ammo-burn",
@@ -520,7 +520,7 @@ export const contractRandomEvents = [
     appliesTo: ["Hunt", "Raid", "Defense", "Occupation"],
     title: "弹药燃烧",
     description: "交火强度高于预算，弹药和钱一样快地飞出去了。财务部会说这是热烈沟通。",
-    effect: { gold: -14, stealth: 0, stress: 2, wound: 1, reputation: 0 },
+    effect: { gold: -14, stealth: 0, mentalInjury: 2, physicalInjury: 1, reputation: 0 },
   },
   {
     id: "civilian-witness",
@@ -531,7 +531,7 @@ export const contractRandomEvents = [
     appliesTo: ["Search", "Recon", "Special", "Transport"],
     title: "目击者",
     description: "附近有不该看见的人看见了不该出现的队伍。历史通常从围观开始。",
-    effect: { gold: -4, stealth: -4, stress: 1, reputation: 0 },
+    effect: { gold: -4, stealth: -4, mentalInjury: 1, reputation: 0 },
   },
   {
     id: "mission-delay",
@@ -541,7 +541,7 @@ export const contractRandomEvents = [
     appliesTo: ["Escort", "Transport", "Recovery", "Extraction"],
     title: "临时延误",
     description: "目标临时改口，所有人都得在雨里再等一轮。客户称之为灵活合作。",
-    effect: { gold: -6, stealth: 0, stress: 2, reputation: -1 },
+    effect: { gold: -6, stealth: 0, mentalInjury: 2, reputation: -1 },
   },
   {
     id: "competing-contract",
@@ -551,7 +551,7 @@ export const contractRandomEvents = [
     appliesTo: ["Special", "Search", "Sabotage", "Recovery"],
     title: "竞争委托",
     description: "另一单的中间人也到了，现场气氛忽然变得很贵。自由市场不自由，且很吵。",
-    effect: { gold: -10, stealth: -3, stress: 2, reputation: -1 },
+    effect: { gold: -10, stealth: -3, mentalInjury: 2, reputation: -1 },
   },
   {
     id: "equipment-glitch",
@@ -561,7 +561,7 @@ export const contractRandomEvents = [
     appliesTo: ["Defense", "Hunt", "Raid", "Occupation", "Escort"],
     title: "装备失灵",
     description: "某件装备在最不合适的时候发了脾气。它可能也想休假。",
-    effect: { gold: -5, stealth: 0, stress: 1, wound: 1, reputation: 0 },
+    effect: { gold: -5, stealth: 0, mentalInjury: 1, physicalInjury: 1, reputation: 0 },
   },
   {
     id: "quiet-payoff",
@@ -571,7 +571,7 @@ export const contractRandomEvents = [
     appliesTo: ["Special", "Search", "Recovery", "Transport"],
     title: "静默回扣",
     description: "雇主额外塞来一笔不写进简报的回扣。道德没有到账提示。",
-    effect: { gold: 18, stealth: 1, stress: 0, reputation: 0 },
+    effect: { gold: 18, stealth: 1, reputation: 0 },
   },
   {
     id: "broken-escape",
@@ -581,7 +581,7 @@ export const contractRandomEvents = [
     appliesTo: ["Extraction", "Defense", "Escort"],
     title: "撤离点损坏",
     description: "撤离口坏得比说明书还彻底，队伍只能多走一程。说明书至少没有流血。",
-    effect: { gold: -12, stealth: -2, stress: 2, wound: 1, reputation: 0 },
+    effect: { gold: -12, stealth: -2, mentalInjury: 2, physicalInjury: 1, reputation: 0 },
   },
   {
     id: "perfect-position",
@@ -591,7 +591,7 @@ export const contractRandomEvents = [
     appliesTo: ["Hunt", "Raid", "Defense", "Occupation"],
     title: "完美站位",
     description: "地形给了队伍一个很不讲理的有利角度。公平被留在了山脚下。",
-    effect: { gold: 0, stealth: 0, stress: -2, wound: 0, reputation: 1 },
+    effect: { gold: 0, stealth: 0, reputation: 1 },
   },
   {
     id: "paperwork-hole",
@@ -601,7 +601,7 @@ export const contractRandomEvents = [
     appliesTo: ["Special", "Search", "Recovery", "Transport"],
     title: "文件漏洞",
     description: "手续里漏了一页，后来那页通常最贵。",
-    effect: { gold: -8, stealth: -3, stress: 1, reputation: -1 },
+    effect: { gold: -8, stealth: -3, mentalInjury: 1, reputation: -1 },
   },
   {
     id: "low-rank-local-guide",
@@ -611,7 +611,7 @@ export const contractRandomEvents = [
     appliesTo: ["Escort", "Transport", "Search", "Recon"],
     title: "本地向导",
     description: "一个收现金的本地人指出了近路。他不爱战争，但爱找零。",
-    effect: { gold: 6, stealth: 1, stress: -1, reputation: 0 },
+    effect: { gold: 6, stealth: 1, reputation: 0 },
   },
   {
     id: "low-rank-rotten-bridge",
@@ -621,7 +621,7 @@ export const contractRandomEvents = [
     appliesTo: ["Escort", "Transport", "Recovery"],
     title: "烂桥",
     description: "桥没塌完，只塌到足够麻烦。工程质量精准服务战争经济。",
-    effect: { gold: -6, stealth: 0, stress: 1, wound: 1, reputation: 0 },
+    effect: { gold: -6, stealth: 0, mentalInjury: 1, physicalInjury: 1, reputation: 0 },
   },
   {
     id: "mid-rank-false-flag",
@@ -632,7 +632,7 @@ export const contractRandomEvents = [
     appliesTo: ["Raid", "Sabotage", "Occupation", "Special"],
     title: "嫁祸标记",
     description: "现场被人提前放了另一个组织的标记。坏消息是，像真的。",
-    effect: { gold: -10, stealth: -3, stress: 2, reputation: -1 },
+    effect: { gold: -10, stealth: -3, mentalInjury: 2, reputation: -1 },
   },
   {
     id: "mid-rank-blackmail-ledger",
@@ -643,7 +643,7 @@ export const contractRandomEvents = [
     appliesTo: ["Search", "Recovery", "Special", "Sabotage"],
     title: "勒索账本",
     description: "队伍找到一本账。它不干净，所以很值钱。",
-    effect: { gold: 22, stealth: 0, stress: 0, reputation: 1 },
+    effect: { gold: 22, stealth: 0, reputation: 1 },
   },
   {
     id: "high-rank-orbital-window",
@@ -653,7 +653,7 @@ export const contractRandomEvents = [
     appliesTo: ["Recon", "Raid", "Sabotage", "Hunt", "Special"],
     title: "轨道盲窗",
     description: "监控卫星短暂失明。天上的眼睛也需要眨眼。",
-    effect: { gold: 0, stealth: 4, stress: -2, reputation: 2 },
+    effect: { gold: 0, stealth: 4, reputation: 2 },
   },
   {
     id: "high-rank-corp-cleaner",
@@ -663,7 +663,7 @@ export const contractRandomEvents = [
     appliesTo: ["Special", "Recovery", "Search", "Sabotage", "Occupation"],
     title: "公司清理队",
     description: "一支没有徽章的小队开始清理证据。证据包括活人。",
-    effect: { gold: -24, stealth: -5, stress: 3, wound: 1, reputation: -2 },
+    effect: { gold: -24, stealth: -5, mentalInjury: 3, physicalInjury: 1, reputation: -2 },
   },
   {
     id: "high-rank-signal-bleed",
@@ -673,7 +673,7 @@ export const contractRandomEvents = [
     appliesTo: ["Recon", "Special", "Defense", "Hunt"],
     title: "信号渗漏",
     description: "通讯里混进了别人的祷告、报价和死亡倒计时。",
-    effect: { gold: -8, stealth: -4, stress: 4, reputation: 0 },
+    effect: { gold: -8, stealth: -4, mentalInjury: 4, reputation: 0 },
   },
   {
     id: "high-rank-prize-target",
@@ -683,7 +683,7 @@ export const contractRandomEvents = [
     appliesTo: ["Hunt", "Raid", "Occupation", "Extraction"],
     title: "高价目标",
     description: "目标比简报上更重要。客户假装惊讶，并真的加钱。",
-    effect: { gold: 36, stealth: -1, stress: 1, reputation: 2 },
+    effect: { gold: 36, stealth: -1, reputation: 2 },
   },
 ];
 

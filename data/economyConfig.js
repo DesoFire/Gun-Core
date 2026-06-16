@@ -5,15 +5,15 @@
 //
 // 设计口径：
 // - 金钱：基地现金，也是所有支出、收益、私人财富消费的统一货币。
-// - 补给：抽象的日常消耗物资。当前主要作为压力惩罚触发器，不直接等同于金钱。
-// - 隐秘值：身份暴露压力。主要由每月隐秘费、未支付声望和少量特殊事件影响，隐秘值归零则失败。
+// - 补给：抽象的日常消耗物资。每日按佣兵等级消耗，可在支出界面批量购买囤积。
+// - 隐秘值：身份暴露程度。主要由每月隐秘费、未支付声望和少量特殊事件影响，隐秘值归零则失败。
 // - 声望：分为基地声望与佣兵个人声望。基地声望决定契约级别；个人声望用于隐秘费与角色履历。
 
 export const economyConfig = {
   initialState: {
     // 新开局资金。过低会导致玩家无法承担前几天试错，过高会让支出压力变钝。
     gold: 300,
-    // 新开局补给。补给为 0 时，所有未阵亡佣兵每天增加压力。
+    // 新开局补给。补给不足会影响基地日常运转，但不会直接生成精神负面状态。
     supplies: 24,
     // 新开局隐秘值。隐秘值归零会直接失败。
     stealth: 100,
@@ -111,12 +111,6 @@ export const economyConfig = {
       roughRiskMin: 18,
       roughRiskMax: 92,
     },
-    execution: {
-      // 补给为 0 时，每名未阵亡佣兵每天增加的压力。
-      noSupplyStress: 2,
-      // 欠薪会让返队佣兵额外增加压力。
-      wageShortageStress: 2,
-    },
     hiddenTwists: {
       // 隐藏事件带来的额外金钱/隐秘值变化。调查足够多时使用 mitigated 数值。
       // weights 控制各类突发事件出现权重。会降低隐秘的事件权重较低，让隐秘值主要由月费和未支付声望驱动。
@@ -183,10 +177,6 @@ export const economyConfig = {
       armorBase: 1,
       perRank: 2,
     },
-    shortage: {
-      // 每日支出无法付清时，资金清零。维护费缺口只会让所有未阵亡佣兵增加压力，不影响隐秘值。
-      stress: 1,
-    },
   },
 
   secrecy: {
@@ -225,19 +215,22 @@ export const economyConfig = {
     barracksMercenaryLimitPerLevel: 1,
     // 情报室每级降低调查费用的比例，最高不超过 contracts.costs.maxInvestigationDiscount。
     intelInvestigationDiscountPerLevel: 0.08,
-    // 医疗中心按负面状态数量收费。轻/中/重状态分别使用不同基础费用。
-    hospitalConditionCost: {
-      light: 8,
-      medium: 18,
-      heavy: 42,
+    // 医疗中心按“单个物理负面状态”收费并尝试移除。等级越高，可处理的伤势点数越高，成功率越高。
+    hospitalTreatment: {
+      baseCost: 8,
+      costPerPoint: 5,
+      severityMultiplier: { light: 1, medium: 1.25, heavy: 1.6 },
+      maxPointsByLevel: [2, 4, 6, 8, 10, 12, 99],
+      successChanceByLevel: [72, 80, 86, 91, 95, 98, 100],
     },
-    // 医疗中心每级治疗成功率；等级越高越稳定。
-    hospitalSuccessChanceByLevel: [80, 86, 90, 93, 96, 98, 100],
-    // 医疗中心能治疗的负面状态严重度。F 级能处理轻度，E-D 处理中度，C-S 可尝试重度。
-    hospitalSeverityByLevel: ["light", "medium", "medium", "heavy", "heavy", "heavy", "heavy"],
-    // 医疗中心治疗成功后附带恢复的伤势/压力。
-    hospitalWoundRecoveryOnSuccess: 2,
-    hospitalStressRecoveryOnSuccess: 16,
+    // 娱乐中心按“单个精神负面状态”收费并尝试移除。等级越高，可处理的压力点数越高，成功率越高。
+    infirmaryTreatment: {
+      baseCost: 6,
+      costPerPoint: 6,
+      severityMultiplier: { light: 1, medium: 1.3, heavy: 1.75 },
+      maxPointsByLevel: [2, 4, 6, 8, 10, 12, 99],
+      successChanceByLevel: [68, 76, 83, 89, 94, 98, 100],
+    },
     // 防御设施在基地遇袭时提供固定基地战斗力。
     defensePowerPerLevel: 18,
   },

@@ -197,7 +197,6 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
   const resolvedClassId = characterClasses[classId] ? classId : randomItem(Object.keys(characterClasses));
   const baseClass = characterClasses[resolvedClassId];
   const category = careerCategories[baseClass.category];
-  const initialStressBonus = baseClass.effects?.initialStressBonus ?? 0;
   const mercenary = {
     id: createId(),
     name: customName || createRandomName(),
@@ -213,8 +212,6 @@ function createInitialMercenary(classId = randomItem(Object.keys(characterClasse
     bounty: randomNumber(0, 24) * 10,
     debt: randomNumber(0, 18) * 5,
     signingMultiplier: randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax),
-    stress: randomNumber(0, 8) + initialStressBonus,
-    wound: 0,
     tags: [...new Set([...(category?.tags ?? []), ...baseClass.tags])],
     equipment: createEmptyEquipment(),
     combatPower: baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0) + randomNumber(-3, 4),
@@ -288,8 +285,6 @@ function normalizeCharacterState(character, usedAvatarKeys = new Set()) {
   character.bounty ??= randomNumber(0, 24) * 10;
   character.debt ??= randomNumber(0, 18) * 5;
   character.signingMultiplier ??= randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax);
-  character.wound ??= 0;
-  character.stress ??= 0;
   character.status = normalizeCharacterStatus(character.status);
   if (!characterClasses[character.classId]) character.classId = "assault";
   const baseClass = characterClasses[character.classId];
@@ -343,10 +338,7 @@ function normalizeConditionState(condition) {
   condition.category ??= "physical";
   condition.severity ??= "light";
   condition.tags ??= [];
-  condition.powerPenalty ??= 0;
   condition.deathRiskModifier ??= 0;
-  condition.stress ??= 0;
-  condition.wound ??= 0;
   return condition;
 }
 
@@ -355,7 +347,6 @@ function normalizePositiveConditionState(condition) {
   condition.tags ??= [];
   condition.powerBonus ??= 0;
   condition.deathRiskReduction ??= 0;
-  condition.stressRecoveryBonus ??= 0;
   return condition;
 }
 

@@ -9,6 +9,7 @@ import { getState, updateState } from "../js/state.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
 import { generateArmorItem } from "./armorGenerator.js";
 import { generateWeaponItem } from "./weaponGenerator.js";
+import { getConditionStressPoints, getConditionWoundPoints } from "./combatPower.js";
 
 export function calculateDailyUpkeep() {
   return calculateDailyExpenseBreakdown().total;
@@ -213,11 +214,32 @@ export function buyBlackMarketWeapon() {
 }
 
 export function hospitalTreatMercenaries() {
+  return treatNegativeConditions({
+    facilityId: "hospital",
+    category: "physical",
+    config: economyConfig.facilities.hospitalTreatment,
+    sourceName: "医疗中心",
+    emptyText: "医疗中心没有找到可以处理的物理伤病。",
+  });
+}
+
+export function infirmaryTreatMercenaries() {
+  return treatNegativeConditions({
+    facilityId: "infirmary",
+    category: "mental",
+    config: economyConfig.facilities.infirmaryTreatment,
+    sourceName: "娱乐中心",
+    emptyText: "娱乐中心没有找到可以处理的心理负面状态。",
+  });
+}
+
+function treatNegativeConditions({ facilityId, category, config, sourceName, emptyText }) {
+  let result = { ok: false, cost: 0, attempted: 0, cured: 0 };
   updateState((draft) => {
-    if (draft.gameStatus !== "active" || (draft.buildings.hospital ?? 0) <= 0) return;
-    const plan = createHospitalTreatmentPlan(draft);
+    if (draft.gameStatus !== "active" || (draft.buildings[facilityId] ?? 0) <= 0) return;
+    const plan = createTreatmentPlan(draft, { facilityId, category, config });
     if (plan.entries.length === 0) {
-      draft.log.push(`第 ${draft.day} 天：医疗中心没有找到需要处理伤病的佣兵。`);
+      draft.log.push(`第 ${draft.day} 天：${emptyText}`);
       return;
     }
     if (draft.gold < plan.cost) return;
@@ -226,16 +248,28 @@ export function hospitalTreatMercenaries() {
     plan.entries.forEach(({ character, condition }) => {
       if (randomNumber(1, 100) > plan.successChance) return;
       character.conditions = (character.conditions ?? []).filter((entry) => entry.id !== condition.id);
-      character.wound = Math.max(0, (character.wound ?? 0) - economyConfig.facilities.hospitalWoundRecoveryOnSuccess);
-      character.stress = Math.max(0, (character.stress ?? 0) - economyConfig.facilities.hospitalStressRecoveryOnSuccess);
       cured += 1;
     });
-    draft.log.push(`第 ${draft.day} 天：支付 ${plan.cost} 金，医疗中心尝试治疗 ${plan.entries.length} 个负面状态，成功 ${cured} 个。`);
+    draft.log.push(`第 ${draft.day} 天：支付 ${plan.cost} 金，${sourceName}尝试处理 ${plan.entries.length} 个负面状态，成功 ${cured} 个。`);
+    result = { ok: true, cost: plan.cost, attempted: plan.entries.length, cured };
   });
+  return result;
 }
 
 export function calculateHospitalTreatmentPlan(state = getState()) {
-  return createHospitalTreatmentPlan(state);
+  return createTreatmentPlan(state, {
+    facilityId: "hospital",
+    category: "physical",
+    config: economyConfig.facilities.hospitalTreatment,
+  });
+}
+
+export function calculateInfirmaryTreatmentPlan(state = getState()) {
+  return createTreatmentPlan(state, {
+    facilityId: "infirmary",
+    category: "mental",
+    config: economyConfig.facilities.infirmaryTreatment,
+  });
 }
 
 export function buySupplies(quantity = 1) {
@@ -276,10 +310,6 @@ export function payDailyUpkeep(draft) {
 
   const shortage = cost - draft.gold;
   draft.gold = 0;
-  const shortageConfig = economyConfig.dailyExpenses.shortage;
-  draft.roster.filter((character) => !isDeadStatus(character.status)).forEach((character) => {
-    character.stress += shortageConfig.stress;
-  });
   draft.log.push(`第 ${draft.day} 天：维护费用缺口 ${shortage} 金，资金清零。隐秘值不受每日支出影响。`);
 }
 
@@ -312,45 +342,46 @@ export function getBlackMarketItemCost(kind, rank) {
   return base + rankIndex * perRank;
 }
 
-function createHospitalTreatmentPlan(draft) {
-  const level = draft.buildings?.hospital ?? 0;
-  const allowedSeverity = getHospitalAllowedSeverity(level);
-  const successChance = getHospitalSuccessChance(level);
+function createTreatmentPlan(draft, { facilityId, category, config }) {
+  const level = draft.buildings?.[facilityId] ?? 0;
+  const maxPoints = getTreatmentMaxPoints(level, config);
+  const successChance = getTreatmentSuccessChance(level, config);
   const entries = [];
   draft.roster
     .filter((character) => !isDeadStatus(character.status))
     .forEach((character) => {
       (character.conditions ?? [])
-        .filter((condition) => canHospitalTreatSeverity(condition.severity, allowedSeverity))
+        .filter((condition) => condition.category === category)
+        .filter((condition) => getTreatmentConditionPoints(condition, category) <= maxPoints)
         .forEach((condition) => entries.push({ character, condition }));
     });
-  const cost = entries.reduce((sum, entry) => sum + getHospitalConditionCost(entry.condition), 0);
-  return { entries, cost, successChance, allowedSeverity };
+  const cost = entries.reduce((sum, entry) => sum + getTreatmentConditionCost(entry.condition, category, config), 0);
+  return { entries, cost, successChance, maxPoints };
 }
 
-function getHospitalAllowedSeverity(level) {
-  const index = Math.max(0, Math.min(level - 1, economyConfig.facilities.hospitalSeverityByLevel.length - 1));
-  return economyConfig.facilities.hospitalSeverityByLevel[index] ?? "light";
+function getTreatmentMaxPoints(level, config) {
+  if (level <= 0) return 0;
+  const values = config?.maxPointsByLevel ?? [1, 3, 5, 7, 9, 11, 99];
+  const index = Math.max(0, Math.min(level - 1, values.length - 1));
+  return values[index] ?? 1;
 }
 
-function getHospitalSuccessChance(level) {
-  const index = Math.max(0, Math.min(level - 1, economyConfig.facilities.hospitalSuccessChanceByLevel.length - 1));
-  return economyConfig.facilities.hospitalSuccessChanceByLevel[index] ?? 65;
+function getTreatmentSuccessChance(level, config) {
+  const values = config?.successChanceByLevel ?? [70, 76, 82, 88, 93, 97, 100];
+  const index = Math.max(0, Math.min(level - 1, values.length - 1));
+  return values[index] ?? 65;
 }
 
-function canHospitalTreatSeverity(severity = "light", allowedSeverity = "light") {
-  return severityWeight(severity) <= severityWeight(allowedSeverity);
+function getTreatmentConditionPoints(condition, category) {
+  return category === "mental" ? getConditionStressPoints(condition) : getConditionWoundPoints(condition);
 }
 
-function severityWeight(severity = "light") {
-  if (severity === "heavy") return 3;
-  if (severity === "medium") return 2;
-  return 1;
-}
-
-function getHospitalConditionCost(condition) {
-  const costs = economyConfig.facilities.hospitalConditionCost;
-  return costs[condition.severity] ?? costs.light ?? 14;
+function getTreatmentConditionCost(condition, category, config) {
+  const points = getTreatmentConditionPoints(condition, category);
+  const base = config?.baseCost ?? 8;
+  const perPoint = config?.costPerPoint ?? 5;
+  const severityMultiplier = config?.severityMultiplier?.[condition.severity] ?? 1;
+  return Math.max(1, Math.round((base + points * perPoint) * severityMultiplier));
 }
 
 function calculateFacilityUpkeep(id, level) {

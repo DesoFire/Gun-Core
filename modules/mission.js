@@ -186,16 +186,6 @@ export function advanceDay() {
     resolveBaseRaidDraft(draft);
     payDailyUpkeep(draft);
     draft.supplies = Math.max(0, draft.supplies - calculateDailySupplyConsumption(draft));
-    recoverRestingStressDraft(draft);
-
-    if (draft.buildings.infirmary > 0) {
-      draft.roster.filter((character) => character.status !== "阵亡").forEach((character) => {
-        if (character.wound > 0 || character.stress > 0) {
-          character.stress = Math.max(0, character.stress - draft.buildings.infirmary);
-        }
-      });
-    }
-
     draft.missions
       .filter((mission) => mission.status === "active")
       .forEach((mission) => {
@@ -212,13 +202,8 @@ export function advanceDay() {
     refillAvailableMissionsDraft(draft);
 
     if (draft.supplies === 0) {
-      draft.roster.filter((character) => character.status !== "阵亡").forEach((character) => {
-        character.stress += economyConfig.contracts.execution.noSupplyStress;
-      });
-      draft.log.push(`第 ${draft.day} 天：补给耗尽，所有佣兵压力上升。`);
+      draft.log.push(`第 ${draft.day} 天：补给耗尽，基地运作进入危险状态。`);
     }
-
-    draft.roster.forEach((character) => resolveStressBreakDraft(draft, character));
 
     evaluateGameOverDraft(draft);
   });
@@ -280,18 +265,16 @@ function resolveMissionDraft(draft, mission) {
     character.contractRecord.survived += 1;
     if (success) character.contractRecord.completed += 1;
     if (!success) character.contractRecord.failed += 1;
-    character.stress += calculateMissionStressGain(character, success);
     const deathRisk = calculateDeathRisk(gap, mission.difficulty, character, team, success);
     const woundRisk = calculateWoundRisk(gap, mission.difficulty, success, team);
+    const mentalRisk = calculateMentalConditionRisk(gap, mission.difficulty, success, team);
     if (randomNumber(1, 100) <= deathRisk) {
       character.status = "阵亡";
-      character.wound += 3;
       draft.log.push(`第 ${draft.day} 天：${character.name} 在「${mission.name}」中阵亡。`);
       return;
     }
     character.status = "待命";
     if (randomNumber(1, 100) <= woundRisk) {
-      character.wound += 1;
       applyNegativeConditionDraft(draft, character, {
         severity: chooseConditionSeverity(gap, mission.difficulty, success),
         damageType: randomItem(enemyDamageTypes),
@@ -299,16 +282,13 @@ function resolveMissionDraft(draft, mission) {
       });
     }
     maybeApplyDamageTypeConditionDraft(draft, character, mission, gap, success);
-    if (success) {
-      resolveGrowthDraft(draft, character, mission.actionType ?? "logistics");
-    } else {
+    if (randomNumber(1, 100) <= mentalRisk) {
       applyNegativeConditionDraft(draft, character, {
-        severity: chooseConditionSeverity(gap, mission.difficulty, success),
-        damageType: randomItem(enemyDamageTypes),
-        armorMatched: hasMatchingArmor(character, enemyDamageTypes),
+        category: "mental",
+        severity: chooseMentalConditionSeverity(gap, mission.difficulty, success),
       });
     }
-    resolveStressBreakDraft(draft, character);
+    if (success) resolveGrowthDraft(draft, character, mission.actionType ?? "logistics");
   });
 
   if (success) {
@@ -354,11 +334,7 @@ function settleReturningWagesDraft(draft, mission, returningTeam) {
 
   const shortage = totalWages - draft.gold;
   draft.gold = 0;
-  const config = economyConfig.contracts.execution;
-  returningTeam.forEach((character) => {
-    character.stress += config.wageShortageStress;
-  });
-  draft.log.push(`第 ${draft.day} 天：外勤薪资需要 ${totalWages} 金，但资金缺口 ${shortage} 金。返队佣兵压力上升，隐秘值不受欠薪影响。`);
+  draft.log.push(`第 ${draft.day} 天：外勤薪资需要 ${totalWages} 金，但资金缺口 ${shortage} 金。返队佣兵没有拿到完整报酬，隐秘值不受欠薪影响。`);
 }
 
 function resolveBaseRaidDraft(draft) {
@@ -397,16 +373,14 @@ function resolveBaseRaidDraft(draft) {
   const enemyDamageTypes = mission.requirements?.damageTypes ?? [];
 
   defenders.forEach((character) => {
-    character.stress += calculateMissionStressGain(character, success);
     const deathRisk = calculateDeathRisk(gap, difficulty, character, defenders, success);
     const woundRisk = calculateWoundRisk(gap, difficulty, success, defenders);
+    const mentalRisk = calculateMentalConditionRisk(gap, difficulty, success, defenders);
     if (randomNumber(1, 100) <= deathRisk) {
       character.status = "阵亡";
-      character.wound += 3;
       return;
     }
     if (randomNumber(1, 100) <= woundRisk) {
-      character.wound += 1;
       applyNegativeConditionDraft(draft, character, {
         severity: chooseConditionSeverity(gap, difficulty, success),
         damageType: randomItem(enemyDamageTypes),
@@ -414,7 +388,12 @@ function resolveBaseRaidDraft(draft) {
       });
     }
     maybeApplyDamageTypeConditionDraft(draft, character, mission, gap, success);
-    resolveStressBreakDraft(draft, character);
+    if (randomNumber(1, 100) <= mentalRisk) {
+      applyNegativeConditionDraft(draft, character, {
+        category: "mental",
+        severity: chooseMentalConditionSeverity(gap, difficulty, success),
+      });
+    }
   });
 
   if (success) {
@@ -731,6 +710,14 @@ function calculateWoundRisk(gap, difficulty, success, team = []) {
   return clamp(Math.round(base + difficulty * 4 - gap * 1.4 - teamReduction), 4, 88);
 }
 
+function calculateMentalConditionRisk(gap, difficulty, success, team = []) {
+  const base = success ? 8 : 24;
+  const categoryReduction = team.reduce((sum, character) => sum + (getCareerCategoryConfig(character)?.effects?.mentalConditionRiskReduction ?? 0), 0);
+  const careerBonus = team.reduce((sum, character) => sum + (getCareerConfig(character)?.effects?.mentalConditionRiskBonus ?? 0), 0);
+  const raw = base + difficulty * 3 - gap * 0.9 + careerBonus - categoryReduction * 20;
+  return clamp(Math.round(raw), 1, 75);
+}
+
 function calculateDeathRisk(gap, difficulty, character, team = [], success = true) {
   const armorReduction = getArmorDeathRiskReduction(character);
   const conditionRisk = getConditionDeathRiskModifier(character);
@@ -758,16 +745,6 @@ function getConditionDeathRiskModifier(character) {
 
 function getPositiveDeathRiskReduction(character) {
   return (character.positiveConditions ?? []).reduce((sum, condition) => sum + (condition.deathRiskReduction ?? 0), 0);
-}
-
-function calculateMissionStressGain(character, success) {
-  const base = success ? randomNumber(2, 5) : randomNumber(8, 16);
-  const category = getCareerCategoryConfig(character);
-  const career = getCareerConfig(character);
-  const rateReduction = category?.effects?.stressGainReduction ?? 0;
-  const flatReduction = success ? career?.effects?.successStressReduction ?? 0 : 0;
-  const flatBonus = (career?.effects?.stressGainFlat ?? 0) + (!success ? career?.effects?.failureStressBonus ?? 0 : 0);
-  return Math.max(0, Math.round(base * (1 - rateReduction)) - flatReduction + flatBonus);
 }
 
 function getRewardGoldMultiplier(team) {
@@ -878,13 +855,16 @@ function applyNegativeConditionDraft(draft, character, options = {}) {
   character.conditions ??= [];
   const condition = { ...drawNegativeCondition(options), id: createId(), day: draft.day };
   character.conditions.push(condition);
-  character.wound += condition.wound ?? 0;
-  character.stress += (condition.stress ?? 0) + getSeverityStress(condition.severity);
   draft.log.push(`第 ${draft.day} 天：${character.name} 获得负面状态「${condition.name}」。`);
 }
 
 function drawNegativeCondition(options = {}) {
   const severity = options.severity ?? "light";
+  const category = options.category ?? "physical";
+  if (category === "mental") {
+    const bySeverity = mentalConditions.filter((condition) => condition.severity === severity);
+    return randomItem(bySeverity.length > 0 ? bySeverity : mentalConditions);
+  }
   const damageType = options.damageType;
   const byDamageType = negativeConditions.filter(
     (condition) =>
@@ -918,34 +898,16 @@ function chooseConditionSeverity(gap, difficulty, success, armorMismatch = false
   return "light";
 }
 
+function chooseMentalConditionSeverity(gap, difficulty, success) {
+  const score = difficulty + (success ? 0 : 3) + Math.max(0, Math.ceil(-gap / 10));
+  if (score >= 8) return "heavy";
+  if (score >= 4) return "medium";
+  return "light";
+}
+
 function hasMatchingArmor(character, damageTypes) {
   const armor = character.equipment?.armor;
   return Boolean(armor?.protectionType && damageTypes.includes(armor.protectionType));
-}
-
-function getSeverityStress(severity) {
-  if (severity === "heavy") return 18;
-  if (severity === "medium") return 10;
-  return 4;
-}
-
-function resolveStressBreakDraft(draft, character) {
-  if (character.status === "阵亡" || (character.stress ?? 0) < 100) return;
-  character.stress = 0;
-  character.conditions ??= [];
-  const severity = randomNumber(1, 100) <= 35 ? "heavy" : "medium";
-  const condition = { ...randomItem(mentalConditions.filter((item) => item.severity === severity)), id: createId(), day: draft.day };
-  character.conditions.push(condition);
-  draft.log.push(`第 ${draft.day} 天：${character.name} 压力崩溃，获得精神疾病「${condition.name}」。`);
-}
-
-function recoverRestingStressDraft(draft) {
-  draft.roster
-    .filter((character) => character.status === "待命" && character.stress > 0)
-    .forEach((character) => {
-      const recoveryBonus = (character.positiveConditions ?? []).reduce((sum, condition) => sum + (condition.stressRecoveryBonus ?? 0), 0);
-      character.stress = Math.max(0, character.stress - randomNumber(1, 5) - recoveryBonus);
-    });
 }
 
 function distributeContractReputationDraft(draft, team, reputation) {
@@ -992,11 +954,7 @@ function applyHiddenTwistDraft(draft, mission, team, success) {
   const result = { goldDelta: 0, reputationDelta: 0, text: `隐藏情报：${twist}` };
 
   if (twist.includes("情报错误")) {
-    const stress = mitigated ? 1 : 3;
-    team.forEach((character) => {
-      character.stress += stress;
-    });
-    result.text += mitigated ? " 事前调查降低了混乱。" : " 错误情报让队伍压力上升。";
+    result.text += mitigated ? " 事前调查降低了混乱。" : " 错误情报让队伍更容易留下战场阴影。";
   } else if (twist.includes("第三方介入")) {
     const loss = mitigated ? 6 : 16;
     result.goldDelta -= loss;
@@ -1005,8 +963,8 @@ function applyHiddenTwistDraft(draft, mission, team, success) {
   } else if (twist.includes("伏击")) {
     const target = randomItem(team);
     if (target && !mitigated) {
-      target.wound += 1;
-      target.stress += 4;
+      applyNegativeConditionDraft(draft, target, { severity: "light" });
+      applyNegativeConditionDraft(draft, target, { category: "mental", severity: "light" });
       result.text += ` ${target.name} 在伏击中受伤。`;
     } else {
       result.text += " 伏击被提前规避。";
@@ -1021,9 +979,6 @@ function applyHiddenTwistDraft(draft, mission, team, success) {
     result.text += ` 现场额外回收物资，追加 ${bonus} 金。`;
   } else if (twist.includes("目标背叛")) {
     result.reputationDelta += success && mitigated ? 2 : -1;
-    team.forEach((character) => {
-      character.stress += mitigated ? 1 : 2;
-    });
     result.text += mitigated ? " 背叛被控制，反而提高了业内评价。" : " 目标背叛让委托评价受损。";
   }
 
@@ -1081,17 +1036,20 @@ function applyContractRandomEventDraft(draft, mission, team, success, revealedCo
     if (effect.stealth) {
       draft.stealth = clamp(draft.stealth + Math.round(effect.stealth * severity), 0, 100);
     }
-    if (effect.stress) {
+    if (effect.mentalInjury) {
       team.forEach((character) => {
-        character.stress = Math.max(0, character.stress + Math.round(effect.stress * severity));
+        if (effect.mentalInjury > 0 && Math.random() <= Math.min(0.75, Math.abs(effect.mentalInjury) * 0.18 * severity)) {
+          applyNegativeConditionDraft(draft, character, {
+            category: "mental",
+            severity: effect.mentalInjury >= 3 ? "medium" : "light",
+          });
+        }
       });
     }
-    if (effect.wound) {
+    if (effect.physicalInjury) {
       team.forEach((character) => {
-        if (effect.wound < 0) {
-          character.wound = Math.max(0, character.wound + effect.wound);
-        } else if (Math.random() <= 0.5) {
-          character.wound += effect.wound;
+        if (effect.physicalInjury > 0 && Math.random() <= 0.5) {
+          applyNegativeConditionDraft(draft, character, { severity: effect.physicalInjury >= 2 ? "medium" : "light" });
         }
       });
     }

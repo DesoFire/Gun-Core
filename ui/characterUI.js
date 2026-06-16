@@ -18,7 +18,7 @@ import {
   updateCharacter,
 } from "../modules/character.js";
 import { getInventory } from "../modules/inventory.js";
-import { calculateEffectiveCharacterCombatPower, getCombatPowerBreakdown } from "../modules/combatPower.js";
+import { calculateEffectiveCharacterCombatPower, getCombatPowerBreakdown, getConditionStressPoints, getConditionWoundPoints, getInjuryState, getPressureState } from "../modules/combatPower.js";
 import { getWeaponTagNames } from "../modules/weaponGenerator.js";
 import { getState } from "../js/state.js";
 import { identityFee } from "../modules/faction.js";
@@ -74,6 +74,8 @@ export function renderCharacterCard(character, options = {}) {
   const selected = Boolean(options.selected);
   const rankLabel = formatRank(character.rank);
   const finalPower = calculateEffectiveCharacterCombatPower(character);
+  const injury = getInjuryState(character);
+  const pressure = getPressureState(character);
   return `
     <article class="card character-card ${isDispatch ? "dispatch-character-card" : ""} ${selected ? "selected" : ""}" data-open-character="${character.id}">
       <div class="card-header">
@@ -93,8 +95,8 @@ export function renderCharacterCard(character, options = {}) {
       ${renderCharacterTagRow(character)}
       <div class="character-kpi-grid">
         <div class="character-kpi primary"><span>战力</span><strong>${finalPower}</strong></div>
-        <div class="character-kpi ${character.stress >= 60 ? "danger" : character.stress >= 30 ? "warning" : ""}"><span>压力</span><strong>${character.stress}</strong></div>
-        <div class="character-kpi ${character.wound > 0 ? "danger" : ""}"><span>伤势</span><strong>${character.wound}</strong></div>
+        <div class="character-kpi status-kpi status-${pressure.level}"><span>压力</span><strong>${pressure.label}</strong><small>${pressure.points} 点</small></div>
+        <div class="character-kpi status-kpi status-${injury.level}"><span>伤势</span><strong>${injury.label}</strong><small>${injury.points} 点</small></div>
         <div class="character-kpi"><span>身份费</span><strong>${identityFee(character)}/天</strong></div>
       </div>
       <div class="character-meta-row">
@@ -230,6 +232,8 @@ function renderCharacterSheet(id) {
   const character = getCharacter(id);
   if (!character) return;
   const breakdown = getCombatPowerBreakdown(character);
+  const injury = getInjuryState(character);
+  const pressure = getPressureState(character);
   const dossier = document.querySelector("#mercenary-dossier");
   dossier.innerHTML = `
     <div class="dossier-top">
@@ -249,8 +253,8 @@ function renderCharacterSheet(id) {
       <div class="dossier-head-stats">
         ${renderRankBadge(character.rank)}
         <div class="mini-stat primary"><span>最终战力</span><strong>${breakdown.final}</strong></div>
-        <div class="mini-stat ${character.stress >= 60 ? "danger" : character.stress >= 30 ? "warning" : ""}"><span>压力</span><strong>${character.stress}</strong></div>
-        <div class="mini-stat ${character.wound > 0 ? "danger" : ""}"><span>伤势</span><strong>${character.wound}</strong></div>
+        <div class="mini-stat status-${pressure.level}"><span>压力</span><strong>${pressure.label}</strong><small>${pressure.points} 点</small></div>
+        <div class="mini-stat status-${injury.level}"><span>伤势</span><strong>${injury.label}</strong><small>${injury.points} 点</small></div>
         <div class="mini-stat"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
       </div>
       <button class="ghost-button dialog-close-button" data-close-dossier aria-label="关闭" title="关闭" type="button">关闭</button>
@@ -399,9 +403,10 @@ function renderCombatPowerBreakdown(character) {
         <div class="field"><span>装备战力</span><strong class="tag-positive">+${breakdown.equipment}</strong></div>
         <div class="field"><span>正面状态</span><strong class="tag-positive">+${breakdown.positive}</strong></div>
         <div class="field"><span>职业加成</span><strong class="tag-positive">+${breakdown.classBonus}</strong></div>
-        <div class="field"><span>伤势扣减</span><strong class="tag-negative">-${breakdown.injuryPenalty}</strong></div>
-        <div class="field"><span>压力扣减</span><strong class="tag-negative">-${breakdown.stressPenalty}</strong></div>
-        <div class="field"><span>负面状态</span><strong class="tag-negative">-${breakdown.conditionPenalty}</strong></div>
+        <div class="field"><span>物理伤势</span><strong class="tag-negative">${breakdown.injuryLabel} ${breakdown.injuryPoints} 点 / -${breakdown.injuryPenalty}</strong></div>
+        <div class="field"><span>物理结算后</span><strong>${breakdown.physicalTotal}</strong></div>
+        <div class="field"><span>精神压力</span><strong class="tag-negative">${breakdown.pressureLabel} ${breakdown.pressurePoints} 点 / -${Math.round(breakdown.pressurePenaltyRate * 100)}%</strong></div>
+        <div class="field"><span>压力折损</span><strong class="tag-negative">-${breakdown.pressurePenalty}</strong></div>
         <div class="field"><span>最终战力</span><strong>${breakdown.final}</strong></div>
       </div>
     </section>
@@ -463,13 +468,19 @@ function renderConditionList(character) {
                 <strong>${condition.name}</strong>
                 <p class="muted">${condition.description}</p>
               </div>
-              <span class="badge condition-badge condition-${condition.severity ?? "light"}">${formatSeverity(condition.severity)} / -${condition.powerPenalty ?? 0} 战力</span>
+              <span class="badge condition-badge condition-${condition.severity ?? "light"}">${formatConditionEffect(condition)}</span>
             </article>
           `
         )
         .join("")}
     </div>
   `;
+}
+
+function formatConditionEffect(condition) {
+  const severity = formatSeverity(condition.severity);
+  if (condition.category === "mental") return `${severity} / 压力 +${getConditionStressPoints(condition)}`;
+  return `${severity} / 伤势 +${getConditionWoundPoints(condition)}`;
 }
 
 function formatSeverity(severity) {

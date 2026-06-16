@@ -56,8 +56,6 @@ export function createMercenary(classId = randomItem(Object.keys(characterClasse
     bounty: randomNumber(0, 24) * 10,
     debt: randomNumber(0, 18) * 5,
     signingMultiplier: randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax),
-    stress: randomNumber(0, 8),
-    wound: 0,
     equipment: createEmptyEquipment(),
     combatPower: baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0) + randomNumber(-3, 4),
     status: "待命",
@@ -250,8 +248,6 @@ export function normalizeCharacter(character) {
   character.bounty ??= randomNumber(0, 24) * 10;
   character.debt ??= randomNumber(0, 18) * 5;
   character.signingMultiplier ??= randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax);
-  character.wound ??= 0;
-  character.stress ??= 0;
   character.status ??= "待命";
   const baseClass = characterClasses[character.classId] ?? characterClasses.assault;
   const category = careerCategories[baseClass.category];

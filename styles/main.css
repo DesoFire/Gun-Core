@@ -827,6 +827,56 @@ h3 {
   color: #9de0a5;
 }
 
+.status-none {
+  border-color: rgb(101 196 129 / 0.34);
+}
+
+.status-none strong {
+  color: #8adf9f;
+}
+
+.status-low {
+  border-color: rgb(170 204 91 / 0.38);
+}
+
+.status-low strong {
+  color: #bddc72;
+}
+
+.status-medium {
+  border-color: rgb(229 188 83 / 0.44);
+}
+
+.status-medium strong {
+  color: #e7c45d;
+}
+
+.status-high {
+  border-color: rgb(230 127 85 / 0.52);
+}
+
+.status-high strong {
+  color: #ee8f61;
+}
+
+.status-extreme {
+  border-color: rgb(224 74 74 / 0.58);
+}
+
+.status-extreme strong {
+  color: #eb6b65;
+}
+
+.status-collapse {
+  background: #100d0e;
+  border-color: rgb(116 16 25 / 0.86);
+}
+
+.status-collapse strong {
+  color: #d8ccd0;
+  text-shadow: 0 0 14px rgb(165 24 36 / 0.5);
+}
+
 .character-meta-row {
   color: var(--muted);
   display: flex;
@@ -1503,6 +1553,13 @@ h3 {
 .mini-stat.danger strong,
 .dossier-stat-card.danger strong {
   color: #e89a93;
+}
+
+.mini-stat small {
+  color: var(--muted);
+  display: block;
+  font-size: 10px;
+  margin-top: 3px;
 }
 
 .dossier-code {
