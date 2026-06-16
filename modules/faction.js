@@ -226,6 +226,17 @@ export function hospitalTreatMercenaries() {
   });
 }
 
+export function hospitalTreatMercenary(characterId) {
+  return treatNegativeConditions({
+    facilityId: "hospital",
+    category: "physical",
+    config: economyConfig.facilities.hospitalTreatment,
+    sourceName: "医疗中心",
+    emptyText: "医疗中心没有找到可以处理的物理伤病。",
+    characterId,
+  });
+}
+
 export function entertainmentCenterTreatMercenaries() {
   return treatNegativeConditions({
     facilityId: "entertainmentCenter",
@@ -236,11 +247,22 @@ export function entertainmentCenterTreatMercenaries() {
   });
 }
 
-function treatNegativeConditions({ facilityId, category, config, sourceName, emptyText }) {
+export function entertainmentCenterTreatMercenary(characterId) {
+  return treatNegativeConditions({
+    facilityId: "entertainmentCenter",
+    category: "mental",
+    config: economyConfig.facilities.entertainmentCenterTreatment,
+    sourceName: "娱乐中心",
+    emptyText: "娱乐中心没有找到可以处理的心理负面状态。",
+    characterId,
+  });
+}
+
+function treatNegativeConditions({ facilityId, category, config, sourceName, emptyText, characterId = null }) {
   let result = { ok: false, cost: 0, attempted: 0, cured: 0 };
   updateState((draft) => {
     if (draft.gameStatus !== "active" || (draft.facilities[facilityId] ?? 0) <= 0) return;
-    const plan = createTreatmentPlan(draft, { facilityId, category, config });
+    const plan = createTreatmentPlan(draft, { facilityId, category, config, characterId });
     if (plan.entries.length === 0) {
       draft.log.push(`第 ${draft.day} 天：${emptyText}`);
       return;
@@ -267,11 +289,29 @@ export function calculateHospitalTreatmentPlan(state = getState()) {
   });
 }
 
+export function calculateCharacterHospitalTreatmentPlan(characterId, state = getState()) {
+  return createTreatmentPlan(state, {
+    facilityId: "hospital",
+    category: "physical",
+    config: economyConfig.facilities.hospitalTreatment,
+    characterId,
+  });
+}
+
 export function calculateEntertainmentCenterTreatmentPlan(state = getState()) {
   return createTreatmentPlan(state, {
     facilityId: "entertainmentCenter",
     category: "mental",
     config: economyConfig.facilities.entertainmentCenterTreatment,
+  });
+}
+
+export function calculateCharacterEntertainmentCenterTreatmentPlan(characterId, state = getState()) {
+  return createTreatmentPlan(state, {
+    facilityId: "entertainmentCenter",
+    category: "mental",
+    config: economyConfig.facilities.entertainmentCenterTreatment,
+    characterId,
   });
 }
 
@@ -345,13 +385,14 @@ export function getBlackMarketItemCost(kind, rank) {
   return base + rankIndex * perRank;
 }
 
-function createTreatmentPlan(draft, { facilityId, category, config }) {
+function createTreatmentPlan(draft, { facilityId, category, config, characterId = null }) {
   const level = draft.facilities?.[facilityId] ?? 0;
   const maxPoints = getTreatmentMaxPoints(level, config);
   const successChance = getTreatmentSuccessChance(level, config);
   const entries = [];
   draft.roster
     .filter((character) => !isDeadStatus(character.status))
+    .filter((character) => !characterId || character.id === characterId)
     .forEach((character) => {
       (character.conditions ?? [])
         .filter((condition) => condition.category === category)

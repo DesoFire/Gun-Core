@@ -1507,8 +1507,7 @@ h3 {
 }
 
 .rank-badge {
-  grid-row: span 2;
-  min-width: 112px;
+  min-width: 96px;
 }
 
 .rank-badge span,
@@ -1527,13 +1526,23 @@ h3 {
 }
 
 .rank-badge strong {
-  font-size: 34px;
+  font-size: 22px;
   font-weight: 900;
 }
 
 .rank-none strong {
   color: #8c929d;
-  font-size: 30px;
+  font-size: 18px;
+}
+
+.mini-stat.primary {
+  grid-column: span 2;
+  min-height: 92px;
+}
+
+.mini-stat.primary strong {
+  color: var(--accent-strong);
+  font-size: 38px;
 }
 
 .rank-F strong {
@@ -1802,6 +1811,10 @@ h3 {
 .trait-list {
   display: grid;
   gap: 8px;
+}
+
+.condition-treatment-row {
+  margin-bottom: 10px;
 }
 
 .trait-item {

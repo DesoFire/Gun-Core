@@ -24,7 +24,13 @@ import { getInventory } from "../modules/inventory.js";
 import { calculateEffectiveCharacterCombatPower, getCombatPowerBreakdown, getConditionStressPoints, getConditionWoundPoints, getInjuryState, getPressureState } from "../modules/combatPower.js";
 import { getWeaponTagNames } from "../modules/weaponGenerator.js";
 import { getState } from "../js/state.js";
-import { identityFee } from "../modules/faction.js";
+import {
+  calculateCharacterEntertainmentCenterTreatmentPlan,
+  calculateCharacterHospitalTreatmentPlan,
+  entertainmentCenterTreatMercenary,
+  hospitalTreatMercenary,
+  identityFee,
+} from "../modules/faction.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { confirmResourceSpend, showInsufficientFunds, showSpendFailure, showSpendSuccess, showToast } from "../js/notifications.js";
 import { renderMercenaryAvatar } from "./mercenaryAvatarUI.js";
@@ -36,6 +42,7 @@ let activeDossierTab = "attributes";
 let selectedEquipmentSlot = "weapon";
 let trainingDialogCharacterId = null;
 let selectedTrainingPoolId = null;
+const CONTRACT_SKILL_TAGS = new Set(["战斗", "后勤", "情报", "生存", "机师"]);
 
 export function initCharacterUI({ onRenderNeeded }) {
   requestRender = onRenderNeeded;
@@ -88,7 +95,7 @@ export function renderCharacterCard(character, options = {}) {
           ${renderMercenaryAvatar(character)}
           <div>
             <p class="card-title">${character.name}</p>
-            <p class="muted">${rankLabel} · ${formatSkillSummary(character)}</p>
+            <p class="muted">${rankLabel}</p>
           </div>
         </div>
         ${
@@ -102,11 +109,9 @@ export function renderCharacterCard(character, options = {}) {
         <div class="character-kpi primary"><span>战力</span><strong>${finalPower}</strong></div>
         <div class="character-kpi status-kpi status-${pressure.level}"><span>压力</span><strong>${pressure.label}</strong><small>${pressure.points} 点</small></div>
         <div class="character-kpi status-kpi status-${injury.level}"><span>伤势</span><strong>${injury.label}</strong><small>${injury.points} 点</small></div>
-        <div class="character-kpi"><span>身份费</span><strong>${identityFee(character)}/天</strong></div>
+        <div class="character-kpi"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
       </div>
       <div class="character-meta-row">
-        <span>个人声望 ${character.personalReputation ?? 0}</span>
-        <span>技能 ${getSkillCount(character)}</span>
         <span>负面状态 ${character.conditions?.length ?? 0}</span>
       </div>
       ${
@@ -139,7 +144,7 @@ function renderRecruits() {
               ${renderMercenaryAvatar(character)}
               <div>
                 <p class="card-title">${character.name}</p>
-                <p class="muted">${formatRank(character.rank)} · ${formatSkillSummary(character)}</p>
+                <p class="muted">${formatRank(character.rank)}</p>
               </div>
             </div>
             <button class="primary-button" data-recruit="${character.id}" ${disabled} type="button">招募 ${cost} 金</button>
@@ -189,7 +194,7 @@ export function renderCharacterTagRow(character) {
       label: skill.name,
       className: "badge skill-badge",
     })),
-    ...getCharacterSkillTags(character).slice(0, 5).map((tag) => ({
+    ...getContractSkillTags(character).slice(0, 5).map((tag) => ({
       label: tag,
       className: "badge skill-tag",
     })),
@@ -258,8 +263,8 @@ function renderCharacterSheet(id) {
         </div>
       </div>
       <div class="dossier-head-stats">
-        ${renderRankBadge(character.rank)}
         <div class="mini-stat primary"><span>最终战力</span><strong>${breakdown.final}</strong></div>
+        ${renderRankBadge(character.rank)}
         <div class="mini-stat status-${pressure.level}"><span>压力</span><strong>${pressure.label}</strong><small>${pressure.points} 点</small></div>
         <div class="mini-stat status-${injury.level}"><span>伤势</span><strong>${injury.label}</strong><small>${injury.points} 点</small></div>
         <div class="mini-stat"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
@@ -374,6 +379,9 @@ function renderCharacterSheet(id) {
       openDossierCharacterId = null;
       requestRender();
     });
+  });
+  dossier.querySelectorAll("[data-quick-treatment]").forEach((button) => {
+    button.addEventListener("click", () => handleQuickTreatment(button.dataset.quickTreatment, button.dataset.quickTreatmentCharacter));
   });
   bindEquipmentEvents(id);
 }
@@ -530,7 +538,7 @@ function renderSkillList(character) {
 }
 
 function renderSkillTagChips(character) {
-  const tags = getCharacterSkillTags(character).slice(0, 6);
+  const tags = getContractSkillTags(character).slice(0, 6);
   if (tags.length === 0) return `<span class="career-chip career-chip-primary" title="\u5c1a\u672a\u83b7\u5f97\u8bad\u7ec3\u6280\u80fd">\u672a\u8bad\u7ec3</span>`;
   return tags.map((tag) => `<span class="career-chip career-chip-primary" title="\u8bad\u7ec3\u6280\u80fd\u6807\u7b7e\uff0c\u7528\u4e8e\u5951\u7ea6\u63a8\u8350\u80fd\u529b\u5339\u914d\u3002">${tag}</span>`).join("");
 }
@@ -547,8 +555,10 @@ function renderRankBadge(rank) {
 
 function renderConditionList(character) {
   const conditions = character.conditions ?? [];
-  if (conditions.length === 0) return `<p class="muted">暂时没有被合同附赠人生体验。</p>`;
+  const treatmentActions = renderQuickTreatmentActions(character);
+  if (conditions.length === 0) return `${treatmentActions}<p class="muted">暂时没有被合同附赠人生体验。</p>`;
   return `
+    ${treatmentActions}
     <div class="trait-list">
       ${conditions
         .map(
@@ -565,6 +575,51 @@ function renderConditionList(character) {
         .join("")}
     </div>
   `;
+}
+
+function renderQuickTreatmentActions(character) {
+  const state = getState();
+  const hospitalPlan = calculateCharacterHospitalTreatmentPlan(character.id, state);
+  const entertainmentPlan = calculateCharacterEntertainmentCenterTreatmentPlan(character.id, state);
+  const canAct = state.gameStatus === "active" && !isDeadStatus(character.status);
+  return `
+    <div class="button-row condition-treatment-row">
+      <button class="ghost-button" data-quick-treatment="physical" data-quick-treatment-character="${character.id}" ${canAct && hospitalPlan.entries.length > 0 ? "" : "disabled"} type="button">
+        医疗中心处理物理伤病 · ${hospitalPlan.cost} 金
+      </button>
+      <button class="ghost-button" data-quick-treatment="mental" data-quick-treatment-character="${character.id}" ${canAct && entertainmentPlan.entries.length > 0 ? "" : "disabled"} type="button">
+        娱乐中心处理心理负面 · ${entertainmentPlan.cost} 金
+      </button>
+    </div>
+  `;
+}
+
+function handleQuickTreatment(type, characterId) {
+  const state = getState();
+  const character = getCharacter(characterId);
+  if (!character) return;
+  const isMental = type === "mental";
+  const plan = isMental
+    ? calculateCharacterEntertainmentCenterTreatmentPlan(characterId, state)
+    : calculateCharacterHospitalTreatmentPlan(characterId, state);
+  const action = isMental ? "娱乐中心处理心理负面" : "医疗中心处理物理伤病";
+  if (plan.entries.length === 0) {
+    showSpendFailure(action, "没有可处理的负面状态，或设施等级不足。");
+    return;
+  }
+  if (state.gold < plan.cost) {
+    showInsufficientFunds(state.gold, plan.cost);
+    return;
+  }
+  if (!confirmResourceSpend(`${action}：${character.name}`, plan.cost)) return;
+  const result = isMental ? entertainmentCenterTreatMercenary(characterId) : hospitalTreatMercenary(characterId);
+  if (!result?.ok) {
+    showSpendFailure(action, "治疗没有完成。");
+    return;
+  }
+  showToast(`${action}完成：尝试 ${result.attempted} 项，成功 ${result.cured} 项，花费 ${result.cost} 金。`, result.cured > 0 ? "good" : "warning");
+  renderCharacterSheet(characterId);
+  requestRender();
 }
 
 function formatConditionEffect(condition) {
@@ -713,11 +768,6 @@ function getCharacterSkillTags(character) {
   return [...new Set((character.skills ?? []).flatMap((skill) => skill.tags ?? []))];
 }
 
-function formatSkillSummary(character) {
-  const count = character.skills?.length ?? 0;
-  return count > 0 ? count + " \u9879\u8bad\u7ec3\u6280\u80fd" : "\u672a\u8bad\u7ec3";
-}
-
-function getSkillCount(character) {
-  return character.skills?.length ?? 0;
+function getContractSkillTags(character) {
+  return getCharacterSkillTags(character).filter((tag) => CONTRACT_SKILL_TAGS.has(tag));
 }
