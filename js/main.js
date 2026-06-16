@@ -55,9 +55,13 @@ function bindGlobalActions() {
   document.querySelector("#advance-day").addEventListener("click", requestAdvanceDayApproval);
   document.querySelector("#organization-name").addEventListener("click", editOrganizationName);
   initGlobalStatusDrawer();
+  initGlobalLogDrawer();
   initDialogStatusContext();
   document.querySelector("#global-status-close").addEventListener("click", () => {
     closeGlobalStatusDrawer();
+  });
+  document.querySelector("#global-log-close").addEventListener("click", () => {
+    closeGlobalLogDrawer();
   });
   document.querySelector("#save-game").addEventListener("click", () => {
     saveState();
@@ -86,20 +90,34 @@ function closeGlobalStatusDrawer() {
   if (panel) panel.hidden = true;
 }
 
+function closeGlobalLogDrawer() {
+  document.querySelector("#global-log-drawer")?.classList.remove("open");
+  const panel = document.querySelector("#global-log-panel");
+  if (panel) panel.hidden = true;
+}
+
 function syncGlobalStatusContext() {
   const drawer = document.querySelector("#global-status-drawer");
-  if (!drawer) return;
+  const logDrawer = document.querySelector("#global-log-drawer");
+  if (!drawer || !logDrawer) return;
   const activeDialog = [...document.querySelectorAll("dialog[open]")].find((dialog) => dialog.id !== "intro-dialog");
   drawer.classList.toggle("in-dialog", Boolean(activeDialog));
+  logDrawer.classList.toggle("in-dialog", Boolean(activeDialog));
   if (activeDialog) {
     activeDialog.append(drawer);
+    activeDialog.append(logDrawer);
     drawer.style.left = "";
     drawer.style.top = "";
     drawer.style.right = "";
+    logDrawer.style.left = "";
+    logDrawer.style.top = "56px";
+    logDrawer.style.right = "";
     return;
   }
   document.querySelector("#root")?.append(drawer);
+  document.querySelector("#root")?.append(logDrawer);
   drawer.classList.remove("in-dialog");
+  logDrawer.classList.remove("in-dialog");
   const savedPosition = loadDrawerPosition();
   if (savedPosition) {
     drawer.style.left = `${savedPosition.left}px`;
@@ -109,6 +127,16 @@ function syncGlobalStatusContext() {
     drawer.style.left = "";
     drawer.style.top = "";
     drawer.style.right = "";
+  }
+  const savedLogPosition = loadDrawerPosition("gun-core-log-drawer-position");
+  if (savedLogPosition) {
+    logDrawer.style.left = `${savedLogPosition.left}px`;
+    logDrawer.style.top = `${savedLogPosition.top}px`;
+    logDrawer.style.right = "auto";
+  } else {
+    logDrawer.style.left = "";
+    logDrawer.style.top = "152px";
+    logDrawer.style.right = "18px";
   }
 }
 
@@ -138,6 +166,7 @@ function closeIntro() {
 function renderApp() {
   renderCommandPanel();
   renderResources();
+  renderGlobalLog();
   renderOverview();
   renderBuildings();
   renderExpenses();
@@ -159,32 +188,69 @@ function requestAdvanceDayApproval() {
 }
 
 function initGlobalStatusDrawer() {
-  const drawer = document.querySelector("#global-status-drawer");
-  const toggle = document.querySelector("#global-status-toggle");
-  const panel = document.querySelector("#global-status-panel");
-  const savedPosition = loadDrawerPosition();
+  initDraggableDrawer({
+    drawerSelector: "#global-status-drawer",
+    toggleSelector: "#global-status-toggle",
+    panelSelector: "#global-status-panel",
+    storageKey: "gun-core-status-drawer-position",
+  });
+}
+
+function initGlobalLogDrawer() {
+  initDraggableDrawer({
+    drawerSelector: "#global-log-drawer",
+    toggleSelector: "#global-log-toggle",
+    panelSelector: "#global-log-panel",
+    storageKey: "gun-core-log-drawer-position",
+    defaultTop: "152px",
+    defaultRight: "18px",
+  });
+}
+
+function initDraggableDrawer({
+  drawerSelector,
+  toggleSelector,
+  panelSelector,
+  storageKey,
+  defaultTop = "",
+  defaultRight = "",
+}) {
+  const drawer = document.querySelector(drawerSelector);
+  const toggle = document.querySelector(toggleSelector);
+  const panel = document.querySelector(panelSelector);
+  if (!drawer || !toggle || !panel) return;
+  const savedPosition = loadDrawerPosition(storageKey);
   if (savedPosition) {
     drawer.style.left = `${savedPosition.left}px`;
     drawer.style.top = `${savedPosition.top}px`;
     drawer.style.right = "auto";
+  } else {
+    drawer.style.left = "";
+    drawer.style.top = defaultTop;
+    drawer.style.right = defaultRight;
   }
 
   let drag = null;
-  toggle.addEventListener("pointerdown", (event) => {
+
+  function beginDrag(event) {
     if (drawer.classList.contains("in-dialog")) return;
     drag = {
-      pointerId: event.pointerId,
+      pointerId: event.pointerId ?? null,
       startX: event.clientX,
       startY: event.clientY,
       left: drawer.offsetLeft,
       top: drawer.offsetTop,
       moved: false,
     };
-    toggle.setPointerCapture(event.pointerId);
+    if (event.pointerId != null && typeof toggle.setPointerCapture === "function") {
+      toggle.setPointerCapture(event.pointerId);
+    }
     drawer.classList.add("dragging");
-  });
-  toggle.addEventListener("pointermove", (event) => {
-    if (!drag || drag.pointerId !== event.pointerId) return;
+  }
+
+  function moveDrag(event) {
+    if (!drag) return;
+    if (drag.pointerId != null && event.pointerId != null && drag.pointerId !== event.pointerId) return;
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
     if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
@@ -195,43 +261,67 @@ function initGlobalStatusDrawer() {
     drawer.style.left = `${left}px`;
     drawer.style.top = `${top}px`;
     drawer.style.right = "auto";
-  });
-  toggle.addEventListener("pointerup", (event) => {
+  }
+
+  function endDrag(event) {
     const dialogMode = drawer.classList.contains("in-dialog");
     if (dialogMode) {
       drawer.classList.toggle("open");
       panel.hidden = !drawer.classList.contains("open");
       return;
     }
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    toggle.releasePointerCapture(event.pointerId);
+    if (!drag) return;
+    if (drag.pointerId != null && event.pointerId != null && drag.pointerId !== event.pointerId) return;
+    if (event.pointerId != null && typeof toggle.releasePointerCapture === "function") {
+      toggle.releasePointerCapture(event.pointerId);
+    }
     drawer.classList.remove("dragging");
-    saveDrawerPosition(drawer);
+    saveDrawerPosition(drawer, storageKey);
     const shouldToggle = !drag.moved;
     drag = null;
     if (!shouldToggle) return;
     drawer.classList.toggle("open");
     panel.hidden = !drawer.classList.contains("open");
-  });
+  }
+
+  toggle.addEventListener("pointerdown", beginDrag);
+  toggle.addEventListener("pointermove", moveDrag);
+  toggle.addEventListener("pointerup", endDrag);
   toggle.addEventListener("pointercancel", () => {
     drag = null;
     drawer.classList.remove("dragging");
   });
+  toggle.addEventListener("mousedown", (event) => {
+    if (drag) return;
+    beginDrag(event);
+    event.preventDefault();
+  });
+  document.addEventListener("mousemove", moveDrag);
+  document.addEventListener("mouseup", endDrag);
 }
 
-function loadDrawerPosition() {
+function loadDrawerPosition(key = "gun-core-status-drawer-position") {
   try {
-    return JSON.parse(localStorage.getItem("gun-core-status-drawer-position") ?? "null");
+    return JSON.parse(localStorage.getItem(key) ?? "null");
   } catch {
     return null;
   }
 }
 
-function saveDrawerPosition(drawer) {
+function saveDrawerPosition(drawer, key = "gun-core-status-drawer-position") {
   localStorage.setItem(
-    "gun-core-status-drawer-position",
+    key,
     JSON.stringify({ left: drawer.offsetLeft, top: drawer.offsetTop })
   );
+}
+
+function renderGlobalLog() {
+  const list = document.querySelector("#global-log-list");
+  if (!list) return;
+  const logs = [...(getState().log ?? [])].slice(-80).reverse();
+  list.innerHTML = logs.length > 0
+    ? logs.map((entry) => `<article class="log-entry">${entry}</article>`).join("")
+    : `<p class="muted">还没有行动记录。</p>`;
 }
 
 function renderCommandPanel() {

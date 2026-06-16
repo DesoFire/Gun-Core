@@ -23,6 +23,8 @@ import { calculateDailySupplyConsumption, calculateUnpaidSecrecyReputation, iden
 import { evaluateGameOverDraft } from "./game.js";
 import { calculateTeamCombatPower, getPromotionCombatPowerGain } from "./combatPower.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
+import { generateArmorItem } from "./armorGenerator.js";
+import { generateWeaponItem } from "./weaponGenerator.js";
 
 export function getMissions() {
   return getState().missions;
@@ -316,6 +318,7 @@ function resolveMissionDraft(draft, mission) {
     distributeContractReputationDraft(draft, team.filter((character) => character.status !== "阵亡"), reputation);
     draft.gold += gold;
     draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」成功。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，获得 ${gold} 金，队员瓜分 ${reputation} 声望。${outcome.text}`);
+    rollCombatLootDraft(draft, mission, `契约「${mission.name}」`);
   } else {
     const reputationLoss = calculateMissionReputationLoss(mission, team.length);
     applyContractReputationLossDraft(draft, team.filter((character) => character.status !== "阵亡"), reputationLoss);
@@ -416,6 +419,7 @@ function resolveBaseRaidDraft(draft) {
 
   if (success) {
     draft.log.push(`第 ${draft.day} 天：基地遭遇袭击，留守佣兵与防御设施防守成功。防御设施提供 ${baseDefensePower} 战斗力。`);
+    rollCombatLootDraft(draft, mission, "基地防守");
     return;
   }
 
@@ -429,6 +433,36 @@ function calculateRaidDifficulty(unpaidReputation) {
 
 function calculateBaseDefensePower(draft) {
   return (draft.buildings?.defenses ?? 0) * economyConfig.facilities.defensePowerPerLevel;
+}
+
+function getContractRank(difficulty = 1) {
+  const ranks = ["F", "F", "E", "D", "C", "B", "A", "S"];
+  return ranks[Math.max(0, Math.min(ranks.length - 1, difficulty))] ?? "F";
+}
+
+function rollCombatLootDraft(draft, mission, sourceLabel = "契约") {
+  const config = economyConfig.contracts.loot ?? {};
+  const baseChance = config.baseChance ?? 25;
+  const perDifficulty = config.perDifficulty ?? 3;
+  const chance = clamp(baseChance + Math.max(0, (mission.difficulty ?? 1) - 1) * perDifficulty, 0, 100);
+  if (randomNumber(1, 100) > chance) return null;
+
+  const rarity = getContractRank(mission.difficulty ?? 1);
+  const isWeapon = randomNumber(1, 100) <= (config.weaponChance ?? 50);
+  const item = isWeapon ? generateWeaponItem({ rarity }) : generateArmorItem({ rarity });
+  item.source = sourceLabel;
+  item.originalPrice = estimateCombatLootOriginalPrice(item);
+  draft.inventory.unshift(item);
+  draft.log.push(`第 ${draft.day} 天：${sourceLabel}结束后回收战利品「${item.name}」（${rarity}级）。`);
+  return item;
+}
+
+function estimateCombatLootOriginalPrice(item) {
+  const rankIndex = Math.max(0, ["F", "E", "D", "C", "B", "A", "S"].indexOf(item.rarity ?? "F"));
+  const config = economyConfig.blackMarket;
+  if (item.itemCategory === "weapon" || item.slot === "weapon") return (config.baseCost.weapon ?? 58) + rankIndex * (config.perRank.weapon ?? 14);
+  if (item.itemCategory === "armor" || item.slot === "armor") return (config.baseCost.armor ?? 46) + rankIndex * (config.perRank.armor ?? 14);
+  return config.baseCost.fallback ?? 40;
 }
 
 function randomlyEquipDefendersDraft(draft, defenders) {
