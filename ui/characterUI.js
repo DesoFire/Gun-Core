@@ -28,6 +28,7 @@ import { identityFee } from "../modules/faction.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { confirmResourceSpend, showInsufficientFunds, showSpendFailure, showSpendSuccess, showToast } from "../js/notifications.js";
 import { renderMercenaryAvatar } from "./mercenaryAvatarUI.js";
+import { getSkillEffectText } from "../modules/skillEffects.js";
 
 let requestRender = () => {};
 let openDossierCharacterId = null;
@@ -519,6 +520,7 @@ function renderSkillList(character) {
           <div>
             <strong>${skill.name}</strong>
             <p class="muted">${skill.description ?? ""}</p>
+            <p class="skill-effect-text">${getSkillEffectText(skill.id)}</p>
           </div>
           <span class="badge skill-badge">${(skill.tags ?? []).join(" / ")}</span>
         </article>

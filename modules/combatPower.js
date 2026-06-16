@@ -1,5 +1,6 @@
 import { mercenaryRanks } from "../data/sampleData.js";
 import { clamp } from "../js/utils.js";
+import { getSkillCombatPowerBonus } from "./skillEffects.js";
 
 export function estimateBaseCombatPower(character) {
   const basePower = character.combatPower ?? 20;
@@ -26,7 +27,7 @@ export function calculateEffectiveCharacterCombatPower(character) {
 export function getCombatPowerBreakdown(character) {
   const base = character.combatPower ?? estimateBaseCombatPower(character);
   const equipment = calculateEquipmentCombatPower(character);
-  const skillBonus = 0;
+  const skillBonus = getSkillCombatPowerBonus(character);
   const injuryState = getInjuryState(character);
   const pressureState = getPressureState(character);
   const injuryPenalty = Math.round(injuryState.penalty);

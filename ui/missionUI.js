@@ -13,6 +13,7 @@ import {
 import { openCharacterSheet, renderCharacterCard } from "./characterUI.js";
 import { renderMercenaryAvatar } from "./mercenaryAvatarUI.js";
 import { confirmResourceSpend, showInsufficientFunds, showSpendFailure, showSpendSuccess } from "../js/notifications.js";
+import { getInvestigationSkillDiscount } from "../modules/skillEffects.js";
 
 let openMissionId = null;
 let dispatchMissionId = null;
@@ -275,7 +276,7 @@ function formatInvestigationCost(mission, mode) {
   const multiplier = mode === "random" ? config.randomInvestigationMultiplier : mode === "power" ? config.powerInvestigationMultiplier : 1;
   const facilities = getState().facilities || {};
   const facilityDiscount = (facilities.intel || 0) * economyConfig.facilities.intelInvestigationDiscountPerLevel;
-  const discount = Math.min(config.maxInvestigationDiscount, facilityDiscount);
+  const discount = Math.min(config.maxInvestigationDiscount, facilityDiscount + getInvestigationSkillDiscount(getState(), mode));
   return `${Math.max(1, Math.round(base * multiplier * (1 - discount)))} 金`;
 }
 

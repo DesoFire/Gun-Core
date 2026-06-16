@@ -10,6 +10,7 @@ import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
 import { generateArmorItem } from "./armorGenerator.js";
 import { generateWeaponItem } from "./weaponGenerator.js";
 import { getConditionStressPoints, getConditionWoundPoints } from "./combatPower.js";
+import { getEquipmentMaintenanceMultiplier, getSupplyCostReduction, getWarehouseMaintenanceReduction } from "./skillEffects.js";
 
 export function calculateDailyUpkeep() {
   return calculateDailyExpenseBreakdown().total;
@@ -122,6 +123,7 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
     Object.entries(character.equipment ?? {})
       .filter(([, item]) => isEquipmentItem(item))
       .map(([slot, item]) => createEquipmentExpenseItem(item, {
+        state: draft,
         characterId: character.id,
         characterName: character.name,
         location: character.name,
@@ -131,6 +133,7 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
   const warehouseEquipmentItems = (draft.inventory ?? [])
     .filter(isEquipmentItem)
     .map((item) => createEquipmentExpenseItem(item, {
+      state: draft,
       characterId: null,
       characterName: "仓库",
       location: "仓库",
@@ -392,14 +395,16 @@ function calculateFacilityUpkeep(id, level) {
 
 function calculateLivingSupplyCost(character) {
   const rankIndex = Math.max(0, mercenaryRanks.indexOf(calculateRank(character)));
-  return economyConfig.dailyExpenses.livingSupplies.rankDailySupply?.[rankIndex] ?? 1;
+  const base = economyConfig.dailyExpenses.livingSupplies.rankDailySupply?.[rankIndex] ?? 1;
+  return Math.max(1, base - getSupplyCostReduction(character));
 }
 
-function calculateEquipmentMaintenanceCost(item) {
+function calculateEquipmentMaintenanceCost(item, state = getState(), context = {}) {
   const rankIndex = Math.max(0, facilityRanks.indexOf(item.rarity ?? "F"));
   const config = economyConfig.dailyExpenses.equipmentMaintenance;
   const base = item.itemCategory === "weapon" || item.slot === "weapon" ? config.weaponBase : config.armorBase;
-  return base + rankIndex * config.perRank;
+  const warehouseReduction = context.location === "仓库" ? getWarehouseMaintenanceReduction(state.roster ?? []) : 0;
+  return Math.max(0, Math.round((base + rankIndex * config.perRank) * getEquipmentMaintenanceMultiplier(state.roster ?? [])) - warehouseReduction);
 }
 
 function isEquipmentItem(item) {
@@ -408,6 +413,7 @@ function isEquipmentItem(item) {
 
 function createEquipmentExpenseItem(item, context = {}) {
   const slot = context.slot ?? item.slot ?? item.itemCategory;
+  const state = context.state ?? getState();
   return {
     id: item.id,
     characterId: context.characterId ?? null,
@@ -418,7 +424,7 @@ function createEquipmentExpenseItem(item, context = {}) {
     itemName: item.name,
     rarity: item.rarity ?? "F",
     type: item.damageType ?? item.protectionType ?? item.type ?? "未知",
-    cost: calculateEquipmentMaintenanceCost(item),
+    cost: calculateEquipmentMaintenanceCost(item, state, context),
   };
 }
 
