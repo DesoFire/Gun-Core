@@ -1,5 +1,6 @@
 import {
   canEquipItemToSlot,
+  createTrainingChoices,
   dismissMercenary,
   equipItem,
   eraseMercenaryReputation,
@@ -9,11 +10,13 @@ import {
   getLivingMercenaryCount,
   getMercenaryLimit,
   getRecruitPool,
+  getTrainingPools,
   hireRecruit,
   recruitCost,
   refreshRecruits,
   renderCharacterDossier,
-  spendEnhancementPoint,
+  spendEnhancementPointForPower,
+  spendEnhancementPointForSkill,
   unequipItem,
   updateCharacter,
 } from "../modules/character.js";
@@ -25,12 +28,13 @@ import { identityFee } from "../modules/faction.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { confirmResourceSpend, showInsufficientFunds, showSpendFailure, showSpendSuccess, showToast } from "../js/notifications.js";
 import { renderMercenaryAvatar } from "./mercenaryAvatarUI.js";
-import { careerCategories } from "../data/sampleData.js";
 
 let requestRender = () => {};
 let openDossierCharacterId = null;
 let activeDossierTab = "attributes";
 let selectedEquipmentSlot = "weapon";
+let trainingDialogCharacterId = null;
+let selectedTrainingPoolId = null;
 
 export function initCharacterUI({ onRenderNeeded }) {
   requestRender = onRenderNeeded;
@@ -83,7 +87,7 @@ export function renderCharacterCard(character, options = {}) {
           ${renderMercenaryAvatar(character)}
           <div>
             <p class="card-title">${character.name}</p>
-            <p class="muted">${character.className} · ${rankLabel}</p>
+            <p class="muted">${rankLabel} · ${formatSkillSummary(character)}</p>
           </div>
         </div>
         ${
@@ -101,7 +105,7 @@ export function renderCharacterCard(character, options = {}) {
       </div>
       <div class="character-meta-row">
         <span>个人声望 ${character.personalReputation ?? 0}</span>
-        <span>正面状态 ${getPositiveStatusCount(character)}</span>
+        <span>技能 ${getSkillCount(character)}</span>
         <span>负面状态 ${character.conditions?.length ?? 0}</span>
       </div>
       ${
@@ -134,7 +138,7 @@ function renderRecruits() {
               ${renderMercenaryAvatar(character)}
               <div>
                 <p class="card-title">${character.name}</p>
-                <p class="muted">${character.className} · ${formatRank(character.rank)}</p>
+                <p class="muted">${formatRank(character.rank)} · ${formatSkillSummary(character)}</p>
               </div>
             </div>
             <button class="primary-button" data-recruit="${character.id}" ${disabled} type="button">招募 ${cost} 金</button>
@@ -180,11 +184,13 @@ function renderRecruits() {
 
 export function renderCharacterTagRow(character) {
   const tags = [
-    { label: character.careerCategoryName ?? "未分类", className: "badge" },
-    { label: character.className, className: "badge" },
-    ...(character.positiveConditions ?? []).slice(0, 3).map((condition) => ({
-      label: condition.name,
-      className: `badge positive-condition-badge positive-condition-${condition.severity ?? "light"}`,
+    ...(character.skills ?? []).slice(0, 4).map((skill) => ({
+      label: skill.name,
+      className: "badge skill-badge",
+    })),
+    ...getCharacterSkillTags(character).slice(0, 5).map((tag) => ({
+      label: tag,
+      className: "badge skill-tag",
     })),
     ...(character.conditions ?? []).slice(0, 4).map((condition) => ({
       label: condition.name,
@@ -224,6 +230,7 @@ export function openCharacterSheet(id, options = {}) {
   openDossierCharacterId = id;
   activeDossierTab = options.tab ?? "attributes";
   selectedEquipmentSlot = "weapon";
+  selectedTrainingPoolId = null;
   renderCharacterSheet(id);
   document.querySelector("#mercenary-dialog").showModal();
 }
@@ -244,8 +251,7 @@ function renderCharacterSheet(id) {
           <button class="editable-title" data-edit-character-name="${character.id}" title="点击重命名" type="button">${character.name}</button>
           <button class="editable-callsign" data-edit-character-callsign="${character.id}" title="点击修改外号" type="button">外号：${character.callsign ?? "未登记"}</button>
           <div class="dossier-chip-row">
-            ${renderCareerChip(character)}
-            <span class="career-chip" title="具体职业会影响职业加成和契约中的建议职业匹配。">${character.className}</span>
+            ${renderSkillTagChips(character)}
             ${renderStatusSwitch(character.status)}
           </div>
         </div>
@@ -277,20 +283,53 @@ function renderCharacterSheet(id) {
       renderCharacterSheet(id);
     });
   });
-  dossier.querySelectorAll("[data-spend-enhancement]").forEach((button) => {
+  dossier.querySelectorAll("[data-gain-power]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (!confirmResourceSpend("强化佣兵", 1, "强化点")) return;
-      const before = getState();
-      const targetBefore = getCharacter(button.dataset.spendEnhancement);
-      const beforePower = targetBefore?.combatPower ?? 0;
-      spendEnhancementPoint(button.dataset.spendEnhancement);
-      const after = getState();
-      const targetAfter = getCharacter(button.dataset.spendEnhancement);
-      if ((after.enhancementPoints ?? 0) >= (before.enhancementPoints ?? 0) || (targetAfter?.combatPower ?? 0) <= beforePower) {
-        showSpendFailure("强化佣兵", "强化点不足或目标不可用。");
+      if (!confirmResourceSpend("强化战力", 1, "强化点")) return;
+      const result = spendEnhancementPointForPower(button.dataset.gainPower);
+      if (!result?.ok) {
+        showSpendFailure("强化战力", "强化点不足或目标不可强化。");
         return;
       }
-      showToast(`强化佣兵成功，消耗 1 强化点，剩余 ${after.enhancementPoints ?? 0}。`, "good");
+      showToast(`强化完成：基础战力 +${result.gain}。剩余强化点 ${getState().enhancementPoints ?? 0}。`, "good");
+      renderCharacterSheet(id);
+      requestRender();
+    });
+  });
+  dossier.querySelectorAll("[data-open-skill-training]").forEach((button) => {
+    button.addEventListener("click", () => {
+      trainingDialogCharacterId = button.dataset.openSkillTraining;
+      selectedTrainingPoolId = null;
+      renderCharacterSheet(id);
+    });
+  });
+  dossier.querySelectorAll("[data-close-skill-training]").forEach((button) => {
+    button.addEventListener("click", () => {
+      trainingDialogCharacterId = null;
+      selectedTrainingPoolId = null;
+      renderCharacterSheet(id);
+    });
+  });
+  dossier.querySelectorAll("[data-select-training-pool]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedTrainingPoolId = button.dataset.selectTrainingPool;
+      renderCharacterSheet(id);
+    });
+  });
+  dossier.querySelectorAll("[data-learn-skill]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!confirmResourceSpend("学习技能", 1, "强化点")) return;
+      const result = spendEnhancementPointForSkill(button.dataset.learnSkillCharacter, button.dataset.learnSkill);
+      if (!result?.ok) {
+        showSpendFailure("学习技能", "强化点不足、技能已拥有，或目标不可训练。");
+        return;
+      }
+      showSpendSuccess("学习技能", 1, getState().enhancementPoints ?? 0);
+      showToast(`学会技能：${result.skill.name}。`, "good");
+      trainingDialogCharacterId = null;
+      selectedTrainingPoolId = null;
+      renderCharacterSheet(id);
+      requestRender();
     });
   });
   dossier.querySelectorAll("[data-edit-character-name]").forEach((button) => {
@@ -361,32 +400,32 @@ function editCharacterIdentity(characterId, field) {
 function renderAttributesTab(character) {
   const state = getState();
   const dead = isDeadStatus(character.status);
-  const canEnhance = state.gameStatus === "active" && !dead && (state.enhancementPoints ?? 0) > 0;
-  const canDismiss = (character.status === "待命" || dead) && state.gameStatus === "active";
-  const dismissLabel = dead ? "收尸" : "解雇该佣兵";
+  const canDismiss = (character.status === "\u5f85\u547d" || dead) && state.gameStatus === "active";
+  const dismissLabel = dead ? "\u6536\u5c38" : "\u89e3\u96c7\u8be5\u4f63\u5175";
   return `
     <div class="dossier-grid">
       ${renderCombatPowerBreakdown(character)}
       <section class="dossier-section">
-        <h3>身份风险</h3>
+        <h3>\u8eab\u4efd\u98ce\u9669</h3>
         <div class="field-list">
-          <div class="field"><span>个人声望</span><strong>${character.personalReputation ?? 0}</strong></div>
-          <div class="field"><span>月隐秘费</span><strong>${character.personalReputation ?? 0} 金</strong></div>
-          <div class="field"><span>抹去黑历史</span><strong>${(character.personalReputation ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint} 金</strong></div>
+          <div class="field"><span>\u4e2a\u4eba\u58f0\u671b</span><strong>${character.personalReputation ?? 0}</strong></div>
+          <div class="field"><span>\u6708\u9690\u79d8\u8d39</span><strong>${character.personalReputation ?? 0} \u91d1</strong></div>
+          <div class="field"><span>\u62b9\u53bb\u9ed1\u5386\u53f2</span><strong>${(character.personalReputation ?? 0) * economyConfig.secrecy.eraseMercenaryReputationCostPerPoint} \u91d1</strong></div>
         </div>
-        <button class="ghost-button full-width-button" data-erase-reputation="${character.id}" ${(character.personalReputation ?? 0) > 0 && state.gameStatus === "active" ? "" : "disabled"} type="button">一次性抹去该佣兵全部个人声望</button>
+        <button class="ghost-button full-width-button" data-erase-reputation="${character.id}" ${(character.personalReputation ?? 0) > 0 && state.gameStatus === "active" ? "" : "disabled"} type="button">\u4e00\u6b21\u6027\u62b9\u53bb\u8be5\u4f63\u5175\u5168\u90e8\u4e2a\u4eba\u58f0\u671b</button>
         <button class="ghost-button full-width-button" data-dismiss-mercenary="${character.id}" ${canDismiss ? "" : "disabled"} type="button">${dismissLabel}</button>
       </section>
       <section class="dossier-section wide">
-        <h3>成长</h3>
-        <button class="primary-button full-width-button" data-spend-enhancement="${character.id}" ${canEnhance ? "" : "disabled"} type="button">消耗基地强化点（剩余 ${state.enhancementPoints ?? 0}）</button>
+        <h3>\u8bad\u7ec3</h3>
+        ${renderEnhancementActions(character)}
+        ${trainingDialogCharacterId === character.id ? renderTrainingPanel(character) : ""}
       </section>
       <section class="dossier-section wide">
-        <h3>正面状态</h3>
-        ${renderPositiveStatusList(character)}
+        <h3>持有技能</h3>
+        ${renderSkillList(character)}
       </section>
       <section class="dossier-section wide">
-        <h3>负面状态</h3>
+        <h3>\u8d1f\u9762\u72b6\u6001</h3>
         ${renderConditionList(character)}
       </section>
     </div>
@@ -401,8 +440,7 @@ function renderCombatPowerBreakdown(character) {
       <div class="field-list">
         <div class="field"><span>基础战力</span><strong>${breakdown.base}</strong></div>
         <div class="field"><span>装备战力</span><strong class="tag-positive">+${breakdown.equipment}</strong></div>
-        <div class="field"><span>正面状态</span><strong class="tag-positive">+${breakdown.positive}</strong></div>
-        <div class="field"><span>职业加成</span><strong class="tag-positive">+${breakdown.classBonus}</strong></div>
+        <div class="field"><span>技能加成</span><strong class="tag-positive">+${breakdown.skillBonus}</strong></div>
         <div class="field"><span>物理伤势</span><strong class="tag-negative">${breakdown.injuryLabel} ${breakdown.injuryPoints} 点 / -${breakdown.injuryPenalty}</strong></div>
         <div class="field"><span>物理结算后</span><strong>${breakdown.physicalTotal}</strong></div>
         <div class="field"><span>精神压力</span><strong class="tag-negative">${breakdown.pressureLabel} ${breakdown.pressurePoints} 点 / -${Math.round(breakdown.pressurePenaltyRate * 100)}%</strong></div>
@@ -413,32 +451,86 @@ function renderCombatPowerBreakdown(character) {
   `;
 }
 
-function renderPositiveStatusList(character) {
-  const conditions = character.positiveConditions ?? [];
-  if (conditions.length === 0) return `<p class="muted">还没有形成稳定的正面状态。</p>`;
+function renderEnhancementActions(character) {
+  const state = getState();
+  const canUse = state.gameStatus === "active" && !isDeadStatus(character.status) && (state.enhancementPoints ?? 0) > 0;
   return `
-    <div class="trait-list">
-      ${conditions
-        .map(
-          (condition) => `
-            <article class="trait-item positive-condition-item positive-condition-${condition.severity ?? "light"}">
-              <div>
-                <strong>${condition.name}</strong>
-                <p class="muted">${condition.description}</p>
-              </div>
-              <span class="badge positive-condition-badge positive-condition-${condition.severity ?? "light"}">${formatSeverity(condition.severity)} / +${condition.powerBonus ?? 0} 战力</span>
-            </article>
-          `
-        )
-        .join("")}
+    <div class="enhancement-actions">
+      <div class="field-list">
+        <div class="field"><span>强化点剩余</span><strong>${state.enhancementPoints ?? 0}</strong></div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" data-gain-power="${character.id}" ${canUse ? "" : "disabled"} type="button">消耗 1 点：基础战力 +20</button>
+        <button class="skill-training-button" data-open-skill-training="${character.id}" ${canUse ? "" : "disabled"} type="button">消耗 1 点：学习技能</button>
+      </div>
     </div>
   `;
 }
 
-function renderCareerChip(character) {
-  const category = careerCategories[character.careerCategory];
-  const title = category ? `${category.name}：${category.description}` : "职业大类会影响契约适配和角色成长。";
-  return `<span class="career-chip career-chip-primary" title="${title}">${character.careerCategoryName ?? "未分类"}</span>`;
+function renderTrainingPanel(character) {
+  const state = getState();
+  const pools = getTrainingPools();
+  const canTrain = state.gameStatus === "active" && !isDeadStatus(character.status) && (state.enhancementPoints ?? 0) > 0;
+  if (!selectedTrainingPoolId || !createTrainingChoices(character.id, selectedTrainingPoolId).length) {
+    selectedTrainingPoolId = Object.keys(pools).find((poolId) => createTrainingChoices(character.id, poolId).length > 0) ?? null;
+  }
+  const selectedChoices = selectedTrainingPoolId ? createTrainingChoices(character.id, selectedTrainingPoolId) : [];
+  return `
+    <div class="training-popover">
+      <div class="card-header">
+        <div>
+          <h3>选择训练池</h3>
+          <p class="muted">先选训练方向，再从随机候选技能中选择 1 个。</p>
+        </div>
+        <button class="ghost-button" data-close-skill-training type="button">关闭</button>
+      </div>
+      <div class="training-layout">
+        <div class="training-pool-list">
+          ${Object.entries(pools).map(([poolId, pool]) => {
+            const availableCount = createTrainingChoices(character.id, poolId).length;
+            const active = selectedTrainingPoolId === poolId ? "active" : "";
+            return `<button class="training-pool-button ${active}" data-select-training-pool="${poolId}" ${canTrain && availableCount > 0 ? "" : "disabled"} type="button">
+              <strong>${pool.name}</strong>
+              <span>${availableCount > 0 ? "\u53ef\u62bd\u53d6 " + availableCount + " \u9879" : "\u5df2\u62bd\u7a7a"}</span>
+            </button>`;
+          }).join("")}
+        </div>
+        <div class="training-choice-list">
+          ${selectedChoices.length > 0 ? selectedChoices.map((skill) => `
+            <button class="training-choice-card" data-learn-skill-character="${character.id}" data-learn-skill="${skill.id}" ${canTrain ? "" : "disabled"} type="button">
+              <strong>${skill.name}</strong>
+              <span>${(skill.tags ?? []).join(" / ")}</span>
+              <small>${skill.description ?? ""}</small>
+            </button>
+          `).join("") : `<p class="muted">\u6ca1\u6709\u53ef\u62bd\u53d6\u7684\u8bad\u7ec3\u6280\u80fd\u3002</p>`}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSkillList(character) {
+  const skills = character.skills ?? [];
+  if (skills.length === 0) return `<p class="muted">\u8fd8\u6ca1\u6709\u8bad\u7ec3\u6280\u80fd\u3002</p>`;
+  return `
+    <div class="trait-list">
+      ${skills.map((skill) => `
+        <article class="trait-item skill-item">
+          <div>
+            <strong>${skill.name}</strong>
+            <p class="muted">${skill.description ?? ""}</p>
+          </div>
+          <span class="badge skill-badge">${(skill.tags ?? []).join(" / ")}</span>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderSkillTagChips(character) {
+  const tags = getCharacterSkillTags(character).slice(0, 6);
+  if (tags.length === 0) return `<span class="career-chip career-chip-primary" title="\u5c1a\u672a\u83b7\u5f97\u8bad\u7ec3\u6280\u80fd">\u672a\u8bad\u7ec3</span>`;
+  return tags.map((tag) => `<span class="career-chip career-chip-primary" title="\u8bad\u7ec3\u6280\u80fd\u6807\u7b7e\uff0c\u7528\u4e8e\u5951\u7ea6\u63a8\u8350\u80fd\u529b\u5339\u914d\u3002">${tag}</span>`).join("");
 }
 
 function renderStatusSwitch(status) {
@@ -449,10 +541,6 @@ function renderStatusSwitch(status) {
 function renderRankBadge(rank) {
   const key = rank && rank !== "无" ? rank : "none";
   return `<div class="rank-badge rank-${key}"><span>评级</span><strong>${formatRank(rank)}</strong></div>`;
-}
-
-function getPositiveStatusCount(character) {
-  return character.positiveConditions?.length ?? 0;
 }
 
 function renderConditionList(character) {
@@ -617,4 +705,17 @@ function formatRank(rank) {
 
 function isDeadStatus(status) {
   return status === "阵亡" || status === "闃典骸";
+}
+
+function getCharacterSkillTags(character) {
+  return [...new Set((character.skills ?? []).flatMap((skill) => skill.tags ?? []))];
+}
+
+function formatSkillSummary(character) {
+  const count = character.skills?.length ?? 0;
+  return count > 0 ? count + " \u9879\u8bad\u7ec3\u6280\u80fd" : "\u672a\u8bad\u7ec3";
+}
+
+function getSkillCount(character) {
+  return character.skills?.length ?? 0;
 }

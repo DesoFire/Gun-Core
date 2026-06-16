@@ -1,5 +1,5 @@
 ﻿import {
-  buildings,
+  facilities,
   facilityRanks,
   mechaFrames,
   mercenaryRanks,
@@ -137,11 +137,11 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
       slot: item.slot ?? item.itemCategory,
     }));
   const equipmentItems = [...equippedEquipmentItems, ...warehouseEquipmentItems];
-  const facilityItems = Object.entries(draft.buildings)
+  const facilityItems = Object.entries(draft.facilities)
     .filter(([, level]) => level > 0)
     .map(([id, level]) => ({
       id,
-      name: buildings[id]?.name ?? id,
+      name: facilities[id]?.name ?? id,
       level,
       rank: id === "defenses" ? `${level}座` : getFacilityRankLabel(level),
       cost: calculateFacilityUpkeep(id, level),
@@ -151,14 +151,14 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
   const wages = { total: sumCosts(wageItems), items: wageItems };
   const supplies = { total: sumCosts(supplyItems), items: supplyItems };
   const equipment = { total: sumCosts(equipmentItems), items: equipmentItems };
-  const facilities = { total: sumCosts(facilityItems), items: facilityItems };
+  const facilityBreakdown = { total: sumCosts(facilityItems), items: facilityItems };
   return {
-    total: base.total + wages.total + equipment.total + facilities.total,
+    total: base.total + wages.total + equipment.total + facilityBreakdown.total,
     base,
     wages,
     supplies,
     equipment,
-    facilities,
+    facilities: facilityBreakdown,
   };
 }
 
@@ -169,30 +169,30 @@ export function identityFee(character) {
   return rankWage + (character.personalReputation ?? 0) * (config.perPersonalReputation ?? 0);
 }
 
-export function upgradeBuilding(id) {
+export function upgradeFacility(id) {
   updateState((draft) => {
-    const building = buildings[id];
-    if (!building) return;
-    const level = draft.buildings[id] ?? 0;
+    const facility = facilities[id];
+    if (!facility) return;
+    const level = draft.facilities[id] ?? 0;
     if (id !== "defenses" && level >= facilityRanks.length) {
-      draft.log.push(`第 ${draft.day} 天：${building.name} 已达到最高 S 级。`);
+      draft.log.push(`第 ${draft.day} 天：${facility.name} 已达到最高 S 级。`);
       return;
     }
     const nextLevel = level + 1;
     const cost = getFacilityUpgradeCost(id, level);
     if (draft.gold < cost) return;
     draft.gold -= cost;
-    draft.buildings[id] = nextLevel;
+    draft.facilities[id] = nextLevel;
     draft.log.push(id === "defenses"
-      ? `第 ${draft.day} 天：修建了第 ${nextLevel} 座${building.name}。`
-      : `第 ${draft.day} 天：${building.name} 升到了 ${getFacilityRankLabel(nextLevel)} 级。`);
+      ? `第 ${draft.day} 天：修建了第 ${nextLevel} 座${facility.name}。`
+      : `第 ${draft.day} 天：${facility.name} 升到了 ${getFacilityRankLabel(nextLevel)} 级。`);
   });
 }
 
 export function buyBlackMarketItem(kind) {
   updateState((draft) => {
-    if (draft.gameStatus !== "active" || (draft.buildings.blackMarket ?? 0) <= 0) return;
-    const rank = getFacilityRankLabel(draft.buildings.blackMarket ?? 0);
+    if (draft.gameStatus !== "active" || (draft.facilities.blackMarket ?? 0) <= 0) return;
+    const rank = getFacilityRankLabel(draft.facilities.blackMarket ?? 0);
     const cost = getBlackMarketItemCost(kind, rank);
     if (draft.gold < cost) return;
     const item = createBlackMarketItem(kind, rank);
@@ -223,11 +223,11 @@ export function hospitalTreatMercenaries() {
   });
 }
 
-export function infirmaryTreatMercenaries() {
+export function entertainmentCenterTreatMercenaries() {
   return treatNegativeConditions({
-    facilityId: "infirmary",
+    facilityId: "entertainmentCenter",
     category: "mental",
-    config: economyConfig.facilities.infirmaryTreatment,
+    config: economyConfig.facilities.entertainmentCenterTreatment,
     sourceName: "娱乐中心",
     emptyText: "娱乐中心没有找到可以处理的心理负面状态。",
   });
@@ -236,7 +236,7 @@ export function infirmaryTreatMercenaries() {
 function treatNegativeConditions({ facilityId, category, config, sourceName, emptyText }) {
   let result = { ok: false, cost: 0, attempted: 0, cured: 0 };
   updateState((draft) => {
-    if (draft.gameStatus !== "active" || (draft.buildings[facilityId] ?? 0) <= 0) return;
+    if (draft.gameStatus !== "active" || (draft.facilities[facilityId] ?? 0) <= 0) return;
     const plan = createTreatmentPlan(draft, { facilityId, category, config });
     if (plan.entries.length === 0) {
       draft.log.push(`第 ${draft.day} 天：${emptyText}`);
@@ -264,11 +264,11 @@ export function calculateHospitalTreatmentPlan(state = getState()) {
   });
 }
 
-export function calculateInfirmaryTreatmentPlan(state = getState()) {
+export function calculateEntertainmentCenterTreatmentPlan(state = getState()) {
   return createTreatmentPlan(state, {
-    facilityId: "infirmary",
+    facilityId: "entertainmentCenter",
     category: "mental",
-    config: economyConfig.facilities.infirmaryTreatment,
+    config: economyConfig.facilities.entertainmentCenterTreatment,
   });
 }
 
@@ -323,15 +323,15 @@ export function getFacilityRankLabel(level) {
 }
 
 export function getFacilityUpgradeCost(id, level) {
-  const building = buildings[id];
-  if (!building) return 0;
-  return level <= 0 ? building.unlockCost ?? building.cost : building.cost + level * economyConfig.facilities.upgradePerCurrentLevel;
+  const facility = facilities[id];
+  if (!facility) return 0;
+  return level <= 0 ? facility.unlockCost ?? facility.cost : facility.cost + level * economyConfig.facilities.upgradePerCurrentLevel;
 }
 
 export function canUpgradeFacility(id) {
   const state = getState();
   if (id === "defenses") return true;
-  const nextLevel = (state.buildings[id] ?? 0) + 1;
+  const nextLevel = (state.facilities[id] ?? 0) + 1;
   return nextLevel <= facilityRanks.length;
 }
 
@@ -343,7 +343,7 @@ export function getBlackMarketItemCost(kind, rank) {
 }
 
 function createTreatmentPlan(draft, { facilityId, category, config }) {
-  const level = draft.buildings?.[facilityId] ?? 0;
+  const level = draft.facilities?.[facilityId] ?? 0;
   const maxPoints = getTreatmentMaxPoints(level, config);
   const successChance = getTreatmentSuccessChance(level, config);
   const entries = [];
@@ -386,7 +386,7 @@ function getTreatmentConditionCost(condition, category, config) {
 
 function calculateFacilityUpkeep(id, level) {
   if (!level || level <= 0) return 0;
-  const rawCost = (buildings[id]?.upkeep ?? 0) * level * economyConfig.facilities.upkeepMultiplier;
+  const rawCost = (facilities[id]?.upkeep ?? 0) * level * economyConfig.facilities.upkeepMultiplier;
   return Math.max(1, Math.round(rawCost));
 }
 

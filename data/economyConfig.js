@@ -19,7 +19,7 @@ export const economyConfig = {
     stealth: 100,
   },
 
-  contracts: {
+  missions: {
     missionBoard: {
       // 初始/常驻契约面板上限。可接契约过期后会被新契约替代，保持该数量。
       availableLimit: 3,
@@ -98,7 +98,7 @@ export const economyConfig = {
       // 随机调查更便宜；战力区间细化介于随机和定向之间。
       randomInvestigationMultiplier: 0.65,
       powerInvestigationMultiplier: 0.85,
-      // 情报、职业等折扣最多减免 40%，避免调查完全免费。
+      // 情报室等折扣最多减免 40%，避免调查完全免费。
       maxInvestigationDiscount: 0.4,
     },
     display: {
@@ -213,7 +213,7 @@ export const economyConfig = {
     // 初始佣兵上限。兵营每提升 1 级，上限 +1。
     baseMercenaryLimit: 4,
     barracksMercenaryLimitPerLevel: 1,
-    // 情报室每级降低调查费用的比例，最高不超过 contracts.costs.maxInvestigationDiscount。
+    // 情报室每级降低调查费用的比例，最高不超过 missions.costs.maxInvestigationDiscount。
     intelInvestigationDiscountPerLevel: 0.08,
     // 医疗中心按“单个物理负面状态”收费并尝试移除。等级越高，可处理的伤势点数越高，成功率越高。
     hospitalTreatment: {
@@ -224,7 +224,7 @@ export const economyConfig = {
       successChanceByLevel: [72, 80, 86, 91, 95, 98, 100],
     },
     // 娱乐中心按“单个精神负面状态”收费并尝试移除。等级越高，可处理的压力点数越高，成功率越高。
-    infirmaryTreatment: {
+    entertainmentCenterTreatment: {
       baseCost: 6,
       costPerPoint: 6,
       severityMultiplier: { light: 1, medium: 1.3, heavy: 1.75 },

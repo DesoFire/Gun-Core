@@ -1,6 +1,4 @@
 ﻿import {
-  careerCategories,
-  characterClasses,
   creeds,
   equipmentSlots,
   fears,
@@ -13,8 +11,8 @@
   personalities,
   shortEpithetAdjectives,
   shortEpithetNouns,
-  positiveConditions,
 } from "../data/sampleData.js";
+import { getTrainingSkill, trainingPools } from "../data/trainingPools.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { getPromotionCombatPowerGain } from "./combatPower.js";
 import { getState, normalizeCharacterAvatars, updateState } from "../js/state.js";
@@ -33,31 +31,25 @@ export function getCharacter(id) {
   return getState().roster.find((character) => character.id === id);
 }
 
-export function getCharacterClasses() {
-  return characterClasses;
+export function getTrainingPools() {
+  return trainingPools;
 }
 
-export function createMercenary(classId = randomItem(Object.keys(characterClasses)), customName = "") {
-  const resolvedClassId = characterClasses[classId] ? classId : randomItem(Object.keys(characterClasses));
-  const baseClass = characterClasses[resolvedClassId];
-  const category = careerCategories[baseClass.category];
+export function createMercenary(customName = "") {
   return {
     id: createId(),
     name: customName || createRandomName(),
     callsign: createCallsign(),
-    classId: resolvedClassId,
-    className: baseClass.name,
-    careerCategory: baseClass.category,
-    careerCategoryName: category?.name ?? "未分类",
     personalReputation: randomNumber(0, 2),
     rank: "无",
     dossier: createDossier(),
-    contractRecord: { completed: 0, failed: 0, survived: 0 },
+    missionRecord: { completed: 0, failed: 0, survived: 0 },
     bounty: randomNumber(0, 24) * 10,
     debt: randomNumber(0, 18) * 5,
     signingMultiplier: randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax),
     equipment: createEmptyEquipment(),
-    combatPower: baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0) + randomNumber(-3, 4),
+    skills: [],
+    combatPower: randomNumber(17, 28),
     status: "待命",
   };
 }
@@ -98,7 +90,7 @@ export function refreshRecruits() {
     if (draft.gameStatus !== "active") return;
     const cost = economyConfig.recruitment.refreshCost;
     if (draft.gold < cost) return;
-    const poolSize = 2 + (draft.buildings.tavern ?? 0);
+    const poolSize = 2 + (draft.facilities.tavern ?? 0);
     draft.gold -= cost;
     draft.recruitPool = Array.from({ length: poolSize }, () => createMercenary());
     normalizeCharacterAvatars(draft);
@@ -139,24 +131,50 @@ export function canEquipItemToSlot(item, slot) {
   return false;
 }
 
-export function spendEnhancementPoint(characterId) {
+export function createTrainingChoices(characterId, poolId) {
+  const character = getCharacter(characterId);
+  const pool = trainingPools[poolId];
+  if (!character || !pool) return [];
+  const ownedIds = new Set((character.skills ?? []).map((skill) => skill.id));
+  const available = pool.skills.filter((skill) => !ownedIds.has(skill.id));
+  return shuffle(available).slice(0, Math.min(3, available.length));
+}
+
+export function spendEnhancementPointForPower(characterId) {
+  let result = { ok: false, reason: "unavailable" };
   updateState((draft) => {
     if (draft.gameStatus !== "active") return;
     const character = draft.roster.find((item) => item.id === characterId);
     if (!character || isDeadStatus(character.status) || (draft.enhancementPoints ?? 0) <= 0) return;
 
     draft.enhancementPoints -= 1;
-    const gain = getPromotionCombatPowerGain(character.rank);
-    character.combatPower = (character.combatPower ?? 0) + gain;
-    const condition = drawPositiveCondition(character, "enhancement");
-    if (condition) {
-      character.positiveConditions ??= [];
-      character.positiveConditions.push(condition);
-    }
-    const conditionText = condition ? `，获得正面状态「${condition.name}」` : "";
-    draft.log.push(`第 ${draft.day} 天：${character.name} 消耗 1 点强化点，战斗力 +${gain}${conditionText}。`);
+    character.combatPower = (character.combatPower ?? 0) + 20;
+    draft.log.push(`第 ${draft.day} 天：${character.name} 消耗 1 点强化点，基础战力 +20。`);
+    result = { ok: true, gain: 20 };
   });
+  return result;
 }
+
+export function spendEnhancementPointForSkill(characterId, skillId) {
+  let result = { ok: false, reason: "unavailable" };
+  updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
+    const character = draft.roster.find((item) => item.id === characterId);
+    if (!character || isDeadStatus(character.status) || (draft.enhancementPoints ?? 0) <= 0) return;
+    const skill = getTrainingSkill(skillId);
+    if (!skill) return;
+    character.skills ??= [];
+    if (character.skills.some((owned) => owned.id === skill.id)) return;
+
+    draft.enhancementPoints -= 1;
+    character.skills.push({ ...skill, day: draft.day });
+    draft.log.push(`第 ${draft.day} 天：${character.name} 消耗 1 点强化点，学会技能「${skill.name}」。`);
+    result = { ok: true, skill };
+  });
+  return result;
+}
+
+export const spendEnhancementPoint = spendEnhancementPointForSkill;
 
 export function eraseMercenaryReputation(characterId) {
   let result = { ok: false, cost: 0 };
@@ -217,7 +235,7 @@ export function recruitCost(character) {
 }
 
 export function getMercenaryLimit(state = getState()) {
-  const barracksLevel = state.buildings?.barracks ?? 0;
+  const barracksLevel = state.facilities?.barracks ?? 0;
   return (
     economyConfig.facilities.baseMercenaryLimit +
     barracksLevel * economyConfig.facilities.barracksMercenaryLimitPerLevel
@@ -241,33 +259,28 @@ export function normalizeCharacter(character) {
   delete character.level;
   delete character.xp;
   delete character.traits;
-  character.positiveConditions ??= [];
+  delete character.positiveConditions;
+  delete character.classId;
+  delete character.className;
+  delete character.careerCategory;
+  delete character.careerCategoryName;
+  character.skills ??= [];
+  character.skills = character.skills
+    .map((skill) => getTrainingSkill(skill.id) ?? skill)
+    .filter((skill) => skill?.id);
   character.dossier ??= createDossier();
   character.dossier.personality ??= randomItem(personalities);
-  character.contractRecord ??= { completed: 0, failed: 0, survived: 0 };
+  character.missionRecord ??= { completed: 0, failed: 0, survived: 0 };
   character.bounty ??= randomNumber(0, 24) * 10;
   character.debt ??= randomNumber(0, 18) * 5;
   character.signingMultiplier ??= randomNumber(economyConfig.recruitment.signingMultiplierMin, economyConfig.recruitment.signingMultiplierMax);
   character.status ??= "待命";
-  const baseClass = characterClasses[character.classId] ?? characterClasses.assault;
-  const category = careerCategories[baseClass.category];
-  character.classId = characterClasses[character.classId] ? character.classId : "assault";
-  character.className = baseClass.name;
-  character.careerCategory = baseClass.category;
-  character.careerCategoryName = category?.name ?? "未分类";
-  character.combatPower ??= baseClass.baseCombatPower + (category?.effects?.combatPowerBonus ?? 0);
+  character.combatPower ??= randomNumber(17, 28);
   delete character.maxHp;
   delete character.hp;
   character.equipment = { ...createEmptyEquipment(), ...(character.equipment ?? {}) };
   character.equipment = normalizeEquipmentSlots(character.equipment);
   return character;
-}
-
-function drawPositiveCondition(character, source = "growth") {
-  const owned = new Set((character.positiveConditions ?? []).map((condition) => condition.name));
-  const pool = positiveConditions.filter((condition) => !owned.has(condition.name));
-  const condition = randomItem(pool.length > 0 ? pool : positiveConditions);
-  return condition ? { ...condition, id: createId(), source } : null;
 }
 
 export function renderCharacterDossier(character) {
@@ -355,4 +368,8 @@ function normalizeEquipmentSlots(equipment) {
 function normalizeRank(character) {
   if (mercenaryRanks.includes(character.rank)) return character.rank;
   return calculateRank(character);
+}
+
+function shuffle(items) {
+  return [...items].sort(() => Math.random() - 0.5);
 }

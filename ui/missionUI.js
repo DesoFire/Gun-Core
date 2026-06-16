@@ -1,8 +1,8 @@
 import { getState } from "../js/state.js";
-import { careerCategories, contractIntelFields } from "../data/sampleData.js";
+import { missionIntelFields } from "../data/sampleData.js";
 import { economyConfig } from "../data/economyConfig.js";
 import {
-  getContractRiskTag,
+  getMissionRiskTag,
   getMissionPowerRange,
   getMissions,
   getTeamCombatPower,
@@ -14,7 +14,7 @@ import { openCharacterSheet, renderCharacterCard } from "./characterUI.js";
 import { renderMercenaryAvatar } from "./mercenaryAvatarUI.js";
 import { confirmResourceSpend, showInsufficientFunds, showSpendFailure, showSpendSuccess } from "../js/notifications.js";
 
-let openContractId = null;
+let openMissionId = null;
 let dispatchMissionId = null;
 let dispatchSelection = new Set();
 
@@ -30,14 +30,14 @@ export function renderMissionUI() {
 
   container.innerHTML = getMissions().map((mission) => renderMissionCard(mission, state)).join("");
 
-  container.querySelectorAll("[data-open-contract]").forEach((card) => {
-    card.addEventListener("click", () => openContractCard(card.dataset.openContract));
+  container.querySelectorAll("[data-open-mission]").forEach((card) => {
+    card.addEventListener("click", () => openMissionCard(card.dataset.openMission));
   });
 
-  container.querySelectorAll("[data-view-contract]").forEach((button) => {
+  container.querySelectorAll("[data-view-mission]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      openContractCard(button.dataset.viewContract);
+      openMissionCard(button.dataset.viewMission);
     });
   });
 
@@ -48,8 +48,8 @@ export function renderMissionUI() {
     });
   });
 
-  if (openContractId && document.querySelector("#contract-dialog")?.open) {
-    renderContractCard(openContractId);
+  if (openMissionId && document.querySelector("#mission-dialog")?.open) {
+    renderMissionDossier(openMissionId);
   }
 }
 
@@ -58,10 +58,10 @@ function renderMissionCard(mission, state) {
   const assignedMembers = getMissionMembers(mission, state.roster);
   const lockedIntelCount = getLockedIntelFields(mission).length;
   const powerRange = getMissionPowerRange(mission);
-  const risk = getContractRiskTag(mission);
+  const risk = getMissionRiskTag(mission);
   const canAct = state.gameStatus === "active";
   return `
-    <article class="card contract-card contract-summary-card" data-open-contract="${mission.id}">
+    <article class="card mission-card mission-summary-card" data-open-mission="${mission.id}">
       <div class="card-header">
         <div>
           <p class="card-title">${mission.name}</p>
@@ -69,20 +69,20 @@ function renderMissionCard(mission, state) {
         </div>
         <span class="badge">${isActive ? `剩余 ${mission.remaining} 天` : "可接取"}</span>
       </div>
-      <div class="contract-public">
+      <div class="mission-public">
         <span>战力 ${powerRange.low}-${powerRange.high}</span>
         <span>${risk.label}</span>
         <span>${mission.duration} 天</span>
         <span>${mission.reward.gold} 金</span>
       </div>
-      ${renderContractSummaryIntel(mission)}
+      ${renderMissionSummaryIntel(mission)}
       ${
         isActive
-          ? `<div class="contract-team-strip">${assignedMembers.map((character) => renderMercenaryAvatar(character, { size: "small" })).join("")}<span>执行中</span></div>`
+          ? `<div class="mission-team-strip">${assignedMembers.map((character) => renderMercenaryAvatar(character, { size: "small" })).join("")}<span>执行中</span></div>`
           : `<p class="muted">仍有 ${lockedIntelCount} 条情报未调查。点开契约卡片后可调查或派遣。</p>`
       }
       <div class="button-row">
-        <button class="primary-button" data-view-contract="${mission.id}" type="button">${isActive ? "查看" : "打开契约"}</button>
+        <button class="primary-button" data-view-mission="${mission.id}" type="button">${isActive ? "查看" : "打开契约"}</button>
         <button class="ghost-button" data-refresh-mission="${mission.id}" ${!canAct || isActive ? "disabled" : ""} type="button">刷新 ${mission.refreshCost || 0} 金</button>
       </div>
     </article>
@@ -108,23 +108,23 @@ function handleRefreshMission(missionId) {
   showSpendSuccess("刷新契约", beforeGold - afterGold, afterGold);
 }
 
-function openContractCard(id) {
-  openContractId = id;
+function openMissionCard(id) {
+  openMissionId = id;
   if (dispatchMissionId !== id) {
     dispatchMissionId = null;
     dispatchSelection.clear();
   }
-  renderContractCard(id);
-  document.querySelector("#contract-dialog").showModal();
+  renderMissionDossier(id);
+  document.querySelector("#mission-dialog").showModal();
 }
 
-function renderContractCard(id) {
+function renderMissionDossier(id) {
   const state = getState();
   const mission = getMissions().find((item) => item.id === id);
   if (!mission) {
-    const dialog = document.querySelector("#contract-dialog");
+    const dialog = document.querySelector("#mission-dialog");
     if (dialog) dialog.close();
-    openContractId = null;
+    openMissionId = null;
     dispatchMissionId = null;
     dispatchSelection.clear();
     return;
@@ -139,7 +139,7 @@ function renderContractCard(id) {
   const canAct = state.gameStatus === "active" && !isActive;
   const daysUntilExpires = Math.max(0, mission.expiresDay - state.day);
 
-  const dossier = document.querySelector("#contract-dossier");
+  const dossier = document.querySelector("#mission-dossier");
   dossier.innerHTML = `
     <div class="dossier-top">
       <div>
@@ -147,7 +147,7 @@ function renderContractCard(id) {
         <h2 class="dossier-title">${mission.name}</h2>
         <p class="muted">${mission.issuer} / ${mission.type} / ${mission.acquisition || "公开广播"}</p>
       </div>
-      <button class="ghost-button dialog-close-button" data-close-contract aria-label="关闭" title="关闭" type="button">关闭</button>
+      <button class="ghost-button dialog-close-button" data-close-mission aria-label="关闭" title="关闭" type="button">关闭</button>
     </div>
     <div class="dossier-grid">
       <section class="dossier-section">
@@ -163,7 +163,7 @@ function renderContractCard(id) {
       </section>
       <section class="dossier-section wide">
         <h3>简报</h3>
-        <p class="contract-brief">${mission.description}</p>
+        <p class="mission-brief">${mission.description}</p>
       </section>
       <section class="dossier-section wide">
         <div class="card-header">
@@ -171,7 +171,7 @@ function renderContractCard(id) {
             <h3>调查情报</h3>
             <p class="muted">定向调查更贵但可控；随机调查更便宜，但查到什么算什么。</p>
           </div>
-          <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="random" ${canAct && (lockedIntelFields.length > 0 || powerRange.level < 3) ? "" : "disabled"} type="button">随机调查 ${formatInvestigationCost(mission, "random")}</button>
+          <button class="ghost-button" data-investigate-mission="${mission.id}" data-intel-key="random" ${canAct && (lockedIntelFields.length > 0 || powerRange.level < 3) ? "" : "disabled"} type="button">随机调查 ${formatInvestigationCost(mission, "random")}</button>
         </div>
         <div class="intel-action-grid">
           <article class="intel-action ${powerRange.level >= 3 ? "revealed" : ""}">
@@ -179,9 +179,9 @@ function renderContractCard(id) {
               <strong>战斗力需求区间</strong>
               <p class="muted">当前 ${powerRange.low}-${powerRange.high}，精度 ${powerRange.level}/3。</p>
             </div>
-            <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="power" ${canAct && powerRange.level < 3 ? "" : "disabled"} type="button">缩小区间 ${formatInvestigationCost(mission, "power")}</button>
+            <button class="ghost-button" data-investigate-mission="${mission.id}" data-intel-key="power" ${canAct && powerRange.level < 3 ? "" : "disabled"} type="button">缩小区间 ${formatInvestigationCost(mission, "power")}</button>
           </article>
-          ${contractIntelFields.map((field) => renderIntelAction(mission, field, canAct)).join("")}
+          ${missionIntelFields.map((field) => renderIntelAction(mission, field, canAct)).join("")}
         </div>
       </section>
       <section class="dossier-section wide">
@@ -201,26 +201,26 @@ function renderContractCard(id) {
     </div>
   `;
 
-  bindContractEvents(mission);
+  bindMissionEvents(mission);
 }
 
 function getLockedIntelFields(mission) {
   const revealed = mission.revealedIntel || [];
-  return contractIntelFields.filter((field) => !revealed.includes(field.key));
+  return missionIntelFields.filter((field) => !revealed.includes(field.key));
 }
 
 function isIntelRevealed(mission, key) {
   return (mission.revealedIntel || []).includes(key);
 }
 
-function renderContractSummaryIntel(mission) {
+function renderMissionSummaryIntel(mission) {
   const chips = [];
   if (isIntelRevealed(mission, "damageTypes")) chips.push(`敌伤：${formatRequirementValue(mission, "damageTypes")}`);
-  if (isIntelRevealed(mission, "careerCategories")) chips.push(`职业：${formatRequirementValue(mission, "careerCategories")}`);
+  if (isIntelRevealed(mission, "skillTags")) chips.push(`能力：${formatRequirementValue(mission, "skillTags")}`);
   if (isIntelRevealed(mission, "weaponTypes")) chips.push(`武器：${formatRequirementValue(mission, "weaponTypes")}`);
   if (isIntelRevealed(mission, "teamSize")) chips.push(`人数：${formatRequirementValue(mission, "teamSize")}`);
   if (chips.length === 0) return "";
-  return `<div class="contract-intel-chips">${chips.map((chip) => `<span>${chip}</span>`).join("")}</div>`;
+  return `<div class="mission-intel-chips">${chips.map((chip) => `<span>${chip}</span>`).join("")}</div>`;
 }
 
 function renderIntelAction(mission, field, canAct) {
@@ -231,7 +231,7 @@ function renderIntelAction(mission, field, canAct) {
         <strong>${field.label}</strong>
         <p class="muted">${revealed ? formatRequirementValue(mission, field.key) : getIntelHint(field.key)}</p>
       </div>
-      <button class="ghost-button" data-investigate-contract="${mission.id}" data-intel-key="${field.key}" ${canAct && !revealed ? "" : "disabled"} type="button">${revealed ? "已知" : `调查 ${formatInvestigationCost(mission, "targeted")}`}</button>
+      <button class="ghost-button" data-investigate-mission="${mission.id}" data-intel-key="${field.key}" ${canAct && !revealed ? "" : "disabled"} type="button">${revealed ? "已知" : `调查 ${formatInvestigationCost(mission, "targeted")}`}</button>
     </article>
   `;
 }
@@ -245,7 +245,7 @@ function renderDifficultyBadge(difficulty = 1) {
 function formatRequirementValue(mission, key) {
   const requirements = mission.requirements || {};
   if (key === "damageTypes") return (requirements.damageTypes || []).join(" / ") || "未知";
-  if (key === "careerCategories") return formatCareerRequirements(requirements.careerCategories);
+  if (key === "skillTags") return formatSkillTagRequirements(requirements.skillTags);
   if (key === "weaponTypes") return (requirements.weaponTypes || []).join(" / ") || "未知";
   if (key === "teamSize") {
     const teamSize = mission.recommendedTeamSize || {};
@@ -254,15 +254,15 @@ function formatRequirementValue(mission, key) {
   return (mission.intel && mission.intel[key]) || "未知";
 }
 
-function formatCareerRequirements(categories = []) {
-  if (categories.length === 0) return "未知";
-  return categories.map((category) => careerCategories[category]?.name || category).join(" + ");
+function formatSkillTagRequirements(tags = []) {
+  if (tags.length === 0) return "\u672a\u77e5";
+  return tags.join(" + ");
 }
 
 function getIntelHint(key) {
   const hints = {
     damageTypes: "敌方伤害类型。携带对应防具可降低风险。",
-    careerCategories: "推荐参与的佣兵职业大类。",
+    skillTags: "推荐小队拥有的训练技能标签。",
     weaponTypes: "推荐武器或伤害方向。",
     teamSize: "推荐小队人数区间。",
   };
@@ -271,10 +271,10 @@ function getIntelHint(key) {
 
 function formatInvestigationCost(mission, mode) {
   const base = mission.investigateCost || 0;
-  const config = economyConfig.contracts.costs;
+  const config = economyConfig.missions.costs;
   const multiplier = mode === "random" ? config.randomInvestigationMultiplier : mode === "power" ? config.powerInvestigationMultiplier : 1;
-  const buildings = getState().buildings || {};
-  const facilityDiscount = (buildings.intel || 0) * economyConfig.facilities.intelInvestigationDiscountPerLevel;
+  const facilities = getState().facilities || {};
+  const facilityDiscount = (facilities.intel || 0) * economyConfig.facilities.intelInvestigationDiscountPerLevel;
   const discount = Math.min(config.maxInvestigationDiscount, facilityDiscount);
   return `${Math.max(1, Math.round(base * multiplier * (1 - discount)))} 金`;
 }
@@ -322,11 +322,11 @@ function renderDispatchCharacter(character, selected) {
   return renderCharacterCard(character, { mode: "dispatch", selected });
 }
 
-function bindContractEvents(mission) {
-  const dossier = document.querySelector("#contract-dossier");
-  dossier.querySelector("[data-close-contract]").addEventListener("click", () => {
-    document.querySelector("#contract-dialog").close();
-    openContractId = null;
+function bindMissionEvents(mission) {
+  const dossier = document.querySelector("#mission-dossier");
+  dossier.querySelector("[data-close-mission]").addEventListener("click", () => {
+    document.querySelector("#mission-dialog").close();
+    openMissionId = null;
     dispatchMissionId = null;
     dispatchSelection.clear();
   });
@@ -335,18 +335,18 @@ function bindContractEvents(mission) {
     button.addEventListener("click", () => {
       dispatchMissionId = dispatchMissionId === button.dataset.openDispatch ? null : button.dataset.openDispatch;
       if (!dispatchMissionId) dispatchSelection.clear();
-      renderContractCard(mission.id);
+      renderMissionDossier(mission.id);
     });
   });
 
-  dossier.querySelectorAll("[data-investigate-contract]").forEach((button) => {
+  dossier.querySelectorAll("[data-investigate-mission]").forEach((button) => {
     button.addEventListener("click", () => handleInvestigate(button, mission));
   });
 
   dossier.querySelectorAll("[data-toggle-dispatch-member]").forEach((button) => {
     button.addEventListener("click", () => {
       toggleDispatchMember(button.dataset.toggleDispatchMember);
-      renderContractCard(mission.id);
+      renderMissionDossier(mission.id);
     });
   });
 
@@ -363,8 +363,8 @@ function bindContractEvents(mission) {
       startMission(button.dataset.confirmDispatch, [...dispatchSelection]);
       dispatchMissionId = null;
       dispatchSelection.clear();
-      document.querySelector("#contract-dialog").close();
-      openContractId = null;
+      document.querySelector("#mission-dialog").close();
+      openMissionId = null;
     });
   });
 }
@@ -378,14 +378,14 @@ function handleInvestigate(button, mission) {
   }
   if (!confirmResourceSpend(`调查契约：${mission.name}`, cost)) return;
   const beforeGold = getState().gold;
-  investigateMission(button.dataset.investigateContract, button.dataset.intelKey || "random");
+  investigateMission(button.dataset.investigateMission, button.dataset.intelKey || "random");
   const afterGold = getState().gold;
   if (afterGold >= beforeGold) {
     showSpendFailure("调查契约", "调查没有完成。");
     return;
   }
   showSpendSuccess("调查契约", beforeGold - afterGold, afterGold);
-  renderContractCard(mission.id);
+  renderMissionDossier(mission.id);
 }
 
 function toggleDispatchMember(id) {

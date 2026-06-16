@@ -528,7 +528,7 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
-.contract-toolbar {
+.mission-toolbar {
   margin: -4px 0 12px;
   max-width: 760px;
 }
@@ -948,7 +948,7 @@ h3 {
   width: 54px;
 }
 
-.contract-team-strip {
+.mission-team-strip {
   align-items: center;
   color: var(--muted);
   display: flex;
@@ -957,45 +957,45 @@ h3 {
   gap: 6px;
 }
 
-.contract-team-strip .merc-avatar {
+.mission-team-strip .merc-avatar {
   margin-right: -4px;
 }
 
-.contract-team-strip-large {
+.mission-team-strip-large {
   margin-top: 10px;
 }
 
-.contract-team-strip-large span {
+.mission-team-strip-large span {
   margin-left: 4px;
 }
 
-.contract-card {
+.mission-card {
   display: grid;
   gap: 10px;
 }
 
-.contract-summary-card {
+.mission-summary-card {
   cursor: pointer;
 }
 
-.contract-summary-card:hover {
+.mission-summary-card:hover {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
 
-.contract-brief {
+.mission-brief {
   color: var(--text);
   font-size: 13px;
   line-height: 1.55;
   margin: 0;
 }
 
-.contract-public {
+.mission-public {
   display: grid;
   gap: 6px;
   grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
 }
 
-.contract-public span {
+.mission-public span {
   background: #171a1f;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -1006,13 +1006,13 @@ h3 {
   text-align: center;
 }
 
-.contract-intel-chips {
+.mission-intel-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.contract-intel-chips span {
+.mission-intel-chips span {
   background: color-mix(in srgb, var(--accent) 12%, #171a1f);
   border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
   border-radius: 999px;
@@ -1247,7 +1247,7 @@ h3 {
   max-width: 820px;
 }
 
-.contract-dialog {
+.mission-dialog {
   max-width: 860px;
 }
 
@@ -1996,6 +1996,93 @@ h3 {
   cursor: grab;
 }
 
+.skill-badge,
+.skill-tag {
+  background: rgba(77, 168, 218, 0.14);
+  border-color: rgba(77, 168, 218, 0.36);
+  color: #a9ddff;
+}
+
+.training-layout {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr);
+}
+
+.enhancement-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.skill-training-button {
+  background: linear-gradient(135deg, #2fc2ff, #7d5cff);
+  border: 1px solid rgba(151, 198, 255, 0.85);
+  border-radius: 6px;
+  color: #f7fbff;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 38px;
+  padding: 8px 12px;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.28);
+}
+
+.skill-training-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.skill-training-button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.45);
+  opacity: 0.55;
+}
+
+.training-popover {
+  background: #111317;
+  border: 1px solid rgba(77, 168, 218, 0.34);
+  border-radius: 6px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.training-pool-list,
+.training-choice-list {
+  display: grid;
+  gap: 8px;
+}
+
+.training-pool-button,
+.training-choice-card {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  text-align: left;
+}
+
+.training-pool-button.active,
+.training-choice-card:hover:not(:disabled) {
+  border-color: rgba(77, 168, 218, 0.7);
+}
+
+.training-pool-button:disabled,
+.training-choice-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.training-pool-button span,
+.training-choice-card span,
+.training-choice-card small {
+  color: var(--muted);
+}
+
 label {
   color: var(--muted);
   display: grid;
@@ -2065,6 +2152,10 @@ select {
   }
 
   .body-equipment-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .training-layout {
     grid-template-columns: 1fr;
   }
 

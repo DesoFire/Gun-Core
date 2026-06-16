@@ -25,13 +25,13 @@ export function evaluateGameOverDraft(draft) {
 
 function buildGameSummary(state) {
   const wealthProgress = getWealthProgress(state);
-  const activeContracts = state.missions.filter((mission) => mission.status === "active").length;
+  const activeMissions = state.missions.filter((mission) => mission.status === "active").length;
   const availableRoster = state.roster.filter((character) => character.status === "待命").length;
   return {
     status: state.gameStatus,
     reputationLeft: Math.max(0, wealthProgress.total - wealthProgress.owned),
     wealthProgress,
-    activeContracts,
+    activeMissions,
     availableRoster,
     objectiveText: `买完整个私人收藏室：${wealthProgress.owned}/${wealthProgress.total}`,
   };

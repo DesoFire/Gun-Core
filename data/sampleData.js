@@ -3,223 +3,13 @@ export const equipmentSlots = {
   armor: "防具",
 };
 
-export const careerCategories = {
-  combat: {
-    name: "战斗类",
-    description: "正面交火、高危突破和压制火力。",
-    tags: ["战斗"],
-    effects: { combatPowerBonus: 4, combatMissionChanceBonus: 5 },
-  },
-  survival: {
-    name: "生存类",
-    description: "降低死亡、受伤和长期压力。",
-    tags: ["生存"],
-    effects: { deathRiskReduction: 2, mentalConditionRiskReduction: 0.1 },
-  },
-  intel: {
-    name: "情报类",
-    description: "降低契约不确定性，处理隐藏风险。",
-    tags: ["侦察", "调查"],
-    effects: { powerIntelBonus: 1, investigateDiscount: 0.1 },
-  },
-  logistics: {
-    name: "后勤类",
-    description: "治疗、装备、收益和基地协同。",
-    tags: ["支援"],
-    effects: { rewardGoldBonus: 0.05, logisticsMissionChanceBonus: 4 },
-  },
-  abnormal: {
-    name: "异常类",
-    description: "处理异源、污染和精神风险。",
-    tags: ["异常"],
-    effects: { abnormalMissionChanceBonus: 6, mentalSeverityReduction: 0.15 },
-  },
-  growth: {
-    name: "成长类",
-    description: "初始不稳定，但更容易成长。",
-    tags: ["成长"],
-    effects: { combatPowerBonus: -3, growthChanceBonus: 10 },
-  },
-};
-
-export const characterClasses = {
-  assault: {
-    name: "突击手",
-    category: "combat",
-    tags: ["战斗", "动能"],
-    baseCombatPower: 28,
-    effects: { damageTypePowerBonus: { type: "动能", value: 3 } },
-  },
-  marksman: {
-    name: "狙击手",
-    category: "combat",
-    tags: ["战斗", "切割"],
-    baseCombatPower: 26,
-    effects: { belowMaxTeamChanceBonus: 5 },
-  },
-  demolisher: {
-    name: "爆破手",
-    category: "combat",
-    tags: ["战斗", "爆风"],
-    baseCombatPower: 25,
-    effects: { damageTypePowerBonus: { type: "爆风", value: 4 }, tagMissionChanceBonus: { tag: "破坏", value: 5 } },
-  },
-  guard: {
-    name: "近卫",
-    category: "combat",
-    tags: ["战斗", "守卫"],
-    baseCombatPower: 27,
-    effects: { teamDeathRiskReduction: 1 },
-  },
-  heavy: {
-    name: "重装兵",
-    category: "survival",
-    tags: ["生存", "守卫"],
-    baseCombatPower: 25,
-    effects: { armorDeathRiskMultiplier: 0.5 },
-  },
-  veteran: {
-    name: "老兵",
-    category: "survival",
-    tags: ["生存", "战斗"],
-    baseCombatPower: 25,
-    effects: { mentalConditionRiskReduction: 0.08 },
-  },
-  evac: {
-    name: "撤离专家",
-    category: "survival",
-    tags: ["生存", "潜入"],
-    baseCombatPower: 23,
-    effects: { failureDeathRiskReduction: 3 },
-  },
-  painbearer: {
-    name: "忍痛者",
-    category: "survival",
-    tags: ["生存"],
-    baseCombatPower: 24,
-    effects: { woundPenaltyReduction: 0.3 },
-  },
-  scout: {
-    name: "侦察兵",
-    category: "intel",
-    tags: ["侦察", "潜入"],
-    baseCombatPower: 22,
-    effects: { powerIntelBonus: 1 },
-  },
-  listener: {
-    name: "监听员",
-    category: "intel",
-    tags: ["侦察", "调查"],
-    baseCombatPower: 20,
-    effects: { investigateDiscount: 0.15 },
-  },
-  counterAmbush: {
-    name: "反伏击专家",
-    category: "intel",
-    tags: ["侦察", "生存"],
-    baseCombatPower: 23,
-    effects: { ambushDamageReduction: 0.25 },
-  },
-  analyst: {
-    name: "分析师",
-    category: "intel",
-    tags: ["调查", "支援"],
-    baseCombatPower: 19,
-    effects: { requirementMatchChanceBonus: 4 },
-  },
-  medic: {
-    name: "医疗兵",
-    category: "logistics",
-    tags: ["医疗", "支援"],
-    baseCombatPower: 20,
-    effects: { teamWoundRiskReduction: 5, treatmentDiscount: 0.2 },
-  },
-  engineer: {
-    name: "工程师",
-    category: "logistics",
-    tags: ["支援", "装备"],
-    baseCombatPower: 21,
-    effects: { armorDeathRiskBonus: 1, facilityDiscount: 0.05 },
-  },
-  scavenger: {
-    name: "清道夫",
-    category: "logistics",
-    tags: ["回收", "支援"],
-    baseCombatPower: 21,
-    effects: { lootChanceBonus: 20 },
-  },
-  broker: {
-    name: "黑市掮客",
-    category: "logistics",
-    tags: ["交易", "支援"],
-    baseCombatPower: 18,
-    effects: { marketDiscount: 0.1, marketRefreshDiscount: 0.1 },
-  },
-  anomalySpecialist: {
-    name: "异常专家",
-    category: "abnormal",
-    tags: ["异常", "调查"],
-    baseCombatPower: 21,
-    effects: { damageTypeConditionReduction: { type: "异源", value: 20 } },
-  },
-  purifier: {
-    name: "净化者",
-    category: "abnormal",
-    tags: ["异常", "医疗"],
-    baseCombatPower: 20,
-    effects: { conditionSeverityReduction: ["异源", "腐蚀", "中毒"] },
-  },
-  dreamRecorder: {
-    name: "梦境记录员",
-    category: "abnormal",
-    tags: ["异常", "精神"],
-    baseCombatPower: 18,
-    effects: { mentalBreakHeavyReduction: 20 },
-  },
-  forbiddenScholar: {
-    name: "禁忌学者",
-    category: "abnormal",
-    tags: ["异常", "调查"],
-    baseCombatPower: 19,
-    effects: { abnormalMissionChanceBonus: 8, mentalConditionRiskBonus: 2 },
-  },
-  rookie: {
-    name: "新血",
-    category: "growth",
-    tags: ["成长"],
-    baseCombatPower: 17,
-    effects: { growthChanceBonus: 15, mentalConditionRiskBonus: 2 },
-  },
-  apprentice: {
-    name: "学徒",
-    category: "growth",
-    tags: ["成长", "支援"],
-    baseCombatPower: 18,
-    effects: { extraEnhancementPointChance: 20 },
-  },
-  deserter: {
-    name: "逃兵",
-    category: "growth",
-    tags: ["成长", "生存"],
-    baseCombatPower: 19,
-    effects: { failureDeathRiskReduction: 3, mentalConditionRiskBonus: 2 },
-  },
-  debtor: {
-    name: "负债者",
-    category: "growth",
-    tags: ["成长", "交易"],
-    baseCombatPower: 20,
-    effects: { wageReduction: 0.15, mentalConditionRiskBonus: 1 },
-  },
-};
-
-export const buildings = {
+export const facilities = {
   tavern: { name: "酒馆", description: "提高招募池规模。", cost: 70, upkeep: 5, unlockCost: 70 },
   barracks: { name: "兵营", description: "提高可雇佣佣兵上限。每提升 1 级，佣兵上限 +1。", cost: 85, upkeep: 5, unlockCost: 85 },
   defenses: { name: "防御设施", description: "在基地遭遇突袭时提供额外基地战斗力。", cost: 100, upkeep: 8, unlockCost: 100 },
   blackMarket: { name: "黑市", description: "花钱购买当前评级的补给、武器、防具和机甲。", cost: 95, upkeep: 6, unlockCost: 95 },
   hospital: { name: "医疗中心", description: "花钱治疗伤病。", cost: 110, upkeep: 9, unlockCost: 110 },
-  infirmary: { name: "娱乐中心", description: "通过赌博、成瘾性药物和军妓等方式缓解压力。", cost: 80, upkeep: 7, unlockCost: 80 },
+  entertainmentCenter: { name: "娱乐中心", description: "通过赌博、成瘾性药物和军妓等方式缓解压力。", cost: 80, upkeep: 7, unlockCost: 80 },
   intel: { name: "情报室", description: "降低调查契约情报的费用。", cost: 90, upkeep: 8, unlockCost: 90 },
 };
 
@@ -287,9 +77,9 @@ export const missionTemplates = [
   { name: "突袭走私仓库", tags: ["战斗", "潜入"], difficulty: 4, duration: 3, reward: { gold: 110, reputation: 16 } },
 ];
 
-export const contractIssuers = ["SSS", "FOF自由邦联"];
+export const missionIssuers = ["SSS", "FOF自由邦联"];
 
-export const otherContractIssuers = [
+export const otherMissionIssuers = [
   "未知信号",
   "流亡组织",
   "割据武装",
@@ -312,7 +102,7 @@ export const otherContractIssuers = [
   "天人残余",
 ];
 
-export const contractTypes = [
+export const missionTypes = [
   { name: "护送", code: "Escort", actionType: "combat", tags: ["守卫", "生存"], verbs: ["护送", "掩护"] },
   { name: "运输", code: "Transport", actionType: "logistics", tags: ["守卫", "支援"], verbs: ["转运", "押运"] },
   { name: "侦察", code: "Recon", actionType: "logistics", tags: ["侦察", "潜入"], verbs: ["侦察", "标记"] },
@@ -330,7 +120,7 @@ export const contractTypes = [
 export const mercenaryRanks = ["无", "F", "E", "D", "C", "B", "A", "S"];
 
 export const promotionChances = {
-  "无": 60,
+  无: 60,
   F: 50,
   E: 40,
   D: 30,
@@ -339,28 +129,6 @@ export const promotionChances = {
   A: 5,
   S: 0,
 };
-
-export const positiveConditions = [
-  // 轻度：来自一次训练、一次幸存或一次小小的自我修复，提供温和但稳定的收益。
-  { name: "手感回暖", severity: "light", description: "他重新找回了扣下扳机前那半秒的判断。", tags: ["战斗"], powerBonus: 3, deathRiskReduction: 0 },
-  { name: "睡过一个整觉", severity: "light", description: "没有梦见战场，这在事务所里已经算奢侈品。", tags: ["恢复"], powerBonus: 1, deathRiskReduction: 0 },
-  { name: "临场冷静", severity: "light", description: "他学会了先数三秒，再决定要不要冲出去。", tags: ["心理"], powerBonus: 2, deathRiskReduction: 1 },
-  { name: "装备熟悉", severity: "light", description: "枪、护甲和身体终于不再互相嫌弃。", tags: ["装备"], powerBonus: 3, deathRiskReduction: 0 },
-  { name: "撤离意识", severity: "light", description: "活着回来不再只是运气，也是一种技术。", tags: ["生存"], powerBonus: 1, deathRiskReduction: 1 },
-
-  // 中度：角色开始形成可依赖的作战习惯，能明显改变一次派遣的风险。
-  { name: "稳定火线", severity: "medium", description: "混乱没有减少，只是他不再跟着混乱移动。", tags: ["战斗"], powerBonus: 6, deathRiskReduction: 1 },
-  { name: "团队锚点", severity: "medium", description: "有人看着他，就会下意识相信队伍还有路可退。", tags: ["团队"], powerBonus: 4, deathRiskReduction: 1 },
-  { name: "疼痛管理", severity: "medium", description: "不是不痛，而是他知道怎样不让疼痛替自己做决定。", tags: ["生存"], powerBonus: 4, deathRiskReduction: 2 },
-  { name: "危险嗅觉", severity: "medium", description: "简报没写的东西，他会先皱眉。", tags: ["侦察"], powerBonus: 5, deathRiskReduction: 2 },
-  { name: "战后整理", severity: "medium", description: "每次回来都把恐惧归档，虽然档案柜越来越满。", tags: ["恢复"], powerBonus: 2, deathRiskReduction: 0 },
-
-  // 重度：少见的强正面状态，代表角色在残酷循环中长出了很硬的东西。
-  { name: "死线直觉", severity: "heavy", description: "他不能预知死亡，但能听见死亡换弹匣的声音。", tags: ["生存"], powerBonus: 8, deathRiskReduction: 3 },
-  { name: "火力统御", severity: "heavy", description: "他不只是开火，他让整条火线知道该往哪里塌。", tags: ["战斗"], powerBonus: 10, deathRiskReduction: 1 },
-  { name: "灾后清醒", severity: "heavy", description: "见过太多坏结局后，他反而更擅长留下一个不那么坏的。", tags: ["心理"], powerBonus: 6, deathRiskReduction: 2 },
-  { name: "幸存者技艺", severity: "heavy", description: "他把所有差点死掉的瞬间，都磨成了下一次活下来的工具。", tags: ["生存"], powerBonus: 7, deathRiskReduction: 3 },
-];
 
 export const negativeConditions = [
   // 轻度：可治疗、可继续出战，但会把人一点点磨坏。
@@ -426,22 +194,22 @@ export const mentalConditions = [
   { name: "欲望紊乱", category: "mental", severity: "heavy", description: "战场把需求、占有和恐惧搅成一团，没人知道哪一个会先失控。", tags: ["冲动", "失控"], stressPoints: 6, deathRiskModifier: 9 },
 ];
 
-export const contractRequirementPool = {
+export const missionRequirementPool = {
   weaponTypes: ["步枪", "霰弹", "手枪", "狙击", "近战", "爆破", "医疗器械", "电子战"],
   damageTypes: ["动能", "腐蚀", "电磁", "爆风", "能量", "燃烧", "异源", "切割"],
-  careerCategories: ["combat", "survival", "intel", "logistics", "abnormal", "growth"],
+  skillTags: ["战斗", "情报", "后勤", "生存", "机师", "特殊"],
 };
 
-export const contractIntelFields = [
+export const missionIntelFields = [
   { key: "damageTypes", label: "敌方伤害", type: "requirement" },
-  { key: "careerCategories", label: "建议职业", type: "requirement" },
+  { key: "skillTags", label: "推荐能力", type: "requirement" },
   { key: "weaponTypes", label: "推荐武器", type: "requirement" },
   { key: "teamSize", label: "需求人数", type: "planning" },
 ];
 
-export const contractIntelPool = {
+export const missionIntelPool = {
   damageTypes: ["敌方火力以动能弹药为主", "现场有燃烧武器痕迹", "电磁脉冲设备活跃", "爆风伤害风险较高", "可能接触异源污染"],
-  careerCategories: ["需要战斗类佣兵压住正面冲突", "需要情报类佣兵拆解不确定性", "需要后勤类佣兵控制损耗", "需要生存类佣兵承担撤离风险", "建议战斗类与情报类混编"],
+  skillTags: ["\u9700\u8981\u6218\u6597\u8bad\u7ec3\u6807\u7b7e\u538b\u4f4f\u6b63\u9762\u51b2\u7a81", "\u9700\u8981\u60c5\u62a5\u8bad\u7ec3\u6807\u7b7e\u62c6\u89e3\u4e0d\u786e\u5b9a\u6027", "\u9700\u8981\u540e\u52e4\u8bad\u7ec3\u6807\u7b7e\u63a7\u5236\u635f\u8017", "\u9700\u8981\u751f\u5b58\u8bad\u7ec3\u6807\u7b7e\u627f\u62c5\u64a4\u79bb\u98ce\u9669", "\u5efa\u8bae\u6218\u6597\u4e0e\u60c5\u62a5\u8bad\u7ec3\u6df7\u7f16"],
   weaponTypes: ["建议携带步枪或狙击武器", "建议携带爆破装备", "建议携带近战或霰弹武器", "建议携带电子战装备", "建议携带医疗器械"],
   teamSize: ["建议小队人数偏少，避免暴露", "建议标准小队进入", "建议满编小队执行", "人数过少会明显提高失败风险"],
   enemy: ["地方武装小队", "黑市雇佣枪手", "异源兽群", "失控安保机兵", "身份不明的第三方小队"],
@@ -449,10 +217,10 @@ export const contractIntelPool = {
   target: ["带有旧联邦封条的货箱", "失联信使的终端", "被劫持的技术员", "异常广播源", "客户拒绝公开的样本"],
   timeLimit: ["24小时内窗口关闭", "两天后目标转移", "夜间行动风险降低", "雨季前必须完成", "发布方随时可能撤约"],
   specialRisk: ["情报来源未核验", "可能遭遇伏击", "客户隐瞒了竞争委托", "撤离点不稳定", "目标具有污染风险"],
-  careerCategories: ["需要战斗类佣兵压住正面冲突", "需要情报类佣兵拆解不确定性", "需要后勤类佣兵控制损耗", "需要生存类佣兵承担撤离风险", "建议战斗类与情报类混编", "建议生存类与后勤类混编"],
+  skillTags: ["需要战斗训练标签压住正面冲突", "需要情报训练标签拆解不确定性", "需要后勤训练标签控制损耗", "需要生存训练标签承担撤离风险", "建议战斗与情报训练混编", "建议生存与后勤训练混编"],
 };
 
-export const contractHiddenTwists = [
+export const missionHiddenTwists = [
   "情报错误：目标规模比公开简报更大。",
   "第三方介入：另一支小队试图截胡。",
   "伏击：撤离路线被提前布置火力点。",
@@ -461,7 +229,7 @@ export const contractHiddenTwists = [
   "目标背叛：被营救或护送对象临时变更立场。",
 ];
 
-export const contractRandomEvents = [
+export const missionRandomEvents = [
   {
     id: "shared-intel-cache",
     tone: "positive",
@@ -544,7 +312,7 @@ export const contractRandomEvents = [
     effect: { gold: -6, stealth: 0, mentalInjury: 2, reputation: -1 },
   },
   {
-    id: "competing-contract",
+    id: "competing-mission",
     tone: "negative",
     weight: 0.7,
     minDifficulty: 3,
@@ -687,7 +455,7 @@ export const contractRandomEvents = [
   },
 ];
 
-export const contractBriefFragments = [
+export const missionBriefFragments = [
   "发布方只愿意支付定金，细节被拆成几段加密简报。",
   "这份契约来得太快，像是有人在掩盖另一件事。",
   "公开说明干净得过分，反而让老佣兵觉得不舒服。",

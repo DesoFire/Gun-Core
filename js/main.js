@@ -1,4 +1,4 @@
-import { buildings } from "../data/sampleData.js";
+import { facilities } from "../data/sampleData.js";
 import { initRouter } from "./router.js";
 import { getState, resetState, saveState, subscribe, updateState } from "./state.js";
 import { advanceDay } from "../modules/mission.js";
@@ -15,12 +15,12 @@ import {
   getFacilityUpgradeCost,
   getSupplyPurchaseCost,
   hospitalTreatMercenaries,
-  infirmaryTreatMercenaries,
+  entertainmentCenterTreatMercenaries,
   calculateHospitalTreatmentPlan,
-  calculateInfirmaryTreatmentPlan,
+  calculateEntertainmentCenterTreatmentPlan,
   approveSecrecyExpenses,
   isSecrecyBillingDay,
-  upgradeBuilding,
+  upgradeFacility,
 } from "../modules/faction.js";
 import { getGameSummary } from "../modules/game.js";
 import { initArmorUI } from "../ui/armorUI.js";
@@ -170,7 +170,7 @@ function renderApp() {
   renderResources();
   renderGlobalLog();
   renderOverview();
-  renderBuildings();
+  renderFacilities();
   renderExpenses();
   renderWealth();
   renderCharacterUI();
@@ -349,7 +349,7 @@ function renderCommandPanel() {
       ["经营天数", state.day],
       ["收藏缺口", summary.reputationLeft],
       ["待命佣兵", `${summary.availableRoster}/${state.roster.length}`],
-      ["执行契约", summary.activeContracts],
+      ["执行契约", summary.activeMissions],
     ]
       .map(([label, value]) => `<div class="command-stat"><span>${label}</span><strong>${value}</strong></div>`)
       .join("");
@@ -691,8 +691,8 @@ function renderWealthItem(item, state) {
 
 function renderOverview() {
   const state = getState();
-  const activeContracts = state.missions.filter((mission) => mission.status === "active");
-  const availableContracts = state.missions.filter((mission) => mission.status === "available");
+  const activeMissions = state.missions.filter((mission) => mission.status === "active");
+  const availableMissions = state.missions.filter((mission) => mission.status === "available");
   const wounded = state.roster.filter((character) => getInjuryState(character).points > 0);
   const stressed = state.roster.filter((character) => getPressureState(character).points >= 5);
   const availableRoster = state.roster.filter((character) => character.status === "待命");
@@ -703,10 +703,10 @@ function renderOverview() {
   const readyPercent = livingRoster.length > 0 ? Math.round((availableRoster.length / livingRoster.length) * 100) : 0;
   const activePercent = livingRoster.length > 0 ? Math.round((activeRoster.length / livingRoster.length) * 100) : 0;
 
-  document.querySelector("#contract-overview-badge").textContent = `${activeContracts.length} 执行 / ${availableContracts.length} 可接`;
-  document.querySelector("#contract-overview").innerHTML =
-    activeContracts.length > 0
-      ? activeContracts
+  document.querySelector("#mission-overview-badge").textContent = `${activeMissions.length} 执行 / ${availableMissions.length} 可接`;
+  document.querySelector("#mission-overview").innerHTML =
+    activeMissions.length > 0
+      ? activeMissions
           .map(
             (mission) => `
               <div class="overview-row">
@@ -739,12 +739,12 @@ function renderOverview() {
 
 }
 
-function renderBuildings() {
+function renderFacilities() {
   const state = getState();
-  const container = document.querySelector("#building-list");
-  container.innerHTML = Object.entries(buildings)
-    .map(([id, building]) => {
-      const level = state.buildings[id] ?? 0;
+  const container = document.querySelector("#facility-list");
+  container.innerHTML = Object.entries(facilities)
+    .map(([id, facility]) => {
+      const level = state.facilities[id] ?? 0;
       const isUnlocked = level > 0;
       const rank = getFacilityRankLabel(level);
       const cost = getFacilityUpgradeCost(id, level);
@@ -757,19 +757,19 @@ function renderBuildings() {
           ? `${level} 座 · 基地战斗力 +${level * economyConfig.facilities.defensePowerPerLevel}`
           : "未修建"
         : isUnlocked
-          ? `${rank}级 · 维护费 ${building.upkeep * level}/天`
+          ? `${rank}级 · 维护费 ${facility.upkeep * level}/天`
           : "未解锁";
       const badgeText = isStackedDefense ? `${level} 座` : isUnlocked ? rank : "未解锁";
       return `
         <article class="card facility-card ${isUnlocked ? "" : "locked"}" data-open-facility="${id}">
           <div class="card-header">
             <div>
-              <p class="card-title">${building.name}</p>
+              <p class="card-title">${facility.name}</p>
               <p class="muted">${statusText}</p>
             </div>
             <span class="badge">${badgeText}</span>
           </div>
-          <p class="muted">${building.description}</p>
+          <p class="muted">${facility.description}</p>
           ${
             isStackedDefense
               ? `<p class="muted">继续修建：防御战斗力 +${economyConfig.facilities.defensePowerPerLevel} · 费用 ${cost} 金</p>`
@@ -806,10 +806,10 @@ function renderBuildings() {
       handleTreatmentSpend(button, "hospital");
     });
   });
-  container.querySelectorAll("[data-infirmary-treat]").forEach((button) => {
+  container.querySelectorAll("[data-entertainmentCenter-treat]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      handleTreatmentSpend(button, "infirmary");
+      handleTreatmentSpend(button, "entertainmentCenter");
     });
   });
 }
@@ -838,9 +838,9 @@ function renderFacilityAction(id, level, cost, disabled) {
     const plan = calculateHospitalTreatmentPlan(state);
     return `<button class="primary-button" data-hospital-treat ${state.gameStatus !== "active" || plan.entries.length === 0 ? "disabled" : ""}>治疗物理伤病 · ${plan.cost} 金</button>${upgradeButton}`;
   }
-  if (id === "infirmary") {
-    const plan = calculateInfirmaryTreatmentPlan(state);
-    return `<button class="primary-button" data-infirmary-treat ${state.gameStatus !== "active" || plan.entries.length === 0 ? "disabled" : ""}>处理心理负面状态 · ${plan.cost} 金</button>${upgradeButton}`;
+  if (id === "entertainmentCenter") {
+    const plan = calculateEntertainmentCenterTreatmentPlan(state);
+    return `<button class="primary-button" data-entertainmentCenter-treat ${state.gameStatus !== "active" || plan.entries.length === 0 ? "disabled" : ""}>处理心理负面状态 · ${plan.cost} 金</button>${upgradeButton}`;
   }
   return upgradeButton;
 }
@@ -853,10 +853,10 @@ function renderFacilityUpgradeButton(id, level, cost, disabled) {
 
 function openFacilityDialog(id) {
   const state = getState();
-  const building = buildings[id];
-  if (!building) return;
+  const facility = facilities[id];
+  if (!facility) return;
 
-  const level = state.buildings[id] ?? 0;
+  const level = state.facilities[id] ?? 0;
   const isUnlocked = level > 0;
   const rank = getFacilityRankLabel(level);
   const nextCost = getFacilityUpgradeCost(id, level);
@@ -869,13 +869,13 @@ function openFacilityDialog(id) {
       const plan = calculateHospitalTreatmentPlan(state);
       return `按单个佣兵身上的单个物理负面状态收费。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点伤势标签。`;
     })(),
-    infirmary: (() => {
-      const plan = calculateInfirmaryTreatmentPlan(state);
+    entertainmentCenter: (() => {
+      const plan = calculateEntertainmentCenterTreatmentPlan(state);
       return `按单个佣兵身上的单个心理负面状态收费。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点压力标签。`;
     })(),
-    defenses: `基地遭遇突袭时提供额外战斗力。当前已建 ${level} 座，防御战斗力 +${(state.buildings.defenses ?? 0) * economyConfig.facilities.defensePowerPerLevel}。`,
+    defenses: `基地遭遇突袭时提供额外战斗力。当前已建 ${level} 座，防御战斗力 +${(state.facilities.defenses ?? 0) * economyConfig.facilities.defensePowerPerLevel}。`,
     tavern: "提高招募池规模，便于寻找更多候选佣兵。",
-    barracks: `提高可雇佣佣兵上限。当前上限 ${economyConfig.facilities.baseMercenaryLimit + (state.buildings.barracks ?? 0) * economyConfig.facilities.barracksMercenaryLimitPerLevel} 人，每升 1 级 +${economyConfig.facilities.barracksMercenaryLimitPerLevel}。`,
+    barracks: `提高可雇佣佣兵上限。当前上限 ${economyConfig.facilities.baseMercenaryLimit + (state.facilities.barracks ?? 0) * economyConfig.facilities.barracksMercenaryLimitPerLevel} 人，每升 1 级 +${economyConfig.facilities.barracksMercenaryLimitPerLevel}。`,
     intel: `每级降低调查契约情报费用 ${Math.round(economyConfig.facilities.intelInvestigationDiscountPerLevel * 100)}%，总折扣仍受调查折扣上限限制。`,
   }[id] ?? "基础设施效果待扩展。";
 
@@ -883,11 +883,11 @@ function openFacilityDialog(id) {
     <div class="dossier-top">
       <div>
         <div class="dossier-code">基础设施 / ${id.toUpperCase()}</div>
-        <h2 class="dossier-title">${building.name}</h2>
+        <h2 class="dossier-title">${facility.name}</h2>
         <p class="muted">${
           isStackedDefense
             ? `${level} 座 · 防御战斗力 +${level * economyConfig.facilities.defensePowerPerLevel}`
-            : `${isUnlocked ? `${rank}级` : "未解锁"} · 维护费 ${building.upkeep * level}/天`
+            : `${isUnlocked ? `${rank}级` : "未解锁"} · 维护费 ${facility.upkeep * level}/天`
         }</p>
       </div>
       <button class="ghost-button dialog-close-button" data-close-facility aria-label="关闭" title="关闭" type="button">关闭</button>
@@ -901,14 +901,14 @@ function openFacilityDialog(id) {
               ? `
                 <div class="field"><span>已建数量</span><strong>${level} 座</strong></div>
                 <div class="field"><span>防御战斗力</span><strong>+${level * economyConfig.facilities.defensePowerPerLevel}</strong></div>
-                <div class="field"><span>维护费</span><strong>${building.upkeep * level} 金/天</strong></div>
+                <div class="field"><span>维护费</span><strong>${facility.upkeep * level} 金/天</strong></div>
                 <div class="field"><span>继续修建</span><strong>${nextCost} 金</strong></div>
                 <div class="field"><span>单座加成</span><strong>+${economyConfig.facilities.defensePowerPerLevel}</strong></div>
               `
               : `
                 <div class="field"><span>当前状态</span><strong>${isUnlocked ? "已解锁" : "未解锁"}</strong></div>
                 <div class="field"><span>评级</span><strong>${rank}</strong></div>
-                <div class="field"><span>维护费</span><strong>${building.upkeep * level} 金/天</strong></div>
+                <div class="field"><span>维护费</span><strong>${facility.upkeep * level} 金/天</strong></div>
                 <div class="field"><span>${isUnlocked ? "升级费用" : "解锁费用"}</span><strong>${level >= 7 ? "已满级" : `${nextCost} 金`}</strong></div>
                 <div class="field"><span>下一评级</span><strong>${level >= 7 ? "S级" : `${nextRank}级`}</strong></div>
                 <div class="field"><span>升级条件</span><strong>${level >= 7 ? "已完成" : "支付费用"}</strong></div>
@@ -918,7 +918,7 @@ function openFacilityDialog(id) {
       </section>
       <section class="dossier-section">
         <h3>用途</h3>
-        <p class="muted">${building.description}</p>
+        <p class="muted">${facility.description}</p>
         <p class="muted">${specialText}</p>
       </section>
       <section class="dossier-section wide">
@@ -948,9 +948,9 @@ function openFacilityDialog(id) {
       if (handleTreatmentSpend(button, "hospital")) dialog.close();
     });
   });
-  dialog.querySelectorAll("[data-infirmary-treat]").forEach((button) => {
+  dialog.querySelectorAll("[data-entertainmentCenter-treat]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (handleTreatmentSpend(button, "infirmary")) dialog.close();
+      if (handleTreatmentSpend(button, "entertainmentCenter")) dialog.close();
     });
   });
 }
@@ -971,15 +971,15 @@ function getGoldFailureReason(currentGold, cost) {
 
 function handleFacilityUpgradeSpend(button) {
   const id = button.dataset.upgrade;
-  const building = buildings[id];
-  const action = id === "defenses" ? "修建防御设施" : `${building?.name ?? "设施"}升级`;
+  const facility = facilities[id];
+  const action = id === "defenses" ? "修建防御设施" : `${facility?.name ?? "设施"}升级`;
   const cost = getCostFromText(button.textContent);
   if (!confirmGoldSpend(action, cost)) return false;
   const beforeGold = getState().gold;
-  const beforeLevel = getState().buildings[id] ?? 0;
-  upgradeBuilding(id);
+  const beforeLevel = getState().facilities[id] ?? 0;
+  upgradeFacility(id);
   const after = getState();
-  const afterLevel = after.buildings[id] ?? 0;
+  const afterLevel = after.facilities[id] ?? 0;
   if (afterLevel <= beforeLevel || after.gold >= beforeGold) {
     showSpendFailure(action, getGoldFailureReason(beforeGold, cost));
     return false;
@@ -1009,13 +1009,13 @@ function handleBlackMarketSpend(button) {
 }
 
 function handleTreatmentSpend(button, facilityId) {
-  const action = facilityId === "infirmary" ? "娱乐中心处理" : "医疗中心治疗";
+  const action = facilityId === "entertainmentCenter" ? "娱乐中心处理" : "医疗中心治疗";
   const cost = getCostFromText(button.textContent);
   if (!confirmGoldSpend(action, cost)) return false;
   const before = getState();
   const beforeConditions = before.roster.reduce((sum, character) => sum + (character.conditions?.length ?? 0), 0);
   const beforeGold = before.gold;
-  const result = facilityId === "infirmary" ? infirmaryTreatMercenaries() : hospitalTreatMercenaries();
+  const result = facilityId === "entertainmentCenter" ? entertainmentCenterTreatMercenaries() : hospitalTreatMercenaries();
   const after = getState();
   const afterConditions = after.roster.reduce((sum, character) => sum + (character.conditions?.length ?? 0), 0);
   if (after.gold >= beforeGold) {

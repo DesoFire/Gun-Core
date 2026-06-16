@@ -1,4 +1,4 @@
-import { characterClasses, mercenaryRanks } from "../data/sampleData.js";
+import { mercenaryRanks } from "../data/sampleData.js";
 import { clamp } from "../js/utils.js";
 
 export function estimateBaseCombatPower(character) {
@@ -26,20 +26,18 @@ export function calculateEffectiveCharacterCombatPower(character) {
 export function getCombatPowerBreakdown(character) {
   const base = character.combatPower ?? estimateBaseCombatPower(character);
   const equipment = calculateEquipmentCombatPower(character);
-  const positive = getPositiveConditionCombatPower(character);
-  const classBonus = getClassDamagePowerBonus(character);
+  const skillBonus = 0;
   const injuryState = getInjuryState(character);
   const pressureState = getPressureState(character);
-  const injuryPenalty = Math.round(injuryState.penalty * (1 - getWoundPenaltyReduction(character)));
-  const rawTotal = Math.max(1, Math.round(base + equipment + positive + classBonus));
+  const injuryPenalty = Math.round(injuryState.penalty);
+  const rawTotal = Math.max(1, Math.round(base + equipment + skillBonus));
   const physicalTotal = Math.max(0, Math.round(rawTotal - injuryPenalty));
   const final = Math.max(0, Math.round(physicalTotal * (1 - pressureState.penaltyRate)));
   const pressurePenalty = Math.max(0, physicalTotal - final);
   return {
     base,
     equipment,
-    positive,
-    classBonus,
+    skillBonus,
     injuryPoints: injuryState.points,
     injuryLabel: injuryState.label,
     injuryPenalty,
@@ -77,34 +75,9 @@ export function getPromotionCombatPowerGain(nextRank) {
   return gains[nextRank] ?? 0;
 }
 
-function rarityBonus(rarity) {
-  return Math.max(0, ["F", "E", "D", "C", "B", "A", "S"].indexOf(rarity));
-}
-
 function hasLostBothArms(character) {
   const limbs = new Set((character.conditions ?? []).map((condition) => condition.limb).filter(Boolean));
   return limbs.has("leftArm") && limbs.has("rightArm");
-}
-
-function getPositiveConditionCombatPower(character) {
-  return (character.positiveConditions ?? []).reduce((sum, condition) => sum + (condition.powerBonus ?? 0), 0);
-}
-
-function getClassDamagePowerBonus(character) {
-  const career = getCareer(character);
-  const bonus = career?.effects?.damageTypePowerBonus;
-  const weapon = character.equipment?.weapon;
-  if (!bonus || !weapon || weapon.damageType !== bonus.type) return 0;
-  return bonus.value ?? 0;
-}
-
-function getWoundPenaltyReduction(character) {
-  const career = getCareer(character);
-  return career?.effects?.woundPenaltyReduction ?? 0;
-}
-
-function getCareer(character) {
-  return characterClasses[character.classId];
 }
 
 export function getInjuryState(character) {

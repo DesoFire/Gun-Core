@@ -57,9 +57,9 @@ export function renderAppShell(root) {
           <section class="panel overview-panel">
             <div class="section-heading">
               <h2>契约执行</h2>
-              <span id="contract-overview-badge" class="badge">读取中</span>
+              <span id="mission-overview-badge" class="badge">读取中</span>
             </div>
-            <div id="contract-overview" class="overview-list"></div>
+            <div id="mission-overview" class="overview-list"></div>
           </section>
 
           <section class="panel overview-panel">
@@ -111,7 +111,7 @@ export function renderAppShell(root) {
             <h2>契约</h2>
             <span id="selected-count" class="badge">未选择队伍</span>
           </div>
-          <div class="contract-toolbar">
+          <div class="mission-toolbar">
             <p class="muted">公开情报只显示发布方、报酬和简报；可花费资金调查更多细节，或刷新不合适的契约。</p>
           </div>
           <div id="mission-list" class="mission-grid"></div>
@@ -124,7 +124,7 @@ export function renderAppShell(root) {
             <h2>基础设施</h2>
             <span class="badge">点开查看详情</span>
           </div>
-          <div id="building-list" class="facility-grid"></div>
+          <div id="facility-list" class="facility-grid"></div>
         </section>
       </section>
 
@@ -169,8 +169,8 @@ export function renderAppShell(root) {
       <div class="dossier" id="armor-dossier"></div>
     </dialog>
 
-    <dialog id="contract-dialog" class="dialog contract-dialog">
-      <div class="dossier" id="contract-dossier"></div>
+    <dialog id="mission-dialog" class="dialog mission-dialog">
+      <div class="dossier" id="mission-dossier"></div>
     </dialog>
 
     <dialog id="facility-dialog" class="dialog dossier-dialog">
@@ -199,7 +199,7 @@ export function renderAppShell(root) {
           </article>
           <article>
             <strong>3. 调查契约</strong>
-            <span>契约页只显示模糊风险。花钱调查敌方伤害、推荐武器、职业需求、人数和战力区间，再决定派谁去。</span>
+            <span>契约页只显示模糊风险。花钱调查敌方伤害、推荐武器、能力需求、人数和战力区间，再决定派谁去。</span>
           </article>
           <article>
             <strong>4. 批准支出</strong>
