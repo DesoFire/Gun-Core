@@ -37,6 +37,7 @@ import { calculateCharacterCombatPower, getInjuryState, getPressureState } from 
 
 let router = null;
 let pendingExpenseApproval = false;
+let lastRenderedSettlementId = null;
 
 function init() {
   renderAppShell(document.querySelector("#root"));
@@ -56,15 +57,11 @@ function init() {
 function bindGlobalActions() {
   document.querySelector("#advance-day").addEventListener("click", requestAdvanceDayApproval);
   document.querySelector("#organization-name").addEventListener("click", editOrganizationName);
-  initGlobalStatusDrawer();
-  initGlobalLogDrawer();
-  initDialogStatusContext();
-  document.querySelector("#global-status-close").addEventListener("click", () => {
-    closeGlobalStatusDrawer();
-  });
+  initGlobalLogSidebar();
   document.querySelector("#global-log-close").addEventListener("click", () => {
-    closeGlobalLogDrawer();
+    closeGlobalLogSidebar();
   });
+  document.querySelector("#settlement-close").addEventListener("click", closeSettlementDialog);
   document.querySelector("#save-game").addEventListener("click", () => {
     saveState();
     updateState((draft) => {
@@ -76,70 +73,6 @@ function bindGlobalActions() {
     showIntroIfNeeded();
   });
   document.querySelector("#intro-confirm").addEventListener("click", closeIntro);
-}
-
-function initDialogStatusContext() {
-  const observer = new MutationObserver(syncGlobalStatusContext);
-  document.querySelectorAll("dialog").forEach((dialog) => {
-    observer.observe(dialog, { attributes: true, attributeFilter: ["open"] });
-  });
-  syncGlobalStatusContext();
-}
-
-function closeGlobalStatusDrawer() {
-  document.querySelector("#global-status-drawer")?.classList.remove("open");
-  const panel = document.querySelector("#global-status-panel");
-  if (panel) panel.hidden = true;
-}
-
-function closeGlobalLogDrawer() {
-  document.querySelector("#global-log-drawer")?.classList.remove("open");
-  const panel = document.querySelector("#global-log-panel");
-  if (panel) panel.hidden = true;
-}
-
-function syncGlobalStatusContext() {
-  const drawer = document.querySelector("#global-status-drawer");
-  const logDrawer = document.querySelector("#global-log-drawer");
-  if (!drawer || !logDrawer) return;
-  const activeDialog = [...document.querySelectorAll("dialog[open]")].find((dialog) => dialog.id !== "intro-dialog");
-  drawer.classList.toggle("in-dialog", Boolean(activeDialog));
-  logDrawer.classList.toggle("in-dialog", Boolean(activeDialog));
-  if (activeDialog) {
-    activeDialog.append(drawer);
-    activeDialog.append(logDrawer);
-    drawer.style.left = "";
-    drawer.style.top = "";
-    drawer.style.right = "";
-    logDrawer.style.left = "";
-    logDrawer.style.top = "56px";
-    logDrawer.style.right = "";
-    return;
-  }
-  document.querySelector("#root")?.append(drawer);
-  document.querySelector("#root")?.append(logDrawer);
-  drawer.classList.remove("in-dialog");
-  logDrawer.classList.remove("in-dialog");
-  const savedPosition = loadDrawerPosition();
-  if (savedPosition) {
-    drawer.style.left = `${savedPosition.left}px`;
-    drawer.style.top = `${savedPosition.top}px`;
-    drawer.style.right = "auto";
-  } else {
-    drawer.style.left = "";
-    drawer.style.top = "";
-    drawer.style.right = "";
-  }
-  const savedLogPosition = loadDrawerPosition("gun-core-log-drawer-position");
-  if (savedLogPosition) {
-    logDrawer.style.left = `${savedLogPosition.left}px`;
-    logDrawer.style.top = `${savedLogPosition.top}px`;
-    logDrawer.style.right = "auto";
-  } else {
-    logDrawer.style.left = "";
-    logDrawer.style.top = "152px";
-    logDrawer.style.right = "18px";
-  }
 }
 
 function showIntroIfNeeded() {
@@ -169,6 +102,7 @@ function renderApp() {
   renderCommandPanel();
   renderResources();
   renderGlobalLog();
+  renderSettlementDialog();
   renderOverview();
   renderFacilities();
   renderExpenses();
@@ -189,132 +123,21 @@ function requestAdvanceDayApproval() {
   showToast("请在支出页确认今日支出，批准后才会进入下一天。", "good");
 }
 
-function initGlobalStatusDrawer() {
-  initDraggableDrawer({
-    drawerSelector: "#global-status-drawer",
-    toggleSelector: "#global-status-toggle",
-    panelSelector: "#global-status-panel",
-    storageKey: "gun-core-status-drawer-position",
+function initGlobalLogSidebar() {
+  const toggle = document.querySelector("#global-log-toggle");
+  toggle?.addEventListener("click", () => {
+    const sidebar = document.querySelector("#global-log-sidebar");
+    const isOpen = sidebar?.classList.toggle("open");
+    if (sidebar) sidebar.hidden = !isOpen;
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
   });
 }
 
-function initGlobalLogDrawer() {
-  initDraggableDrawer({
-    drawerSelector: "#global-log-drawer",
-    toggleSelector: "#global-log-toggle",
-    panelSelector: "#global-log-panel",
-    storageKey: "gun-core-log-drawer-position",
-    defaultTop: "152px",
-    defaultRight: "18px",
-  });
-}
-
-function initDraggableDrawer({
-  drawerSelector,
-  toggleSelector,
-  panelSelector,
-  storageKey,
-  defaultTop = "",
-  defaultRight = "",
-}) {
-  const drawer = document.querySelector(drawerSelector);
-  const toggle = document.querySelector(toggleSelector);
-  const panel = document.querySelector(panelSelector);
-  if (!drawer || !toggle || !panel) return;
-  const savedPosition = loadDrawerPosition(storageKey);
-  if (savedPosition) {
-    drawer.style.left = `${savedPosition.left}px`;
-    drawer.style.top = `${savedPosition.top}px`;
-    drawer.style.right = "auto";
-  } else {
-    drawer.style.left = "";
-    drawer.style.top = defaultTop;
-    drawer.style.right = defaultRight;
-  }
-
-  let drag = null;
-
-  function beginDrag(event) {
-    if (drawer.classList.contains("in-dialog")) return;
-    drag = {
-      pointerId: event.pointerId ?? null,
-      startX: event.clientX,
-      startY: event.clientY,
-      left: drawer.offsetLeft,
-      top: drawer.offsetTop,
-      moved: false,
-    };
-    if (event.pointerId != null && typeof toggle.setPointerCapture === "function") {
-      toggle.setPointerCapture(event.pointerId);
-    }
-    drawer.classList.add("dragging");
-  }
-
-  function moveDrag(event) {
-    if (!drag) return;
-    if (drag.pointerId != null && event.pointerId != null && drag.pointerId !== event.pointerId) return;
-    const dx = event.clientX - drag.startX;
-    const dy = event.clientY - drag.startY;
-    if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
-    const maxLeft = window.innerWidth - drawer.offsetWidth - 8;
-    const maxTop = window.innerHeight - toggle.offsetHeight - 8;
-    const left = Math.max(8, Math.min(maxLeft, drag.left + dx));
-    const top = Math.max(8, Math.min(maxTop, drag.top + dy));
-    drawer.style.left = `${left}px`;
-    drawer.style.top = `${top}px`;
-    drawer.style.right = "auto";
-  }
-
-  function endDrag(event) {
-    const dialogMode = drawer.classList.contains("in-dialog");
-    if (dialogMode) {
-      drawer.classList.toggle("open");
-      panel.hidden = !drawer.classList.contains("open");
-      return;
-    }
-    if (!drag) return;
-    if (drag.pointerId != null && event.pointerId != null && drag.pointerId !== event.pointerId) return;
-    if (event.pointerId != null && typeof toggle.releasePointerCapture === "function") {
-      toggle.releasePointerCapture(event.pointerId);
-    }
-    drawer.classList.remove("dragging");
-    saveDrawerPosition(drawer, storageKey);
-    const shouldToggle = !drag.moved;
-    drag = null;
-    if (!shouldToggle) return;
-    drawer.classList.toggle("open");
-    panel.hidden = !drawer.classList.contains("open");
-  }
-
-  toggle.addEventListener("pointerdown", beginDrag);
-  toggle.addEventListener("pointermove", moveDrag);
-  toggle.addEventListener("pointerup", endDrag);
-  toggle.addEventListener("pointercancel", () => {
-    drag = null;
-    drawer.classList.remove("dragging");
-  });
-  toggle.addEventListener("mousedown", (event) => {
-    if (drag) return;
-    beginDrag(event);
-    event.preventDefault();
-  });
-  document.addEventListener("mousemove", moveDrag);
-  document.addEventListener("mouseup", endDrag);
-}
-
-function loadDrawerPosition(key = "gun-core-status-drawer-position") {
-  try {
-    return JSON.parse(localStorage.getItem(key) ?? "null");
-  } catch {
-    return null;
-  }
-}
-
-function saveDrawerPosition(drawer, key = "gun-core-status-drawer-position") {
-  localStorage.setItem(
-    key,
-    JSON.stringify({ left: drawer.offsetLeft, top: drawer.offsetTop })
-  );
+function closeGlobalLogSidebar() {
+  const sidebar = document.querySelector("#global-log-sidebar");
+  sidebar?.classList.remove("open");
+  if (sidebar) sidebar.hidden = true;
+  document.querySelector("#global-log-toggle")?.setAttribute("aria-expanded", "false");
 }
 
 function renderGlobalLog() {
@@ -329,31 +152,8 @@ function renderGlobalLog() {
 function renderCommandPanel() {
   const state = getState();
   const summary = getGameSummary();
-  const objectiveText = document.querySelector("#objective-text");
-  const status = document.querySelector("#game-status");
-  const commandGrid = document.querySelector("#command-grid");
-  const statusText = {
-    active: "进行中",
-    won: "胜利",
-    lost: "失败",
-  }[summary.status];
   document.querySelector("#organization-name").textContent = state.organizationName ?? "Gun Core";
-  if (objectiveText) objectiveText.textContent = summary.objectiveText;
-  if (status) {
-    status.textContent = statusText;
-    status.className = `badge status-${summary.status}`;
-  }
   document.querySelector("#advance-day").disabled = summary.status !== "active";
-  if (commandGrid) {
-    commandGrid.innerHTML = [
-      ["经营天数", state.day],
-      ["收藏缺口", summary.reputationLeft],
-      ["待命佣兵", `${summary.availableRoster}/${state.roster.length}`],
-      ["执行契约", summary.activeMissions],
-    ]
-      .map(([label, value]) => `<div class="command-stat"><span>${label}</span><strong>${value}</strong></div>`)
-      .join("");
-  }
 }
 
 function editOrganizationName() {
@@ -370,33 +170,109 @@ function editOrganizationName() {
 function renderResources() {
   const state = getState();
   const dailyExpenses = calculateDailyExpenseBreakdown(state);
-  const currentDay = document.querySelector("#current-day");
-  if (currentDay) currentDay.textContent = `第 ${state.day} 天`;
-  const resources = [
+  const summary = getGameSummary();
+  const baseStatusDay = document.querySelector("#base-status-day");
+  if (baseStatusDay) baseStatusDay.textContent = `第 ${state.day} 天`;
+  const grid = document.querySelector("#base-status-grid");
+  if (!grid) return;
+  grid.innerHTML = [
     ["资金", state.gold],
     ["基地声望", state.reputation],
     ["强化点", state.enhancementPoints ?? 0],
     ["隐秘值", `${state.stealth}/100`],
-    ["每日支出", dailyExpenses.total],
+    ["每日支出", `${dailyExpenses.total} 金`],
+    ["补给库存", `${state.supplies ?? 0}`],
+    ["待命佣兵", `${summary.availableRoster}/${state.roster.length}`],
+    ["执行契约", `${summary.activeMissions}`],
     ["遇袭率", `${Math.max(0, 100 - state.stealth)}%`],
-  ];
-  const resourceHtml = resources
-    .map(([label, value]) => `<div class="resource"><span>${label}</span><strong>${value}</strong></div>`)
-    .join("");
-  const resourceGrid = document.querySelector("#resource-grid");
-  if (resourceGrid) resourceGrid.innerHTML = resourceHtml;
-
-  document.querySelector("#global-resource-strip").innerHTML = [
-    ["第", `${state.day} 天`],
-    ["资金", state.gold],
-    ["基地声望", state.reputation],
-    ["强化点", state.enhancementPoints ?? 0],
-    ["隐秘", `${state.stealth}/100`],
-    ["日支出", dailyExpenses.total],
-    ["遇袭", `${Math.max(0, 100 - state.stealth)}%`],
   ]
-    .map(([label, value]) => `<div class="strip-resource"><span>${label}</span><strong>${value}</strong></div>`)
+    .map(([label, value]) => `<div class="base-status-card"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
+}
+
+function renderSettlementDialog() {
+  const state = getState();
+  const settlement = state.lastSettlement;
+  const dialog = document.querySelector("#settlement-dialog");
+  const summary = document.querySelector("#settlement-summary");
+  const content = document.querySelector("#settlement-content");
+  if (!dialog || !summary || !content) return;
+
+  if (!settlement) {
+    if (dialog.open) dialog.close();
+    lastRenderedSettlementId = null;
+    return;
+  }
+
+  summary.textContent = `第 ${settlement.day} 天 · ${settlement.title}`;
+  content.innerHTML = `
+    <section class="settlement-summary-grid">
+      <article class="settlement-stat ${settlement.success ? "good" : "danger"}">
+        <span>结果</span>
+        <strong>${settlement.success ? "成功" : "失败"}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>最终战力</span>
+        <strong>${settlement.teamPower}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>需求战力</span>
+        <strong>${settlement.requiredPower}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>金币变化</span>
+        <strong>${settlement.goldDelta >= 0 ? `+${settlement.goldDelta}` : settlement.goldDelta}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>声望变化</span>
+        <strong>${settlement.reputationDelta >= 0 ? `+${settlement.reputationDelta}` : settlement.reputationDelta}</strong>
+      </article>
+      <article class="settlement-stat">
+        <span>当前资金</span>
+        <strong>${settlement.remainingGold}</strong>
+      </article>
+    </section>
+    <section class="dossier-section">
+      <h3>事件摘要</h3>
+      <p class="muted">${settlement.summaryText}</p>
+      ${settlement.lootName ? `<p class="muted">战利品：${settlement.lootName}</p>` : ""}
+    </section>
+    <section class="dossier-section wide">
+      <h3>队员状态</h3>
+      <div class="settlement-member-list">
+        ${settlement.members
+          .map(
+            (member) => `
+              <article class="settlement-member-card">
+                <div class="card-header">
+                  <strong>${member.name}</strong>
+                  <span class="badge">${member.status}</span>
+                </div>
+                <div class="compact-field-list">
+                  <div class="field"><span>战力</span><strong>${member.combatPower}</strong></div>
+                  <div class="field"><span>伤势</span><strong>${member.injuryLabel}</strong></div>
+                  <div class="field"><span>压力</span><strong>${member.pressureLabel}</strong></div>
+                  <div class="field"><span>新状态</span><strong>${member.newConditions.length > 0 ? member.newConditions.join("、") : "无"}</strong></div>
+                </div>
+              </article>
+            `
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+
+  if (lastRenderedSettlementId !== settlement.id) {
+    lastRenderedSettlementId = settlement.id;
+    if (!dialog.open) dialog.showModal();
+  }
+}
+
+function closeSettlementDialog() {
+  document.querySelector("#settlement-dialog")?.close();
+  updateState((draft) => {
+    draft.lastSettlement = null;
+  }, { save: true, notify: false });
 }
 
 function renderExpenses() {

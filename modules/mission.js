@@ -19,7 +19,7 @@ import { economyConfig } from "../data/economyConfig.js";
 import { getState, updateState } from "../js/state.js";
 import { calculateDailySupplyConsumption, calculateUnpaidSecrecyReputation, identityFee, payDailyUpkeep } from "./faction.js";
 import { evaluateGameOverDraft } from "./game.js";
-import { calculateTeamCombatPower, getPromotionCombatPowerGain } from "./combatPower.js";
+import { calculateEffectiveCharacterCombatPower, calculateTeamCombatPower, getInjuryState, getPressureState, getPromotionCombatPowerGain } from "./combatPower.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
 import { generateArmorItem } from "./armorGenerator.js";
 import { generateWeaponItem } from "./weaponGenerator.js";
@@ -267,6 +267,17 @@ function resolveMissionDraft(draft, mission) {
   const chance = fit.chance;
   const success = randomNumber(1, 100) <= chance;
   const team = draft.roster.filter((character) => mission.assigned.includes(character.id));
+  const initialGold = draft.gold ?? 0;
+  const initialBaseReputation = draft.reputation ?? 0;
+  const memberSnapshots = new Map(
+    team.map((character) => [
+      character.id,
+      {
+        personalReputation: character.personalReputation ?? 0,
+        conditionIds: new Set((character.conditions ?? []).map((condition) => condition.id)),
+      },
+    ])
+  );
   const outcome = applyHiddenTwistDraft(draft, mission, team, success);
   const enemyDamageTypes = mission.requirements?.damageTypes ?? [];
 
@@ -300,16 +311,21 @@ function resolveMissionDraft(draft, mission) {
     if (success) resolveGrowthDraft(draft, character, mission.actionType ?? "logistics");
   });
 
+  let loot = null;
+  let reputationDelta = 0;
+
   if (success) {
     const grossGold = Math.max(0, Math.round((mission.reward.gold + outcome.goldDelta) * getRewardGoldMultiplier(team)));
     const gold = Math.max(0, grossGold - (mission.advancePaid ?? 0));
     const reputation = Math.max(0, mission.reward.reputation + outcome.reputationDelta);
+    reputationDelta = reputation;
     distributeMissionReputationDraft(draft, team.filter((character) => character.status !== "阵亡"), reputation);
     draft.gold += gold;
     draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」成功。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，获得 ${gold} 金，队员瓜分 ${reputation} 声望。${outcome.text}`);
-    rollCombatLootDraft(draft, mission, `契约「${mission.name}」`, team);
+    loot = rollCombatLootDraft(draft, mission, `契约「${mission.name}」`, team);
   } else {
     const reputationLoss = calculateMissionReputationLoss(mission, team.length);
+    reputationDelta = -reputationLoss * (team.length + 1);
     applyMissionReputationLossDraft(draft, team.filter((character) => character.status !== "阵亡"), reputationLoss);
     if (outcome.reputationDelta > 0) distributeMissionReputationDraft(draft, team.filter((character) => character.status !== "阵亡"), outcome.reputationDelta);
     draft.gold = Math.max(0, draft.gold + outcome.goldDelta);
@@ -317,6 +333,41 @@ function resolveMissionDraft(draft, mission) {
   }
 
   settleReturningWagesDraft(draft, mission, team.filter((character) => character.status !== "阵亡"));
+  const finalBaseReputation = draft.reputation ?? 0;
+  const memberReputationDelta = team.reduce((sum, character) => {
+    const snapshot = memberSnapshots.get(character.id);
+    return sum + ((character.personalReputation ?? 0) - (snapshot?.personalReputation ?? 0));
+  }, 0);
+  const settlementMembers = team.map((character) => {
+    const snapshot = memberSnapshots.get(character.id);
+    const newConditions = (character.conditions ?? [])
+      .filter((condition) => !snapshot?.conditionIds?.has(condition.id))
+      .map((condition) => condition.name);
+    return {
+      id: character.id,
+      name: character.name,
+      status: character.status,
+      combatPower: calculateEffectiveCharacterCombatPower(character),
+      injuryLabel: getInjuryState(character).label,
+      pressureLabel: getPressureState(character).label,
+      newConditions,
+    };
+  });
+  draft.lastSettlement = {
+    id: createId(),
+    day: draft.day,
+    missionId: mission.id,
+    title: mission.name,
+    success,
+    teamPower,
+    requiredPower: mission.powerRequirement,
+    goldDelta: (draft.gold ?? 0) - initialGold,
+    reputationDelta: (finalBaseReputation - initialBaseReputation) + memberReputationDelta,
+    remainingGold: draft.gold ?? 0,
+    lootName: loot?.name ?? "",
+    summaryText: outcome.text,
+    members: settlementMembers,
+  };
 
   draft.missions = draft.missions.filter((item) => item.id !== mission.id);
   evaluateGameOverDraft(draft);

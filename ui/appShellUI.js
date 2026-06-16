@@ -23,32 +23,16 @@ export function renderAppShell(root) {
       <button class="tab-button" data-tab-target="warehouse" type="button">仓库</button>
     </nav>
 
-    <aside id="global-status-drawer" class="global-status-drawer" aria-label="基地关键状态">
-      <button id="global-status-toggle" class="global-status-toggle" type="button">状态</button>
-      <div id="global-status-panel" class="global-status-panel" hidden>
-        <div class="card-header">
-          <div>
-            <strong>基地关键状态</strong>
-            <p class="muted">随时查看现金流和暴露风险。</p>
-          </div>
-          <button id="global-status-close" class="ghost-button" type="button">关闭</button>
+    <button id="global-log-toggle" class="global-log-toggle" type="button" aria-controls="global-log-sidebar" aria-expanded="false">日志</button>
+    <aside id="global-log-sidebar" class="global-log-sidebar" aria-label="行动日志" hidden>
+      <div class="global-log-header">
+        <div>
+          <strong>行动日志</strong>
+          <p class="muted">记录操作、契约结算和突发事件。</p>
         </div>
-        <div id="global-resource-strip" class="global-resource-strip"></div>
+        <button id="global-log-close" class="ghost-button" type="button">关闭</button>
       </div>
-    </aside>
-
-    <aside id="global-log-drawer" class="global-status-drawer global-log-drawer" aria-label="行动日志">
-      <button id="global-log-toggle" class="global-status-toggle" type="button">日志</button>
-      <div id="global-log-panel" class="global-status-panel global-log-panel" hidden>
-        <div class="card-header">
-          <div>
-            <strong>行动日志</strong>
-            <p class="muted">记录操作、契约结算和突发事件。</p>
-          </div>
-          <button id="global-log-close" class="ghost-button" type="button">关闭</button>
-        </div>
-        <div id="global-log-list" class="global-log-list"></div>
-      </div>
+      <div id="global-log-list" class="global-log-list"></div>
     </aside>
 
     <main class="dashboard">
@@ -157,6 +141,14 @@ export function renderAppShell(root) {
 
     </main>
 
+    <aside id="base-status-dashboard" class="base-status-dashboard" aria-label="基地状态仪表盘">
+      <div class="base-status-header">
+        <strong>基地状态</strong>
+        <span id="base-status-day" class="badge">第 1 天</span>
+      </div>
+      <div id="base-status-grid" class="base-status-grid"></div>
+    </aside>
+
     <dialog id="mercenary-dialog" class="dialog dossier-dialog">
       <div class="dossier" id="mercenary-dossier"></div>
     </dialog>
@@ -214,6 +206,20 @@ export function renderAppShell(root) {
           <p class="muted">欢迎使用 GMS。愿战争早日结束，但不要太早。</p>
           <button id="intro-confirm" class="primary-button" type="button">开始经营</button>
         </div>
+      </div>
+    </dialog>
+
+    <dialog id="settlement-dialog" class="dialog settlement-dialog">
+      <div class="settlement-card">
+        <div class="dossier-top settlement-top">
+          <div>
+            <div class="dossier-code">CONTRACT SETTLEMENT</div>
+            <h2 class="dossier-title">契约结算</h2>
+            <p id="settlement-summary" class="muted">等待结算。</p>
+          </div>
+          <button id="settlement-close" class="ghost-button dialog-close-button" aria-label="关闭" title="关闭" type="button">关闭</button>
+        </div>
+        <div id="settlement-content" class="settlement-content"></div>
       </div>
     </dialog>
   `;

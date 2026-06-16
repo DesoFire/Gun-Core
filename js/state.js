@@ -65,7 +65,7 @@ export function subscribe(listener) {
 
 export function addLog(message) {
   updateState((draft) => {
-    draft.log.push(`? ${draft.day} ??${message}`);
+    draft.log.push(`第 ${draft.day} 天：${message}`);
   });
 }
 
@@ -112,6 +112,7 @@ export function createInitialState() {
     inventorySeeded: true,
     wealth: { owned: {} },
     factions: [],
+    lastSettlement: null,
     log: ["事务所挂牌营业。目标：把战争财搬进私人收藏室，同时别让隐秘值归零。"],
   };
 }
@@ -166,6 +167,7 @@ function normalizeState(savedState) {
   savedState.inventory ??= sampleItems.map((item) => ({ ...item }));
   savedState.wealth ??= { owned: {} };
   savedState.wealth.owned ??= {};
+  savedState.lastSettlement ??= null;
   normalizeWealthState(savedState);
   if (!savedState.inventorySeeded) {
     const existingIds = new Set(savedState.inventory.map((item) => item.id));
