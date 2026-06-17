@@ -13,8 +13,6 @@ export const economyConfig = {
   initialState: {
     // 新开局资金。过低会导致玩家无法承担前几天试错，过高会让支出压力变钝。
     gold: 300,
-    // 新开局补给。补给不足会影响基地日常运转，但不会直接生成精神负面状态。
-    supplies: 24,
     // 新开局隐秘值。隐秘值归零会直接失败。
     stealth: 100,
   },
@@ -53,12 +51,17 @@ export const economyConfig = {
       reputationRandomMax: 5,
     },
     loot: {
-      // 契约成功与基地防守成功后的战斗掉落概率。掉落装备等级等同于本次契约等级。
+      // 契约成功与基地防守成功后的战斗掉落概率。掉落装备等级会在契约等级上下浮动 1 级。
       baseChance: 25,
       // 契约难度每提高 1 级，额外增加的掉落概率。
       perDifficulty: 3,
-      // 掉落时生成武器的概率；剩余概率生成防具。
+      // 常规掉落池：未确认敌方机动兵器时，只掉武器或防具。
       weaponChance: 50,
+      armorChance: 50,
+      // 机动兵器掉落池：只有情报确认敌方存在机动兵器时才启用。
+      mechaChanceWhenEnemyMecha: 10,
+      armorChanceWhenEnemyMecha: 45,
+      weaponChanceWhenEnemyMecha: 45,
     },
     mechaThreat: {
       // 敌方机动兵器出现率。按契约难度读取，下标 0 不使用，1=F级低难，8=S级高难。
@@ -125,9 +128,9 @@ export const economyConfig = {
       // weights 控制各类突发事件出现权重。会降低隐秘的事件权重较低，让隐秘值主要由月费和未支付声望驱动。
       weights: {
         "情报错误：目标规模比公开简报更大。": 1,
-        "第三方介入：另一支小队试图截胡。": 0.3,
+        "第三方介入：另一支小队试图截胡。": 0.12,
         "伏击：撤离路线被提前布置火力点。": 1,
-        "客户欺骗：发布方隐瞒了真实目标。": 0.3,
+        "客户欺骗：发布方隐瞒了真实目标。": 0.12,
         "隐藏奖励：目标现场存在额外可回收物资。": 1,
         "目标背叛：被营救或护送对象临时变更立场。": 1,
       },
@@ -169,23 +172,23 @@ export const economyConfig = {
       playerBonus: 0,
     },
     livingSupplies: {
-      // 每名未阵亡佣兵每日消耗补给份数。按评级走从 1, 2 开始的斐波那契：
+      // 每名未阵亡佣兵每日生活补给费用。按评级走从 1, 2 开始的斐波那契：
       // 无=1，F=2，E=3，D=5，C=8，B=13，A=21，S=34。
       rankDailySupply: [1, 2, 3, 5, 8, 13, 21, 34],
-      // 支出界面购买补给库存的批发价格。
-      purchaseTiers: [
-        { quantity: 1, cost: 1 },
-        { quantity: 20, cost: 19 },
-        { quantity: 50, cost: 45 },
-        { quantity: 100, cost: 85 },
-      ],
+      // 生活补给不再作为库存资源购买，直接在每日支出中按 1 份=1 金自动结算。
+      costPerSupply: 1,
     },
     equipmentMaintenance: {
-      // 武器/防具养护费：base + rankIndex * perRank。
+      // 武器/防具养护费：base + rankIndex * perRank。机动兵器按常规装备维护费的倍数计算。
       weaponBase: 2,
       armorBase: 1,
       mechaBase: 20,
       perRank: 2,
+      mechaMultiplier: 2,
+    },
+    debtRelief: {
+      // 第一次日常结算把资金扣成负数时，给玩家一次黑色幽默式救济。
+      compensationGold: 100,
     },
   },
 
@@ -199,6 +202,9 @@ export const economyConfig = {
     baseMonthlyCostPerReputation: 2,
     // 未支付隐秘费时，每 1 点未支付声望永久累计，并立即降低 1 点隐秘值。
     stealthLossPerUnpaidReputation: 1,
+    // 紧急隐蔽：随时花钱购买一点生存空间。不会超过 100 隐秘值。
+    emergencyStealthCost: 500,
+    emergencyStealthGain: 5,
     // 在佣兵详情中“抹去黑历史”的价格：每 1 点个人声望 2 金，且必须一次付清清零。
     eraseMercenaryReputationCostPerPoint: 2,
   },
@@ -333,12 +339,20 @@ export const economyConfig = {
     weaponPowerReferenceByRank: { F: 24, E: 28, D: 36, C: 52, B: 84, A: 148, S: 276 },
     weaponPowerMultiplierMin: 0.3,
     weaponPowerMultiplierMax: 1.2,
+    // 机动兵器购买规则：黑市 C 级才解锁。常规货源比黑市等级低两档，偶尔出现高级货。
+    mechaUnlockRank: "C",
+    mechaCommonRankByMarketRank: { C: "F", B: "E", A: "D", S: "C" },
+    mechaRareChance: 5,
+    mechaRareRankOffset: 1,
+    mechaDamageTypes: ["动能", "腐蚀", "电磁", "爆风", "能量", "燃烧", "异源", "切割"],
+    mechaProtectionTypes: ["动能", "腐蚀", "电磁", "爆风", "能量", "燃烧", "异源", "切割"],
   },
 
   baseRaid: {
     // 每日开始时遇袭率 = 100 - 隐秘值。隐秘值 100 时不会遇袭，隐秘值 0 时必定遇袭。
+    // 没有未遮掩声望时，仍然可以遇袭；这里仅作为袭击强度的最低声望压力。
     minUnpaidReputationForRaid: 1,
-    // 未支付声望换算袭击级别。未支付声望越高，袭击越接近高级契约。
+    // 未支付声望 + 基地声望共同换算袭击级别。声望越高，袭击越接近高级契约。
     unpaidReputationPerDifficulty: 10,
     minDifficulty: 1,
     maxDifficulty: 8,

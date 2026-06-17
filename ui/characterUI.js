@@ -209,7 +209,8 @@ export function renderCharacterTagRow(character) {
   const mecha = character.equipment?.mecha;
   if (weapon?.damageType) tags.push({ label: `武器：${weapon.damageType}`, className: "badge equipment-tag weapon-tag" });
   if (armor?.protectionType) tags.push({ label: `防具：${armor.protectionType}`, className: "badge equipment-tag armor-tag" });
-  if (mecha) tags.push({ label: "机动兵器", className: "badge equipment-tag mecha-tag" });
+  if (mecha?.damageType) tags.push({ label: `机动：${mecha.damageType}`, className: "badge equipment-tag mecha-tag" });
+  if (mecha?.protectionType) tags.push({ label: `机动防护：${mecha.protectionType}`, className: "badge equipment-tag mecha-tag" });
   return `<div class="badge-row character-tag-row">${tags.map((tag) => `<span class="${tag.className}">${tag.label}</span>`).join("")}</div>`;
 }
 

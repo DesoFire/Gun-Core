@@ -98,7 +98,7 @@ export function createInitialState() {
     organizationName: "Gun Core",
     introSeen: false,
     gold: economyConfig.initialState.gold,
-    supplies: economyConfig.initialState.supplies,
+    debtReliefUsed: false,
     enhancementPoints: 0,
     reputation: 0,
     unpaidSecrecy: { base: 0, mercenaries: {} },
@@ -151,7 +151,8 @@ function normalizeState(savedState) {
   savedState.organizationName ??= "Gun Core";
   savedState.introSeen ??= false;
   savedState.gold ??= economyConfig.initialState.gold;
-  savedState.supplies ??= economyConfig.initialState.supplies;
+  savedState.debtReliefUsed ??= false;
+  delete savedState.supplies;
   savedState.enhancementPoints ??= 0;
   savedState.reputation ??= 0;
   savedState.unpaidSecrecy ??= { base: 0, mercenaries: {} };
@@ -325,6 +326,12 @@ function normalizeItemState(item) {
   item.id ??= createId();
   item.note ??= "";
   item.tags ??= [];
+  if (item.itemCategory === "mecha" || item.slot === "mecha") {
+    item.slot = "mecha";
+    item.itemCategory = "mecha";
+    item.damageType ??= randomItem(economyConfig.blackMarket.mechaDamageTypes ?? ["动能", "电磁", "爆风", "能量"]);
+    item.protectionType ??= randomItem(economyConfig.blackMarket.mechaProtectionTypes ?? ["动能", "电磁", "爆风", "能量"]);
+  }
   return item;
 }
 
@@ -349,9 +356,9 @@ function createEmptyEquipment() {
 
 function normalizeEquipmentSlots(equipment) {
   return {
-    weapon: equipment.weapon ?? null,
-    armor: equipment.armor ?? null,
-    mecha: equipment.mecha ?? null,
+    weapon: equipment.weapon ? normalizeItemState(equipment.weapon) : null,
+    armor: equipment.armor ? normalizeItemState(equipment.armor) : null,
+    mecha: equipment.mecha ? normalizeItemState(equipment.mecha) : null,
   };
 }
 

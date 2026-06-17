@@ -88,7 +88,7 @@ function renderMechaCard(item) {
 }
 
 function renderMechaSummaryLine(item) {
-  return `${item.rarity}级 · 战斗力 +${item.power ?? 0} · 死亡率 -${item.deathRiskReduction ?? 0}% · ${item.role ?? "通用"}`;
+  return `${item.rarity}级 · 战斗力 +${item.power ?? 0} · 伤害 ${item.damageType ?? "未知"} · 防护 ${item.protectionType ?? "未知"} · ${item.role ?? "通用"}`;
 }
 
 function openMechaDetail(id) {
@@ -112,6 +112,8 @@ function openMechaDetail(id) {
         <div class="field-list">
           <div class="field"><span>等级</span><strong>${mecha.rarity}</strong></div>
           <div class="field"><span>战斗力</span><strong>+${mecha.power ?? 0}</strong></div>
+          <div class="field"><span>伤害类型</span><strong>${mecha.damageType ?? "未知"}</strong></div>
+          <div class="field"><span>防护类型</span><strong>${mecha.protectionType ?? "未知"}</strong></div>
           <div class="field"><span>降低死亡率</span><strong>${mecha.deathRiskReduction ?? 0}%</strong></div>
           <div class="field"><span>维护费</span><strong>${mecha.maintenance ?? 0} 金/天</strong></div>
           <div class="field"><span>回收价</span><strong>${sellValue} 金</strong></div>

@@ -3,22 +3,21 @@ import { initRouter } from "./router.js";
 import { getState, resetState, saveState, subscribe, updateState } from "./state.js";
 import { advanceDay } from "../modules/mission.js";
 import {
-  buySupplies,
   buyBlackMarketItem,
-  calculateDailySupplyConsumption,
   calculateDailyExpenseBreakdown,
   calculateSecrecyExpenseItems,
   calculateUnpaidSecrecyReputation,
   canUpgradeFacility,
   getBlackMarketItemCost,
+  getBlackMarketMechaPurchaseRank,
   getFacilityRankLabel,
   getFacilityUpgradeCost,
-  getSupplyPurchaseCost,
   hospitalTreatMercenaries,
   entertainmentCenterTreatMercenaries,
   calculateHospitalTreatmentPlan,
   calculateEntertainmentCenterTreatmentPlan,
   approveSecrecyExpenses,
+  buyEmergencyStealth,
   isSecrecyBillingDay,
   upgradeFacility,
 } from "../modules/faction.js";
@@ -37,6 +36,7 @@ import { calculateCharacterCombatPower, getInjuryState, getPressureState } from 
 
 let router = null;
 let lastRenderedSettlementId = null;
+let lastDebtReliefNoticeId = null;
 
 function init() {
   renderAppShell(document.querySelector("#root"));
@@ -105,6 +105,7 @@ function closeIntro() {
 function renderApp() {
   renderCommandPanel();
   renderResources();
+  renderDebtReliefNotice();
   renderGlobalLog();
   renderSettlementDialog();
   renderOverview();
@@ -201,13 +202,23 @@ function renderResources() {
     ["强化点", state.enhancementPoints ?? 0],
     ["隐秘值", `${state.stealth}/100`],
     ["每日支出", `${dailyExpenses.total} 金`],
-    ["补给库存", `${state.supplies ?? 0}`],
+    ["生活补给", `${dailyExpenses.supplies.total} 金/天`],
     ["待命佣兵", `${summary.availableRoster}/${state.roster.length}`],
     ["执行契约", `${summary.activeMissions}`],
     ["遇袭率", `${Math.max(0, 100 - state.stealth)}%`],
   ]
     .map(([label, value]) => `<div class="base-status-card"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
+}
+
+function renderDebtReliefNotice() {
+  const notice = getState().debtReliefNotice;
+  if (!notice || notice.id === lastDebtReliefNoticeId) return;
+  lastDebtReliefNoticeId = notice.id;
+  showToast(
+    `首次出现负资产，系统补偿 ${notice.compensation} 金。负资产只会让你不能购买；真正失败是隐秘值归零，意味着佣兵组织彻底暴露。`,
+    "warning"
+  );
 }
 
 function openExpenseApprovalDialog() {
@@ -242,8 +253,8 @@ function openExpenseApprovalDialog() {
         <strong>${state.gold}</strong>
       </article>
       <article class="settlement-stat">
-        <span>补给库存</span>
-        <strong>${state.supplies ?? 0}</strong>
+        <span>生活补给</span>
+        <strong>${breakdown.supplies.total} 金/天</strong>
       </article>
       <article class="settlement-stat">
         <span>待命佣兵</span>
@@ -254,7 +265,7 @@ function openExpenseApprovalDialog() {
       <h3>支出模块</h3>
       <div class="compact-field-list">
         <div class="field"><span>佣兵工资</span><strong>${breakdown.wages.total} 金</strong></div>
-        <div class="field"><span>生活补给</span><strong>${calculateDailySupplyConsumption(state)} 份/天</strong></div>
+        <div class="field"><span>生活补给</span><strong>${breakdown.supplies.total} 金/天</strong></div>
         <div class="field"><span>装备养护</span><strong>${breakdown.equipment.total} 金</strong></div>
         <div class="field"><span>设施维持</span><strong>${breakdown.facilities.total + breakdown.base.total} 金</strong></div>
         <div class="field"><span>隐秘费用</span><strong>${secrecyDue ? `${secrecyTotal} 金` : "本日无需支付"}</strong></div>
@@ -345,7 +356,11 @@ function renderSettlementDialog() {
     <section class="dossier-section">
       <h3>事件摘要</h3>
       <p class="muted">${settlement.summaryText}</p>
-      ${settlement.lootName ? `<p class="muted">战利品：${settlement.lootName}</p>` : ""}
+      ${
+        settlement.lootName
+          ? `<p class="muted">战利品：${settlement.lootName}${settlement.lootType || settlement.lootRarity ? `（${[settlement.lootType, settlement.lootRarity ? `${settlement.lootRarity}级` : ""].filter(Boolean).join(" / ")}）` : ""}</p>`
+          : ""
+      }
     </section>
     <section class="dossier-section wide">
       <h3>队员状态</h3>
@@ -401,8 +416,8 @@ function renderExpenses() {
 
   list.innerHTML = [
     renderExpenseCard("佣兵工资", `${breakdown.wages.items.length} 名待命佣兵`, "仅待命佣兵按日支付；执行契约期间暂不支付，归来后补发。", breakdown.wages.items, renderWageExpenseLine, `${breakdown.wages.total} 金`),
-    renderSupplyExpenseSection(state, breakdown.supplies),
-    renderExpenseCard("武器防具养护", `${breakdown.equipment.items.length} 件装备`, "已装备的武器和防具每天都要维护，等级越高费用越高。", breakdown.equipment.items, renderEquipmentExpenseLine, `${breakdown.equipment.total} 金`),
+    renderSupplyExpenseSection(breakdown.supplies),
+    renderExpenseCard("装备养护", `${breakdown.equipment.items.length} 件装备`, "武器、防具和机动兵器无论是否装备都需要维护；机动兵器维护费更高。", breakdown.equipment.items, renderEquipmentExpenseLine, `${breakdown.equipment.total} 金`),
     renderExpenseCard("基础设施维持", `${breakdown.facilities.items.length} 座设施`, "基地基础开销加已解锁设施维持费。", [...breakdown.base.items, ...breakdown.facilities.items], renderFacilityExpenseLine, `${breakdown.base.total + breakdown.facilities.total} 金`),
     renderSecrecyExpenseCard(secrecyItems, unpaidSecrecy, secrecyDue),
   ].join("");
@@ -412,29 +427,15 @@ function renderExpenses() {
       toggleExpenseCard(button.dataset.expenseCard);
     });
   });
-  list.querySelectorAll("[data-buy-supplies]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const requested = window.prompt("输入要购买的补给数量", "10");
-      if (requested == null) return;
-      const quantity = Math.max(0, Math.floor(Number(requested) || 0));
-      if (quantity <= 0) return;
-      const cost = getSupplyPurchaseCost(quantity);
-      if (!confirmGoldSpend(`购买 ${quantity} 份补给`, cost)) return;
-      const before = getState();
-      const ok = buySupplies(quantity);
-      const after = getState();
-      if (!ok || after.gold >= before.gold) {
-        showSpendFailure("购买补给", getGoldFailureReason(before.gold, cost));
-        return;
-      }
-      showSpendSuccess("购买补给", before.gold - after.gold, after.gold);
-      renderApp();
-    });
-  });
+  list.querySelector("[data-buy-emergency-stealth]")?.addEventListener("click", handleEmergencyStealthSpend);
 }
 
 function renderSecrecyExpenseCard(items, unpaidSecrecy, secrecyDue) {
   const total = items.reduce((sum, item) => sum + item.cost, 0);
+  const state = getState();
+  const cost = economyConfig.secrecy.emergencyStealthCost ?? 500;
+  const gain = economyConfig.secrecy.emergencyStealthGain ?? 5;
+  const canBuyEmergency = state.gameStatus === "active" && (state.stealth ?? 0) < 100 && (state.gold ?? 0) >= cost;
   return `
     <section class="expense-card-shell">
       <button class="expense-card-header" data-expense-card="secrecy" type="button">
@@ -450,6 +451,9 @@ function renderSecrecyExpenseCard(items, unpaidSecrecy, secrecyDue) {
             ? "月初结算。可任意勾选支付对象；未支付的声望会永久累计为未遮掩声望，并立即降低隐秘值。"
             : `本日无需结算。当前永久未遮掩声望 ${unpaidSecrecy}，每日遇袭率由隐秘值决定。`
         }</p>
+        <div class="button-row">
+          <button class="primary-button" data-buy-emergency-stealth ${canBuyEmergency ? "" : "disabled"} type="button">紧急隐蔽 · ${cost} 金 / +${gain} 隐秘值</button>
+        </div>
         ${
           secrecyDue && items.length > 0
             ? `<div class="expense-line-list">${items.map(renderSecrecyExpenseLine).join("")}</div>`
@@ -458,6 +462,31 @@ function renderSecrecyExpenseCard(items, unpaidSecrecy, secrecyDue) {
       </div>
     </section>
   `;
+}
+
+function handleEmergencyStealthSpend() {
+  const cost = economyConfig.secrecy.emergencyStealthCost ?? 500;
+  const gain = economyConfig.secrecy.emergencyStealthGain ?? 5;
+  const state = getState();
+  if ((state.stealth ?? 0) >= 100) {
+    showSpendFailure("紧急隐蔽", "隐秘值已满。");
+    return;
+  }
+  if (state.gold < cost) {
+    showInsufficientFunds(state.gold, cost);
+    return;
+  }
+  if (!confirmGoldSpend(`紧急隐蔽：提高 ${gain} 点隐秘值`, cost)) return;
+  const before = getState();
+  const result = buyEmergencyStealth();
+  const after = getState();
+  if (!result.ok) {
+    showSpendFailure("紧急隐蔽", result.reason || "操作没有完成。");
+    return;
+  }
+  showSpendSuccess("紧急隐蔽", before.gold - after.gold, after.gold);
+  showToast(`隐秘值提高 ${result.gain} 点，当前 ${after.stealth}/100。`, "good");
+  renderApp();
 }
 
 function renderSecrecyExpenseLine(item) {
@@ -470,23 +499,18 @@ function renderSecrecyExpenseLine(item) {
   `;
 }
 
-function renderSupplyExpenseSection(state, supplies) {
-  const dailyConsumption = calculateDailySupplyConsumption(state);
-  const daysLeft = dailyConsumption > 0 ? Math.floor((state.supplies ?? 0) / dailyConsumption) : 0;
+function renderSupplyExpenseSection(supplies) {
   return `
     <section class="expense-card-shell">
       <button class="expense-card-header" data-expense-card="supplies" type="button">
         <div>
           <h3>生活补给</h3>
-          <p class="muted">库存 ${state.supplies ?? 0} · 可维持 ${daysLeft} 天</p>
+          <p class="muted">${supplies.items.length} 名在籍佣兵自动结算</p>
         </div>
-        <span class="badge">${dailyConsumption} 份/天</span>
+        <span class="badge">${supplies.total} 金/天</span>
       </button>
       <div class="expense-card-detail" data-expense-detail="supplies" hidden>
-        <p class="muted">库存 ${state.supplies ?? 0}，每日消耗 ${dailyConsumption}，约可维持 ${daysLeft} 天。高等级佣兵消耗更多补给。</p>
-        <div class="button-row">
-          <button class="ghost-button" data-buy-supplies="manual" ${state.gameStatus !== "active" ? "disabled" : ""} type="button">购买补给</button>
-        </div>
+        <p class="muted">生活补给不再囤货，按佣兵评级每日自动折算为金钱支出。高等级佣兵消耗更多。</p>
         ${
           supplies.items.length > 0
             ? `<div class="expense-line-list">${supplies.items.map(renderSupplyExpenseLine).join("")}</div>`
@@ -540,8 +564,8 @@ function renderSupplyExpenseLine(item) {
   return `
     <div class="expense-line">
       <span>${item.name}</span>
-      <small>${item.rank}级 · 生活补给</small>
-      <strong>${item.cost} 份</strong>
+      <small>${item.rank}级 · ${item.amount} 份折算</small>
+      <strong>${item.cost} 金</strong>
     </div>
   `;
 }
@@ -771,16 +795,18 @@ function renderFacilityAction(id, level, cost, disabled) {
   const upgradeButton = renderFacilityUpgradeButton(id, level, cost, disabled);
   if (id === "blackMarket") {
     const rank = getFacilityRankLabel(level);
+    const mechaRank = getBlackMarketMechaPurchaseRank(rank, { allowRare: false });
     const actions = [
       ["weapon", "购买武器"],
       ["armor", "购买防具"],
-      ["mecha", "购买机动兵器"],
+      ...(mechaRank ? [["mecha", "购买机动兵器"]] : []),
     ];
     return actions
       .map(([kind, label]) => {
+        const itemRank = kind === "mecha" ? mechaRank : rank;
         const itemCost = getBlackMarketItemCost(kind, rank);
         const isDisabled = state.gameStatus !== "active" ? "disabled" : "";
-        return `<button class="${kind === "mecha" ? "primary-button" : "ghost-button"}" data-buy-black-market-item="${kind}" ${isDisabled}>${label} · ${rank}级 ${itemCost} 金</button>`;
+        return `<button class="${kind === "mecha" ? "primary-button" : "ghost-button"}" data-buy-black-market-item="${kind}" ${isDisabled}>${label} · ${itemRank}级 ${itemCost} 金</button>`;
       })
       .join("") + upgradeButton;
   }
@@ -814,7 +840,12 @@ function openFacilityDialog(id) {
   const canUpgrade = (isStackedDefense || level < 7) && canUpgradeFacility(id);
   const nextRank = getFacilityRankLabel(Math.min(level + 1, 7));
   const specialText = {
-    blackMarket: `只能买到当前黑市评级的商品。当前可购买 ${rank}级补给、武器、防具与机动兵器。`,
+    blackMarket: (() => {
+      const mechaRank = getBlackMarketMechaPurchaseRank(rank, { allowRare: false });
+      return mechaRank
+        ? `只能买到当前黑市评级的常规武器与防具。机动兵器从 C级黑市解锁，当前常规货源为 ${mechaRank}级，极低概率出现更高级机体。`
+        : `只能买到当前黑市评级的常规武器与防具。机动兵器需要 C级及以上黑市。`;
+    })(),
     hospital: (() => {
       const plan = calculateHospitalTreatmentPlan(state);
       return `按单个佣兵身上的单个物理负面状态收费。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点伤势标签。`;

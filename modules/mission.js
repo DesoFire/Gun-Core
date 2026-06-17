@@ -17,7 +17,7 @@ import {
 import { getAllTrainingSkills } from "../data/trainingPools.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { getState, updateState } from "../js/state.js";
-import { calculateDailySupplyConsumption, calculateUnpaidSecrecyReputation, identityFee, payDailyUpkeep } from "./faction.js";
+import { calculateUnpaidSecrecyReputation, createRankedMecha, identityFee, payDailyUpkeep } from "./faction.js";
 import { evaluateGameOverDraft } from "./game.js";
 import { calculateEffectiveCharacterCombatPower, calculateTeamCombatPower, getInjuryState, getPressureState, getPromotionCombatPowerGain } from "./combatPower.js";
 import { clamp, createId, randomItem, randomNumber } from "../js/utils.js";
@@ -194,7 +194,6 @@ export function advanceDay() {
     draft.day += 1;
     resolveBaseRaidDraft(draft);
     payDailyUpkeep(draft);
-    draft.supplies = Math.max(0, draft.supplies - calculateDailySupplyConsumption(draft));
     draft.missions
       .filter((mission) => mission.status === "active")
       .forEach((mission) => {
@@ -209,10 +208,6 @@ export function advanceDay() {
     draft.missions = draft.missions.filter((mission) => mission.status !== "available" || mission.expiresDay >= draft.day);
 
     refillAvailableMissionsDraft(draft);
-
-    if (draft.supplies === 0) {
-      draft.log.push(`第 ${draft.day} 天：补给耗尽，基地运作进入危险状态。`);
-    }
 
     evaluateGameOverDraft(draft);
   });
@@ -329,7 +324,7 @@ function resolveMissionDraft(draft, mission) {
     reputationDelta = -reputationLoss * (team.length + 1);
     applyMissionReputationLossDraft(draft, team.filter((character) => character.status !== "阵亡"), reputationLoss);
     if (outcome.reputationDelta > 0) distributeMissionReputationDraft(draft, team.filter((character) => character.status !== "阵亡"), outcome.reputationDelta);
-    draft.gold = Math.max(0, draft.gold + outcome.goldDelta);
+    draft.gold += outcome.goldDelta;
     draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，伤亡风险上升。${outcome.text}${mechaMismatch ? " 敌方机动兵器把现场变成了账单粉碎机。" : ""}`);
   }
 
@@ -366,6 +361,8 @@ function resolveMissionDraft(draft, mission) {
     reputationDelta: (finalBaseReputation - initialBaseReputation) + memberReputationDelta,
     remainingGold: draft.gold ?? 0,
     lootName: loot?.name ?? "",
+    lootType: loot ? formatLootItemType(loot.itemCategory ?? loot.slot) : "",
+    lootRarity: loot?.rarity ?? "",
     summaryText: `${outcome.text}${mechaMismatch ? " 敌方存在机动兵器，我方未部署机动兵器，成功率与伤亡率均受到显著惩罚。" : ""}`,
     members: settlementMembers,
   };
@@ -400,27 +397,27 @@ function settleReturningWagesDraft(draft, mission, returningTeam) {
 
 function resolveBaseRaidDraft(draft) {
   const unpaidReputation = calculateUnpaidSecrecyReputation(draft);
+  const raidPressure = unpaidReputation + Math.max(0, draft.reputation ?? 0);
   const config = economyConfig.baseRaid;
-  if (unpaidReputation < config.minUnpaidReputationForRaid) return;
   const raidChance = clamp(100 - (draft.stealth ?? 0), 0, 100);
   if (raidChance <= 0 || randomNumber(1, 100) > raidChance) return;
 
   const defenders = draft.roster.filter((character) => character.status === "待命");
-  const difficulty = calculateRaidDifficulty(unpaidReputation);
+  const difficulty = calculateRaidDifficulty(raidPressure);
   if (defenders.length === 0) {
     applyBaseRaidFailureDraft(draft, difficulty, "无人留守");
     return;
   }
 
   randomlyEquipDefendersDraft(draft, defenders);
-  const powerRequirement = calculateMissionPowerRequirement(difficulty, unpaidReputation);
+  const powerRequirement = calculateMissionPowerRequirement(difficulty, raidPressure);
   const mission = createMission({
     difficulty,
     powerRequirement,
     duration: 1,
     rewardMultiplier: 1,
     recommendedTeamSize: { min: 1, max: 4 },
-    requirements: createMissionRequirements(),
+    requirements: createMissionRequirements(difficulty),
   });
   mission.name = "基地暴露袭击";
   mission.powerRequirement = powerRequirement;
@@ -467,18 +464,48 @@ function resolveBaseRaidDraft(draft) {
   applyBaseRaidFailureDraft(draft, difficulty, "防守失败");
 }
 
-function calculateRaidDifficulty(unpaidReputation) {
+function calculateRaidDifficulty(raidPressure) {
   const config = economyConfig.baseRaid;
-  return clamp(Math.ceil(unpaidReputation / config.unpaidReputationPerDifficulty), config.minDifficulty, config.maxDifficulty);
+  const reputationPressure = Math.max(config.minUnpaidReputationForRaid ?? 1, raidPressure);
+  return clamp(Math.ceil(reputationPressure / config.unpaidReputationPerDifficulty), config.minDifficulty, config.maxDifficulty);
 }
 
 function calculateBaseDefensePower(draft) {
   return (draft.facilities?.defenses ?? 0) * economyConfig.facilities.defensePowerPerLevel;
 }
 
-function getMissionRank(difficulty = 1) {
+export function getMissionRank(missionOrDifficulty = 1) {
+  if (typeof missionOrDifficulty === "number") return getMissionRankByDifficulty(missionOrDifficulty);
+  const mission = missionOrDifficulty ?? {};
+  const averagePower = getMissionAveragePowerRequirement(mission);
+  return getRankByAveragePowerRequirement(averagePower);
+}
+
+export function getMissionAveragePowerRequirement(mission) {
+  const teamSize = getMissionRankTeamSize(mission);
+  return Math.max(1, Math.round((mission.powerRequirement ?? 1) / teamSize));
+}
+
+function getMissionRankByDifficulty(difficulty = 1) {
   const ranks = ["F", "F", "E", "D", "C", "B", "A", "S"];
   return ranks[Math.max(0, Math.min(ranks.length - 1, difficulty))] ?? "F";
+}
+
+function getMissionRankTeamSize(mission) {
+  const teamSize = mission.recommendedTeamSize ?? {};
+  return Math.max(1, teamSize.max ?? teamSize.min ?? 1);
+}
+
+function getRankByAveragePowerRequirement(averagePower) {
+  const templates = economyConfig.recruitment.rankTemplates ?? {};
+  const ranks = ["F", "E", "D", "C", "B", "A", "S"];
+  let selected = "F";
+  ranks.forEach((rank) => {
+    const range = templates[rank]?.combatPower;
+    if (!Array.isArray(range)) return;
+    if (averagePower >= range[0]) selected = rank;
+  });
+  return selected;
 }
 
 function rollCombatLootDraft(draft, mission, sourceLabel = "契约", team = []) {
@@ -488,14 +515,59 @@ function rollCombatLootDraft(draft, mission, sourceLabel = "契约", team = []) 
   const chance = clamp(baseChance + Math.max(0, (mission.difficulty ?? 1) - 1) * perDifficulty + getLootChanceBonus(team), 0, 100);
   if (randomNumber(1, 100) > chance) return null;
 
-  const rarity = getMissionRank(mission.difficulty ?? 1);
-  const isWeapon = randomNumber(1, 100) <= (config.weaponChance ?? 50);
-  const item = isWeapon ? generateWeaponItem({ rarity }) : generateArmorItem({ rarity });
+  const baseRank = getMissionRank(mission);
+  const rarity = rollLootRank(baseRank);
+  const itemType = rollLootItemType(mission, config);
+  const item =
+    itemType === "mecha"
+      ? createRankedMecha(rarity)
+      : itemType === "armor"
+        ? generateArmorItem({ rarity })
+        : generateWeaponItem({ rarity });
   item.source = sourceLabel;
   item.originalPrice = estimateCombatLootOriginalPrice(item);
   draft.inventory.unshift(item);
-  draft.log.push(`第 ${draft.day} 天：${sourceLabel}结束后回收战利品「${item.name}」（${rarity}级）。`);
+  draft.log.push(`第 ${draft.day} 天：${sourceLabel}结束后回收战利品「${item.name}」（${formatLootItemType(itemType)} / ${rarity}级）。`);
   return item;
+}
+
+function rollLootRank(baseRank) {
+  const ranks = ["F", "E", "D", "C", "B", "A", "S"];
+  const index = Math.max(0, ranks.indexOf(baseRank));
+  const candidates = ranks.slice(Math.max(0, index - 1), Math.min(ranks.length, index + 2));
+  return randomItem(candidates.length ? candidates : ["F"]);
+}
+
+function rollLootItemType(mission, config) {
+  const hasEnemyMecha = Boolean(mission.requirements?.enemyMecha);
+  if (hasEnemyMecha) {
+    return rollWeightedLootType([
+      ["mecha", config.mechaChanceWhenEnemyMecha ?? 10],
+      ["armor", config.armorChanceWhenEnemyMecha ?? 45],
+      ["weapon", config.weaponChanceWhenEnemyMecha ?? 45],
+    ]);
+  }
+  return rollWeightedLootType([
+    ["weapon", config.weaponChance ?? 50],
+    ["armor", config.armorChance ?? 50],
+  ]);
+}
+
+function rollWeightedLootType(entries) {
+  const total = entries.reduce((sum, [, weight]) => sum + Math.max(0, weight ?? 0), 0);
+  if (total <= 0) return "weapon";
+  let roll = randomNumber(1, total);
+  for (const [type, weight] of entries) {
+    roll -= Math.max(0, weight ?? 0);
+    if (roll <= 0) return type;
+  }
+  return entries.at(-1)?.[0] ?? "weapon";
+}
+
+function formatLootItemType(type) {
+  if (type === "mecha") return "机动兵器";
+  if (type === "armor") return "防具";
+  return "武器";
 }
 
 function estimateCombatLootOriginalPrice(item) {
@@ -503,6 +575,7 @@ function estimateCombatLootOriginalPrice(item) {
   const config = economyConfig.blackMarket;
   if (item.itemCategory === "weapon" || item.slot === "weapon") return (config.baseCost.weapon ?? 58) + rankIndex * (config.perRank.weapon ?? 14);
   if (item.itemCategory === "armor" || item.slot === "armor") return (config.baseCost.armor ?? 46) + rankIndex * (config.perRank.armor ?? 14);
+  if (item.itemCategory === "mecha" || item.slot === "mecha") return (config.baseCost.mecha ?? 150) + rankIndex * (config.perRank.mecha ?? 45);
   return config.baseCost.fallback ?? 40;
 }
 
@@ -525,7 +598,7 @@ function applyBaseRaidFailureDraft(draft, difficulty, reason) {
   const rewardConfig = economyConfig.missions.reward;
   const raidConfig = economyConfig.baseRaid;
   const goldLoss = Math.min(
-    draft.gold,
+    Math.max(0, draft.gold),
     rewardConfig.baseGold + difficulty * randomNumber(rewardConfig.goldPerDifficultyMin, rewardConfig.goldPerDifficultyMax)
   );
   const stealthLoss = randomNumber(raidConfig.failureStealthLossMin, raidConfig.failureStealthLossMax);
@@ -954,7 +1027,11 @@ function chooseMentalConditionSeverity(gap, difficulty, success) {
 
 function hasMatchingArmor(character, damageTypes) {
   const armor = character.equipment?.armor;
-  return Boolean(armor?.protectionType && damageTypes.includes(armor.protectionType));
+  const mecha = character.equipment?.mecha;
+  return Boolean(
+    (armor?.protectionType && damageTypes.includes(armor.protectionType)) ||
+      (mecha?.protectionType && damageTypes.includes(mecha.protectionType))
+  );
 }
 
 function distributeMissionReputationDraft(draft, team, reputation) {
