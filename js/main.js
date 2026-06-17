@@ -58,11 +58,15 @@ function bindGlobalActions() {
   document.querySelector("#organization-name").addEventListener("click", editOrganizationName);
   initGlobalLogSidebar();
   initBaseStatusSidebar();
+  initHelpSidebar();
   document.querySelector("#global-log-close").addEventListener("click", () => {
     closeGlobalLogSidebar();
   });
   document.querySelector("#base-status-close").addEventListener("click", () => {
     closeBaseStatusSidebar();
+  });
+  document.querySelector("#help-close").addEventListener("click", () => {
+    closeHelpSidebar();
   });
   document.querySelector("#settlement-close").addEventListener("click", closeSettlementDialog);
   document.querySelector("#expense-approval-close").addEventListener("click", closeExpenseApprovalDialog);
@@ -132,7 +136,10 @@ function initGlobalLogSidebar() {
     const isOpen = sidebar?.classList.toggle("open");
     if (sidebar) sidebar.hidden = !isOpen;
     toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    if (isOpen) closeBaseStatusSidebar();
+    if (isOpen) {
+      closeBaseStatusSidebar();
+      closeHelpSidebar();
+    }
   });
 }
 
@@ -150,7 +157,10 @@ function initBaseStatusSidebar() {
     const isOpen = sidebar?.classList.toggle("open");
     if (sidebar) sidebar.hidden = !isOpen;
     toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    if (isOpen) closeGlobalLogSidebar();
+    if (isOpen) {
+      closeGlobalLogSidebar();
+      closeHelpSidebar();
+    }
   });
 }
 
@@ -159,6 +169,27 @@ function closeBaseStatusSidebar() {
   sidebar?.classList.remove("open");
   if (sidebar) sidebar.hidden = true;
   document.querySelector("#base-status-toggle")?.setAttribute("aria-expanded", "false");
+}
+
+function initHelpSidebar() {
+  const toggle = document.querySelector("#help-toggle");
+  toggle?.addEventListener("click", () => {
+    const sidebar = document.querySelector("#help-sidebar");
+    const isOpen = sidebar?.classList.toggle("open");
+    if (sidebar) sidebar.hidden = !isOpen;
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    if (isOpen) {
+      closeGlobalLogSidebar();
+      closeBaseStatusSidebar();
+    }
+  });
+}
+
+function closeHelpSidebar() {
+  const sidebar = document.querySelector("#help-sidebar");
+  sidebar?.classList.remove("open");
+  if (sidebar) sidebar.hidden = true;
+  document.querySelector("#help-toggle")?.setAttribute("aria-expanded", "false");
 }
 
 function renderGlobalLog() {
