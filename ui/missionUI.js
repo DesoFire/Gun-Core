@@ -217,6 +217,7 @@ function isIntelRevealed(mission, key) {
 function renderMissionSummaryIntel(mission) {
   const chips = [];
   if (isIntelRevealed(mission, "damageTypes")) chips.push(`敌伤：${formatRequirementValue(mission, "damageTypes")}`);
+  if (isIntelRevealed(mission, "enemyMecha")) chips.push(`机动兵器：${formatRequirementValue(mission, "enemyMecha")}`);
   if (isIntelRevealed(mission, "skillTags")) chips.push(`能力：${formatRequirementValue(mission, "skillTags")}`);
   if (isIntelRevealed(mission, "weaponTypes")) chips.push(`武器：${formatRequirementValue(mission, "weaponTypes")}`);
   if (isIntelRevealed(mission, "teamSize")) chips.push(`人数：${formatRequirementValue(mission, "teamSize")}`);
@@ -246,6 +247,7 @@ function renderDifficultyBadge(difficulty = 1) {
 function formatRequirementValue(mission, key) {
   const requirements = mission.requirements || {};
   if (key === "damageTypes") return (requirements.damageTypes || []).join(" / ") || "未知";
+  if (key === "enemyMecha") return requirements.enemyMecha ? "确认存在" : "未发现";
   if (key === "skillTags") return formatSkillTagRequirements(requirements.skillTags);
   if (key === "weaponTypes") return (requirements.weaponTypes || []).join(" / ") || "未知";
   if (key === "teamSize") {
@@ -263,6 +265,7 @@ function formatSkillTagRequirements(tags = []) {
 function getIntelHint(key) {
   const hints = {
     damageTypes: "敌方伤害类型。携带对应防具可降低风险。",
+    enemyMecha: "敌方是否部署机动兵器。若我方没有对应机体，成功率与伤亡率都会很难看。",
     skillTags: "推荐小队拥有的训练技能标签。",
     weaponTypes: "推荐武器或伤害方向。",
     teamSize: "推荐小队人数区间。",

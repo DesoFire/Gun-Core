@@ -1,6 +1,7 @@
 export const equipmentSlots = {
   weapon: "武器",
   armor: "防具",
+  mecha: "机动兵器",
 };
 
 export const facilities = {
@@ -197,11 +198,13 @@ export const mentalConditions = [
 export const missionRequirementPool = {
   weaponTypes: ["步枪", "霰弹", "手枪", "狙击", "近战", "爆破", "医疗器械", "电子战"],
   damageTypes: ["动能", "腐蚀", "电磁", "爆风", "能量", "燃烧", "异源", "切割"],
-  skillTags: ["战斗", "情报", "后勤", "生存", "机师", "特殊"],
+  skillTags: ["战斗", "情报", "后勤", "生存", "机师"],
+  enemyMecha: [false, true],
 };
 
 export const missionIntelFields = [
   { key: "damageTypes", label: "敌方伤害", type: "requirement" },
+  { key: "enemyMecha", label: "敌方机动兵器", type: "requirement" },
   { key: "skillTags", label: "推荐能力", type: "requirement" },
   { key: "weaponTypes", label: "推荐武器", type: "requirement" },
   { key: "teamSize", label: "需求人数", type: "planning" },
@@ -209,6 +212,7 @@ export const missionIntelFields = [
 
 export const missionIntelPool = {
   damageTypes: ["敌方火力以动能弹药为主", "现场有燃烧武器痕迹", "电磁脉冲设备活跃", "爆风伤害风险较高", "可能接触异源污染"],
+  enemyMecha: ["未发现敌方机动兵器", "可能存在轻型机动兵器", "确认存在敌方机动兵器", "敌方机动兵器活动频繁"],
   skillTags: ["\u9700\u8981\u6218\u6597\u8bad\u7ec3\u6807\u7b7e\u538b\u4f4f\u6b63\u9762\u51b2\u7a81", "\u9700\u8981\u60c5\u62a5\u8bad\u7ec3\u6807\u7b7e\u62c6\u89e3\u4e0d\u786e\u5b9a\u6027", "\u9700\u8981\u540e\u52e4\u8bad\u7ec3\u6807\u7b7e\u63a7\u5236\u635f\u8017", "\u9700\u8981\u751f\u5b58\u8bad\u7ec3\u6807\u7b7e\u627f\u62c5\u64a4\u79bb\u98ce\u9669", "\u5efa\u8bae\u6218\u6597\u4e0e\u60c5\u62a5\u8bad\u7ec3\u6df7\u7f16"],
   weaponTypes: ["建议携带步枪或狙击武器", "建议携带爆破装备", "建议携带近战或霰弹武器", "建议携带电子战装备", "建议携带医疗器械"],
   teamSize: ["建议小队人数偏少，避免暴露", "建议标准小队进入", "建议满编小队执行", "人数过少会明显提高失败风险"],

@@ -67,7 +67,7 @@ export function createMission(options = {}) {
   const name = `${type.name}契约：${randomMissionSubject(type)}`;
   const powerRequirement = options.powerRequirement ?? calculateMissionPowerRequirement(difficulty, state.reputation ?? 0);
   const recommendedTeamSize = options.recommendedTeamSize ?? createRecommendedTeamSize(difficulty);
-  const requirements = options.requirements ?? createMissionRequirements();
+  const requirements = options.requirements ?? createMissionRequirements(difficulty);
 
   return {
     id: createId(),
@@ -267,6 +267,7 @@ function resolveMissionDraft(draft, mission) {
   const chance = fit.chance;
   const success = randomNumber(1, 100) <= chance;
   const team = draft.roster.filter((character) => mission.assigned.includes(character.id));
+  const mechaMismatch = hasEnemyMechaMismatch(team, mission);
   const initialGold = draft.gold ?? 0;
   const initialBaseReputation = draft.reputation ?? 0;
   const memberSnapshots = new Map(
@@ -285,8 +286,8 @@ function resolveMissionDraft(draft, mission) {
     character.missionRecord.survived += 1;
     if (success) character.missionRecord.completed += 1;
     if (!success) character.missionRecord.failed += 1;
-    const deathRisk = calculateDeathRisk(gap, mission.difficulty, character, team, success);
-    const woundRisk = calculateWoundRisk(gap, mission.difficulty, success, team);
+    const deathRisk = calculateDeathRisk(gap, mission.difficulty, character, team, success, { mechaMismatch });
+    const woundRisk = calculateWoundRisk(gap, mission.difficulty, success, team, { mechaMismatch });
     const mentalRisk = calculateMentalConditionRisk(gap, mission.difficulty, success, team);
     if (randomNumber(1, 100) <= deathRisk) {
       character.status = "阵亡";
@@ -321,7 +322,7 @@ function resolveMissionDraft(draft, mission) {
     reputationDelta = reputation;
     distributeMissionReputationDraft(draft, team.filter((character) => character.status !== "阵亡"), reputation);
     draft.gold += gold;
-    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」成功。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，获得 ${gold} 金，队员瓜分 ${reputation} 声望。${outcome.text}`);
+    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」成功。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，获得 ${gold} 金，队员瓜分 ${reputation} 声望。${outcome.text}${mechaMismatch ? " 敌方机动兵器造成额外压制。" : ""}`);
     loot = rollCombatLootDraft(draft, mission, `契约「${mission.name}」`, team);
   } else {
     const reputationLoss = calculateMissionReputationLoss(mission, team.length);
@@ -329,7 +330,7 @@ function resolveMissionDraft(draft, mission) {
     applyMissionReputationLossDraft(draft, team.filter((character) => character.status !== "阵亡"), reputationLoss);
     if (outcome.reputationDelta > 0) distributeMissionReputationDraft(draft, team.filter((character) => character.status !== "阵亡"), outcome.reputationDelta);
     draft.gold = Math.max(0, draft.gold + outcome.goldDelta);
-    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，伤亡风险上升。${outcome.text}`);
+    draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，伤亡风险上升。${outcome.text}${mechaMismatch ? " 敌方机动兵器把现场变成了账单粉碎机。" : ""}`);
   }
 
   settleReturningWagesDraft(draft, mission, team.filter((character) => character.status !== "阵亡"));
@@ -365,7 +366,7 @@ function resolveMissionDraft(draft, mission) {
     reputationDelta: (finalBaseReputation - initialBaseReputation) + memberReputationDelta,
     remainingGold: draft.gold ?? 0,
     lootName: loot?.name ?? "",
-    summaryText: outcome.text,
+    summaryText: `${outcome.text}${mechaMismatch ? " 敌方存在机动兵器，我方未部署机动兵器，成功率与伤亡率均受到显著惩罚。" : ""}`,
     members: settlementMembers,
   };
 
@@ -433,8 +434,9 @@ function resolveBaseRaidDraft(draft) {
   const enemyDamageTypes = mission.requirements?.damageTypes ?? [];
 
   defenders.forEach((character) => {
-    const deathRisk = calculateDeathRisk(gap, difficulty, character, defenders, success);
-    const woundRisk = calculateWoundRisk(gap, difficulty, success, defenders);
+    const mechaMismatch = hasEnemyMechaMismatch(defenders, mission);
+    const deathRisk = calculateDeathRisk(gap, difficulty, character, defenders, success, { mechaMismatch });
+    const woundRisk = calculateWoundRisk(gap, difficulty, success, defenders, { mechaMismatch });
     const mentalRisk = calculateMentalConditionRisk(gap, difficulty, success, defenders);
     if (randomNumber(1, 100) <= deathRisk) {
       character.status = "阵亡";
@@ -507,7 +509,8 @@ function estimateCombatLootOriginalPrice(item) {
 function randomlyEquipDefendersDraft(draft, defenders) {
   const pool = [...(draft.inventory ?? [])].sort(() => Math.random() - 0.5);
   defenders.forEach((character) => {
-    ["weapon", "armor"].forEach((slot) => {
+    ["weapon", "armor", "mecha"].forEach((slot) => {
+      if (slot === "mecha" && !hasPilotTag(character)) return;
       const index = pool.findIndex((item) => item.slot === slot || item.itemCategory === slot);
       if (index < 0) return;
       const [item] = pool.splice(index, 1);
@@ -577,13 +580,16 @@ function evaluateMissionFitFromRoster(roster, facilities, memberIds, mission, op
   const sizePenalty = Math.max(0, rawSizePenalty - getTeamSizePenaltyReduction(team, rawSizePenalty));
   const equipmentBonus = calculateEquipmentFitBonus(team, mission);
   const skillFit = calculateSkillTagFit(team, mission);
+  const mechaPenalty = hasEnemyMechaMismatch(team, mission)
+    ? economyConfig.missions.mechaThreat.noFriendlyMechaChancePenalty
+    : 0;
   const unlockedIntelBonus = (mission.revealedIntel?.length ?? 0) * 2 + (mission.powerIntelLevel ?? 0);
   const intelBonus = 0;
   const skillEffectBonus = getTeamMissionChanceBonus(team, mission, {
     fullSkillMatch: skillFit.missing === 0 && (mission.requirements?.skillTags ?? []).length > 0,
   });
   const chance = clamp(
-    powerChance + equipmentBonus + skillFit.bonus + unlockedIntelBonus + intelBonus + skillEffectBonus - sizePenalty - skillFit.penalty,
+    powerChance + equipmentBonus + skillFit.bonus + unlockedIntelBonus + intelBonus + skillEffectBonus - sizePenalty - skillFit.penalty - mechaPenalty,
     2,
     98
   );
@@ -598,6 +604,7 @@ function evaluateMissionFitFromRoster(roster, facilities, memberIds, mission, op
     matchingDamageTypes: countMatchingEquipmentTags(team, mission.requirements?.damageTypes ?? []),
     matchingSkillTags: skillFit.matched,
     skillTagPenalty: skillFit.penalty,
+    mechaPenalty,
     unlockedIntelBonus,
     intelBonus,
     skillEffectBonus,
@@ -638,6 +645,26 @@ function calculateSkillTagFit(team, mission) {
 
 function getCharacterSkillTags(character) {
   return (character.skills ?? []).flatMap((skill) => skill.tags ?? []);
+}
+
+function hasPilotTag(character) {
+  return getCharacterSkillTags(character).includes("机师");
+}
+
+function hasEquippedMecha(character) {
+  return Boolean(character.equipment?.mecha);
+}
+
+function missionHasEnemyMecha(mission) {
+  return Boolean(mission.requirements?.enemyMecha);
+}
+
+function teamHasMecha(team) {
+  return team.some(hasEquippedMecha);
+}
+
+function hasEnemyMechaMismatch(team, mission) {
+  return missionHasEnemyMecha(mission) && !teamHasMecha(team);
 }
 
 function countMatchingEquipmentTags(team, wantedTags) {
@@ -683,14 +710,18 @@ function createRecommendedTeamSize(difficulty) {
   return { min: 3, max: 4 };
 }
 
-function createMissionRequirements() {
+function createMissionRequirements(difficulty = 1) {
   const weaponTypeCount = randomNumber(1, 2);
   const damageTypeCount = randomNumber(1, 2);
   const skillTagCount = randomNumber(1, 100) <= 35 ? 2 : 1;
+  const mechaConfig = economyConfig.missions.mechaThreat ?? {};
+  const chanceTable = mechaConfig.enemyPresenceChanceByDifficulty ?? [];
+  const enemyMechaChance = chanceTable[Math.max(0, Math.min(chanceTable.length - 1, difficulty))] ?? 0;
   return {
     weaponTypes: drawUniqueRequirements(missionRequirementPool.weaponTypes, weaponTypeCount),
     damageTypes: drawUniqueRequirements(missionRequirementPool.damageTypes, damageTypeCount),
     skillTags: drawUniqueRequirements(missionRequirementPool.skillTags, skillTagCount),
+    enemyMecha: randomNumber(1, 100) <= enemyMechaChance,
   };
 }
 
@@ -725,6 +756,7 @@ function normalizeMissionPlanningFields(mission) {
   mission.requirements.weaponTypes ??= [];
   mission.requirements.damageTypes ??= [];
   mission.requirements.skillTags ??= mission.requirements.careerCategories ?? [];
+  mission.requirements.enemyMecha ??= false;
   delete mission.requirements.careerCategories;
   delete mission.requirements.tags;
 }
@@ -733,10 +765,11 @@ function calculateMissionChanceFromPower(gap) {
   return clamp(Math.round(55 + gap * 3), 5, 96);
 }
 
-function calculateWoundRisk(gap, difficulty, success, team = []) {
+function calculateWoundRisk(gap, difficulty, success, team = [], context = {}) {
   const base = success ? 18 : 34;
   const skillModifier = averageTeamModifier(team, (character) => getWoundRiskModifier(character, team, { difficulty, success }));
-  return clamp(Math.round(base + difficulty * 4 - gap * 1.4 + skillModifier), 4, 88);
+  const mechaPenalty = context.mechaMismatch ? economyConfig.missions.mechaThreat.noFriendlyMechaWoundRiskPenalty : 0;
+  return clamp(Math.round(base + difficulty * 4 - gap * 1.4 + skillModifier + mechaPenalty), 4, 95);
 }
 
 function calculateMentalConditionRisk(gap, difficulty, success, team = []) {
@@ -746,17 +779,18 @@ function calculateMentalConditionRisk(gap, difficulty, success, team = []) {
   return clamp(Math.round(raw), 1, 75);
 }
 
-function calculateDeathRisk(gap, difficulty, character, team = [], success = true) {
+function calculateDeathRisk(gap, difficulty, character, team = [], success = true, context = {}) {
   const armorReduction = getArmorDeathRiskReduction(character);
   const conditionRisk = getConditionDeathRiskModifier(character);
   const skillModifier = getDeathRiskModifier(character, team, { difficulty, success });
-  return clamp(Math.round(1 + difficulty * 2 - gap * 0.6 + conditionRisk - armorReduction + skillModifier), 1, 65);
+  const mechaPenalty = context.mechaMismatch ? economyConfig.missions.mechaThreat.noFriendlyMechaDeathRiskPenalty : 0;
+  return clamp(Math.round(1 + difficulty * 2 - gap * 0.6 + conditionRisk - armorReduction + skillModifier + mechaPenalty), 1, 85);
 }
 
 function getArmorDeathRiskReduction(character) {
   const armor = character.equipment?.armor;
-  if (!armor) return 0;
-  return armor.deathRiskReduction ?? 0;
+  const mecha = character.equipment?.mecha;
+  return (armor?.deathRiskReduction ?? 0) + (mecha?.deathRiskReduction ?? 0);
 }
 
 function getConditionDeathRiskModifier(character) {

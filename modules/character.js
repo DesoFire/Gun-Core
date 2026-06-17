@@ -133,6 +133,7 @@ export function unequipItem(characterId, slot) {
 export function canEquipItemToSlot(item, slot) {
   if (slot === "weapon") return item.itemCategory === "weapon" || item.slot === "weapon";
   if (slot === "armor") return item.itemCategory === "armor" || item.slot === "armor";
+  if (slot === "mecha") return item.itemCategory === "mecha" || item.slot === "mecha";
   return false;
 }
 
@@ -227,9 +228,14 @@ export function dismissMercenary(characterId, options = {}) {
 }
 
 function canCharacterUseSlot(character, slot) {
+  if (slot === "mecha") return hasPilotTag(character);
   if (slot !== "weapon") return true;
   const limbs = new Set((character.conditions ?? []).map((condition) => condition.limb).filter(Boolean));
   return !(limbs.has("leftArm") && limbs.has("rightArm"));
+}
+
+function hasPilotTag(character) {
+  return (character.skills ?? []).some((skill) => (skill.tags ?? []).includes("机师"));
 }
 
 function isDeadStatus(status) {
@@ -400,6 +406,7 @@ function normalizeEquipmentSlots(equipment) {
   return {
     weapon: equipment.weapon ?? null,
     armor: equipment.armor ?? null,
+    mecha: equipment.mecha ?? null,
   };
 }
 

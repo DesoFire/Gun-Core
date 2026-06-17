@@ -774,7 +774,7 @@ function renderFacilityAction(id, level, cost, disabled) {
     const actions = [
       ["weapon", "购买武器"],
       ["armor", "购买防具"],
-      ["mecha", "购买机甲"],
+      ["mecha", "购买机动兵器"],
     ];
     return actions
       .map(([kind, label]) => {
@@ -814,7 +814,7 @@ function openFacilityDialog(id) {
   const canUpgrade = (isStackedDefense || level < 7) && canUpgradeFacility(id);
   const nextRank = getFacilityRankLabel(Math.min(level + 1, 7));
   const specialText = {
-    blackMarket: `只能买到当前黑市评级的商品。当前可购买 ${rank}级补给、武器、防具与机甲。`,
+    blackMarket: `只能买到当前黑市评级的商品。当前可购买 ${rank}级补给、武器、防具与机动兵器。`,
     hospital: (() => {
       const plan = calculateHospitalTreatmentPlan(state);
       return `按单个佣兵身上的单个物理负面状态收费。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点伤势标签。`;
@@ -940,16 +940,16 @@ function handleFacilityUpgradeSpend(button) {
 
 function handleBlackMarketSpend(button) {
   const kind = button.dataset.buyBlackMarketItem;
-  const labels = { weapon: "黑市购买武器", armor: "黑市购买防具", mecha: "黑市购买机甲" };
+  const labels = { weapon: "黑市购买武器", armor: "黑市购买防具", mecha: "黑市购买机动兵器" };
   const action = labels[kind] ?? "黑市采购";
   const cost = getCostFromText(button.textContent);
   if (!confirmGoldSpend(action, cost)) return false;
   const before = getState();
-  const beforeCount = kind === "mecha" ? before.mechs.length : before.inventory.length;
+  const beforeCount = before.inventory.length;
   const beforeGold = before.gold;
   buyBlackMarketItem(kind);
   const after = getState();
-  const afterCount = kind === "mecha" ? after.mechs.length : after.inventory.length;
+  const afterCount = after.inventory.length;
   if (afterCount <= beforeCount || after.gold >= beforeGold) {
     showSpendFailure(action, getGoldFailureReason(beforeGold, cost));
     return false;

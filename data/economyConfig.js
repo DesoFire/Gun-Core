@@ -60,6 +60,15 @@ export const economyConfig = {
       // 掉落时生成武器的概率；剩余概率生成防具。
       weaponChance: 50,
     },
+    mechaThreat: {
+      // 敌方机动兵器出现率。按契约难度读取，下标 0 不使用，1=F级低难，8=S级高难。
+      enemyPresenceChanceByDifficulty: [0, 4, 8, 14, 22, 32, 45, 58, 72],
+      // 敌方有机动兵器，而我方没有出动机动兵器时，直接扣减成功率。
+      noFriendlyMechaChancePenalty: 30,
+      // 同一情况下，额外提高死亡率与物理伤病概率。
+      noFriendlyMechaDeathRiskPenalty: 14,
+      noFriendlyMechaWoundRiskPenalty: 26,
+    },
     reputationFailure: {
       // 契约失败时每个实体扣除的声望：floor(successReputation * rate / (teamSize + 1))。
       // 这里按“单体扣除 * (n+1) < 成功声望池”设计，避免一次失败扣掉超过成功收益的总声望。
@@ -175,6 +184,7 @@ export const economyConfig = {
       // 武器/防具养护费：base + rankIndex * perRank。
       weaponBase: 2,
       armorBase: 1,
+      mechaBase: 20,
       perRank: 2,
     },
   },
@@ -254,11 +264,11 @@ export const economyConfig = {
     hospitalTreatment: {
       maxPointsByLevel: [1, 2, 4, 5, 7, 8, 9],
       costByPoint: {
-        1: 1,
-        2: 4,
-        3: 8,
-        4: 16,
-        5: 32,
+        1: 4,
+        2: 9,
+        3: 16,
+        4: 25,
+        5: 49,
         6: 64,
         7: 128,
         8: 256,
@@ -279,11 +289,11 @@ export const economyConfig = {
     entertainmentCenterTreatment: {
       maxPointsByLevel: [1, 2, 4, 5, 7, 8, 11],
       costByPoint: {
-        1: 1,
-        2: 4,
-        3: 8,
-        4: 16,
-        5: 32,
+        1: 4,
+        2: 9,
+        3: 16,
+        4: 25,
+        5: 49,
         6: 64,
         7: 128,
         8: 256,

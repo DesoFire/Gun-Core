@@ -223,7 +223,7 @@ function createInitialMission() {
   const expiresDay = issueDay + randomNumber(2, 4) + Math.floor(difficulty / 2);
   const powerRequirement = calculateInitialPowerRequirement(difficulty, 0);
   const recommendedTeamSize = createInitialRecommendedTeamSize(difficulty);
-  const requirements = createInitialMissionRequirements();
+  const requirements = createInitialMissionRequirements(difficulty);
   const reward = createInitialMissionReward(difficulty);
   return {
     id: createId(),
@@ -311,10 +311,11 @@ function normalizeMissionState(mission) {
   mission.powerRequirement ??= calculateInitialPowerRequirement(mission.difficulty ?? 2, 0);
   mission.powerIntelLevel ??= Math.min(3, mission.revealedIntel?.length ?? 0);
   mission.recommendedTeamSize ??= createInitialRecommendedTeamSize(mission.difficulty ?? 2);
-  mission.requirements ??= createInitialMissionRequirements();
+  mission.requirements ??= createInitialMissionRequirements(mission.difficulty ?? 2);
   mission.requirements.weaponTypes ??= [];
   mission.requirements.damageTypes ??= [];
   mission.requirements.skillTags ??= mission.requirements.careerCategories ?? [];
+  mission.requirements.enemyMecha ??= false;
   delete mission.requirements.careerCategories;
   delete mission.requirements.tags;
   return mission;
@@ -350,6 +351,7 @@ function normalizeEquipmentSlots(equipment) {
   return {
     weapon: equipment.weapon ?? null,
     armor: equipment.armor ?? null,
+    mecha: equipment.mecha ?? null,
   };
 }
 
@@ -450,11 +452,15 @@ function createInitialRecommendedTeamSize(difficulty) {
   return { min: 3, max: 4 };
 }
 
-function createInitialMissionRequirements() {
+function createInitialMissionRequirements(difficulty = 1) {
+  const mechaConfig = economyConfig.missions.mechaThreat ?? {};
+  const chanceTable = mechaConfig.enemyPresenceChanceByDifficulty ?? [];
+  const chance = chanceTable[Math.max(0, Math.min(chanceTable.length - 1, difficulty))] ?? 0;
   return {
     weaponTypes: drawInitialRequirements(missionRequirementPool.weaponTypes, randomNumber(1, 2)),
     damageTypes: drawInitialRequirements(missionRequirementPool.damageTypes, randomNumber(1, 2)),
     skillTags: drawInitialRequirements(missionRequirementPool.skillTags, randomNumber(1, 100) <= 35 ? 2 : 1),
+    enemyMecha: randomNumber(1, 100) <= chance,
   };
 }
 

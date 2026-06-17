@@ -1,3 +1,4 @@
+import { economyConfig } from "../data/economyConfig.js";
 import { getState, updateState } from "../js/state.js";
 
 export function getInventory() {
@@ -50,12 +51,21 @@ export function removeInventoryItem(itemId) {
 }
 
 function isRecoverableEquipment(item) {
-  return item.itemCategory === "weapon" || item.itemCategory === "armor" || item.slot === "weapon" || item.slot === "armor";
+  return (
+    item.itemCategory === "weapon" ||
+    item.itemCategory === "armor" ||
+    item.itemCategory === "mecha" ||
+    item.slot === "weapon" ||
+    item.slot === "armor" ||
+    item.slot === "mecha"
+  );
 }
 
 function estimateEquipmentOriginalPrice(item) {
   const rankIndex = Math.max(0, ["F", "E", "D", "C", "B", "A", "S"].indexOf(item.rarity ?? "F"));
-  if (item.itemCategory === "weapon" || item.slot === "weapon") return 58 + rankIndex * 14;
-  if (item.itemCategory === "armor" || item.slot === "armor") return 46 + rankIndex * 14;
-  return 10;
+  const config = economyConfig.blackMarket;
+  if (item.itemCategory === "weapon" || item.slot === "weapon") return (config.baseCost.weapon ?? 58) + rankIndex * (config.perRank.weapon ?? 14);
+  if (item.itemCategory === "armor" || item.slot === "armor") return (config.baseCost.armor ?? 46) + rankIndex * (config.perRank.armor ?? 14);
+  if (item.itemCategory === "mecha" || item.slot === "mecha") return (config.baseCost.mecha ?? 150) + rankIndex * (config.perRank.mecha ?? 45);
+  return config.baseCost.fallback ?? 10;
 }

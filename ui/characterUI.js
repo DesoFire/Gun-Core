@@ -206,8 +206,10 @@ export function renderCharacterTagRow(character) {
   ];
   const weapon = character.equipment?.weapon;
   const armor = character.equipment?.armor;
+  const mecha = character.equipment?.mecha;
   if (weapon?.damageType) tags.push({ label: `武器：${weapon.damageType}`, className: "badge equipment-tag weapon-tag" });
   if (armor?.protectionType) tags.push({ label: `防具：${armor.protectionType}`, className: "badge equipment-tag armor-tag" });
+  if (mecha) tags.push({ label: "机动兵器", className: "badge equipment-tag mecha-tag" });
   return `<div class="badge-row character-tag-row">${tags.map((tag) => `<span class="${tag.className}">${tag.label}</span>`).join("")}</div>`;
 }
 
@@ -707,7 +709,7 @@ function renderEquipmentCandidates(candidates, slotLocked = false) {
         <article class="equipment-item" draggable="true" data-drag-item="${item.id}">
           <div>
             <strong>${item.name}</strong>
-            <p class="muted">${item.type} · ${getWeaponTagNames(item).join(" / ") || "无标签"} · ${item.note}</p>
+            <p class="muted">${item.type ?? item.role ?? item.itemCategory} · ${getEquipmentTagNames(item).join(" / ") || "无标签"} · ${item.note}</p>
             <p class="muted">${renderEquipmentSummary(item)}</p>
           </div>
           <button class="primary-button" data-equip-item="${item.id}" ${canAct && !slotLocked ? "" : "disabled"} type="button">装备</button>
@@ -719,6 +721,11 @@ function renderEquipmentCandidates(candidates, slotLocked = false) {
 
 function getCandidateItems(slot) {
   return getInventory().filter((item) => canEquipItemToSlot(item, slot));
+}
+
+function getEquipmentTagNames(item) {
+  if (item.itemCategory === "weapon") return getWeaponTagNames(item);
+  return [item.protectionType, item.role, ...(item.tags ?? [])].filter(Boolean);
 }
 
 function bindEquipmentEvents(characterId) {
@@ -770,6 +777,7 @@ function bindEquipmentEvents(characterId) {
 }
 
 function isSlotLocked(character, slot) {
+  if (slot === "mecha") return !hasPilotTag(character);
   if (slot !== "weapon") return false;
   const limbs = new Set((character.conditions ?? []).map((condition) => condition.limb).filter(Boolean));
   return limbs.has("leftArm") && limbs.has("rightArm");
@@ -778,7 +786,12 @@ function isSlotLocked(character, slot) {
 function renderEquipmentSummary(item) {
   if (item.itemCategory === "weapon") return `等级 ${item.rarity} · 战斗力 +${item.power ?? 0} · 伤害 ${item.damageType ?? "未知"}`;
   if (item.itemCategory === "armor") return `等级 ${item.rarity} · 死亡率 -${item.deathRiskReduction ?? 0}% · 防护 ${item.protectionType ?? "未知"}`;
+  if (item.itemCategory === "mecha") return `等级 ${item.rarity} · 战斗力 +${item.power ?? 0} · 防护 ${item.deathRiskReduction ?? 0}%`;
   return "未分类装备";
+}
+
+function hasPilotTag(character) {
+  return (character.skills ?? []).some((skill) => (skill.tags ?? []).includes("机师"));
 }
 
 function formatRank(rank) {
