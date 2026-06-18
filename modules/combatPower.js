@@ -60,6 +60,7 @@ export function calculateTeamCombatPower(roster, memberIds) {
 
 export function getItemCombatPower(item) {
   if (item.itemCategory === "weapon" || item.slot === "weapon") return clamp(item.power ?? 0, 0, 400);
+  if (item.itemCategory === "mecha" || item.slot === "mecha") return clamp(item.power ?? 0, 0, 1200);
   return 0;
 }
 

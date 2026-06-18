@@ -117,7 +117,8 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
     name: character.name,
     rank: calculateRank(character),
     status: character.status,
-    cost: calculateLivingSupplyCost(character),
+    amount: calculateLivingSupplyCost(character),
+    cost: calculateLivingSupplyCost(character) * (economyConfig.dailyExpenses.livingSupplies.costPerSupply ?? 1),
   }));
   const equippedEquipmentItems = livingRoster.flatMap((character) =>
     Object.entries(character.equipment ?? {})
@@ -156,7 +157,7 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
   const equipment = { total: sumCosts(equipmentItems), items: equipmentItems };
   const facilityBreakdown = { total: sumCosts(facilityItems), items: facilityItems };
   return {
-    total: base.total + wages.total + equipment.total + facilityBreakdown.total,
+    total: base.total + wages.total + supplies.total + equipment.total + facilityBreakdown.total,
     base,
     wages,
     supplies,
@@ -203,13 +204,34 @@ export function buyBlackMarketItem(kind) {
     item.purchasePrice = cost;
     item.originalPrice = cost;
     draft.gold -= cost;
-    if (kind === "mecha") {
-      draft.mechs.unshift(item);
-    } else {
-      draft.inventory.unshift(item);
-    }
+    draft.inventory.unshift(item);
     draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金，从 ${rank} 级黑市购入 ${item.name}。`);
   });
+}
+
+export function buyEmergencyStealth() {
+  let result = { ok: false, cost: 0, gain: 0, reason: "unavailable" };
+  updateState((draft) => {
+    if (draft.gameStatus !== "active") return;
+    const cost = economyConfig.secrecy.emergencyStealthCost ?? 500;
+    const gain = economyConfig.secrecy.emergencyStealthGain ?? 5;
+    result = { ok: false, cost, gain, reason: "unavailable" };
+    if ((draft.stealth ?? 0) >= 100) {
+      result.reason = "隐秘值已满。";
+      return;
+    }
+    if ((draft.gold ?? 0) < cost) {
+      result.reason = "资金不足。";
+      return;
+    }
+    const before = draft.stealth ?? 0;
+    draft.gold -= cost;
+    draft.stealth = clamp(before + gain, 0, 100);
+    const actualGain = draft.stealth - before;
+    draft.log.push(`第 ${draft.day} 天：启动紧急隐蔽，支付 ${cost} 金，隐秘值提高 ${actualGain}。`);
+    result = { ok: true, cost, gain: actualGain, reason: "" };
+  });
+  return result;
 }
 
 export function buyBlackMarketWeapon() {
@@ -315,45 +337,27 @@ export function calculateCharacterEntertainmentCenterTreatmentPlan(characterId, 
   });
 }
 
-export function buySupplies(quantity = 1) {
-  const amount = Math.max(0, Math.floor(Number(quantity) || 0));
-  if (amount <= 0) return false;
-  const cost = getSupplyPurchaseCost(amount);
-  let purchased = false;
-  updateState((draft) => {
-    if (draft.gameStatus !== "active") return;
-    if (draft.gold < cost) return;
-    draft.gold -= cost;
-    draft.supplies = (draft.supplies ?? 0) + amount;
-    draft.log.push(`第 ${draft.day} 天：购买 ${amount} 份补给，支付 ${cost} 金。`);
-    purchased = true;
-  });
-  return purchased;
-}
-
-export function getSupplyPurchaseCost(quantity = 1) {
-  const amount = Math.max(0, Math.floor(Number(quantity) || 0));
-  const tiers = economyConfig.dailyExpenses.livingSupplies.purchaseTiers ?? [{ quantity: 1, cost: 1 }];
-  const exact = tiers.find((tier) => tier.quantity === amount);
-  if (exact) return exact.cost;
-  const unit = tiers.find((tier) => tier.quantity === 1)?.cost ?? 1;
-  return amount * unit;
-}
-
 export function payDailyUpkeep(draft) {
   const breakdown = calculateDailyExpenseBreakdownFromDraft(draft);
   const cost = breakdown.total;
   if (cost <= 0) return;
 
-  if (draft.gold >= cost) {
-    draft.gold -= cost;
-    draft.log.push(`第 ${draft.day} 天：支付基地每日支出 ${cost} 金。`);
-    return;
-  }
+  const beforeGold = draft.gold ?? 0;
+  draft.gold = beforeGold - cost;
+  draft.log.push(`第 ${draft.day} 天：支付基地每日支出 ${cost} 金，剩余 ${draft.gold} 金。`);
 
-  const shortage = cost - draft.gold;
-  draft.gold = 0;
-  draft.log.push(`第 ${draft.day} 天：维护费用缺口 ${shortage} 金，资金清零。隐秘值不受每日支出影响。`);
+  if (beforeGold >= 0 && draft.gold < 0 && !draft.debtReliefUsed) {
+    const compensation = economyConfig.dailyExpenses.debtRelief.compensationGold ?? 100;
+    draft.gold += compensation;
+    draft.debtReliefUsed = true;
+    draft.debtReliefNotice = {
+      id: `debt-relief-${draft.day}`,
+      day: draft.day,
+      compensation,
+      goldAfter: draft.gold,
+    };
+    draft.log.push(`第 ${draft.day} 天：首次出现负资产，系统发放 ${compensation} 金周转款。负资产只会限制购买，真正的失败条件是隐秘值归零。`);
+  }
 }
 
 export function calculateRank(character) {
@@ -385,10 +389,27 @@ export function canUpgradeFacility(id) {
 }
 
 export function getBlackMarketItemCost(kind, rank) {
+  if (kind === "mecha") rank = getBlackMarketMechaPurchaseRank(rank, { allowRare: false }) ?? rank;
   const rankIndex = Math.max(0, facilityRanks.indexOf(rank));
   const base = economyConfig.blackMarket.baseCost[kind] ?? economyConfig.blackMarket.baseCost.fallback;
   const perRank = economyConfig.blackMarket.perRank[kind] ?? economyConfig.blackMarket.perRank.fallback;
   return base + rankIndex * perRank;
+}
+
+export function getBlackMarketMechaPurchaseRank(marketRank, options = {}) {
+  const config = economyConfig.blackMarket;
+  const unlockIndex = facilityRanks.indexOf(config.mechaUnlockRank ?? "C");
+  const marketIndex = facilityRanks.indexOf(marketRank);
+  if (marketIndex < unlockIndex) return null;
+  const commonRank = config.mechaCommonRankByMarketRank?.[marketRank] ?? "F";
+  const commonIndex = Math.max(0, facilityRanks.indexOf(commonRank));
+  if (options.allowRare === false) return commonRank;
+  const rareChance = Math.max(0, Math.min(5, config.mechaRareChance ?? 5));
+  if (randomNumber(1, 100) <= rareChance) {
+    const offset = Math.max(1, config.mechaRareRankOffset ?? 1);
+    return facilityRanks[Math.min(facilityRanks.length - 1, commonIndex + offset)] ?? commonRank;
+  }
+  return commonRank;
 }
 
 function createTreatmentPlan(draft, { facilityId, category, config, characterId = null }) {
@@ -465,13 +486,24 @@ function calculateLivingSupplyCost(character) {
 function calculateEquipmentMaintenanceCost(item, state = getState(), context = {}) {
   const rankIndex = Math.max(0, facilityRanks.indexOf(item.rarity ?? "F"));
   const config = economyConfig.dailyExpenses.equipmentMaintenance;
-  const base = item.itemCategory === "weapon" || item.slot === "weapon" ? config.weaponBase : config.armorBase;
+  const isMecha = item.itemCategory === "mecha" || item.slot === "mecha";
+  const normalBase = item.itemCategory === "weapon" || item.slot === "weapon" ? config.weaponBase : config.armorBase;
+  const base = isMecha ? (config.mechaBase ?? normalBase) : normalBase;
+  const perRank = config.perRank;
+  const mechaMultiplier = isMecha ? (config.mechaMultiplier ?? 2) : 1;
   const warehouseReduction = context.location === "仓库" ? getWarehouseMaintenanceReduction(state.roster ?? []) : 0;
-  return Math.max(0, Math.round((base + rankIndex * config.perRank) * getEquipmentMaintenanceMultiplier(state.roster ?? [])) - warehouseReduction);
+  return Math.max(0, Math.round((base + rankIndex * perRank) * mechaMultiplier * getEquipmentMaintenanceMultiplier(state.roster ?? [])) - warehouseReduction);
 }
 
 function isEquipmentItem(item) {
-  return Boolean(item && (item.itemCategory === "weapon" || item.itemCategory === "armor" || item.slot === "weapon" || item.slot === "armor"));
+  return Boolean(item && (
+    item.itemCategory === "weapon" ||
+    item.itemCategory === "armor" ||
+    item.itemCategory === "mecha" ||
+    item.slot === "weapon" ||
+    item.slot === "armor" ||
+    item.slot === "mecha"
+  ));
 }
 
 function createEquipmentExpenseItem(item, context = {}) {
@@ -483,7 +515,7 @@ function createEquipmentExpenseItem(item, context = {}) {
     characterName: context.characterName ?? context.location ?? "仓库",
     location: context.location ?? context.characterName ?? "仓库",
     slot,
-    slotLabel: slot === "weapon" || item.itemCategory === "weapon" ? "武器" : "防具",
+    slotLabel: slot === "weapon" || item.itemCategory === "weapon" ? "武器" : slot === "mecha" || item.itemCategory === "mecha" ? "机动兵器" : "防具",
     itemName: item.name,
     rarity: item.rarity ?? "F",
     type: item.damageType ?? item.protectionType ?? item.type ?? "未知",
@@ -502,17 +534,27 @@ function isDeadStatus(status) {
 function createBlackMarketItem(kind, rank) {
   if (kind === "weapon") return generateWeaponItem({ rarity: rank });
   if (kind === "armor") return generateArmorItem({ rarity: rank });
-  if (kind === "mecha") return createRankedMecha(rank);
+  if (kind === "mecha") {
+    const mechaRank = getBlackMarketMechaPurchaseRank(rank);
+    return mechaRank ? createRankedMecha(mechaRank) : null;
+  }
   return null;
 }
 
-function createRankedMecha(rank) {
+export function createRankedMecha(rank) {
   const frame = randomItem(mechaFrames);
+  const rankIndex = Math.max(0, facilityRanks.indexOf(rank));
   return {
     id: createId(),
     ...frame,
     name: `${rank}级${frame.name}`,
     rarity: rank,
+    slot: "mecha",
+    itemCategory: "mecha",
+    damageType: randomItem(economyConfig.blackMarket.mechaDamageTypes ?? ["动能", "电磁", "爆风", "能量"]),
+    protectionType: randomItem(economyConfig.blackMarket.mechaProtectionTypes ?? ["动能", "电磁", "爆风", "能量"]),
+    power: 80 + rankIndex * 55,
+    deathRiskReduction: 8 + rankIndex * 5,
     condition: 100,
     maintenance: 20 + Math.max(0, facilityRanks.indexOf(rank)) * 18,
   };

@@ -111,14 +111,25 @@ button:disabled {
   justify-content: flex-end;
 }
 
+.app-layout {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 168px minmax(0, 1fr);
+}
+
+.side-nav {
+  position: sticky;
+  top: 16px;
+}
+
 .tabbar {
   background: #15171b;
   border: 1px solid var(--line);
   border-radius: 8px;
   display: flex;
+  flex-direction: column;
   gap: 4px;
-  margin-bottom: 16px;
-  overflow-x: auto;
   padding: 6px;
 }
 
@@ -199,6 +210,45 @@ button:disabled {
   padding-right: 4px;
 }
 
+.help-content {
+  display: grid;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.help-section {
+  background: #101317;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.help-section h3 {
+  color: var(--accent-strong);
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+
+.help-section p,
+.help-section li {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.help-section p {
+  margin: 0 0 8px;
+}
+
+.help-section p:last-child {
+  margin-bottom: 0;
+}
+
+.help-section ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
 .log-entry {
   background: #101317;
   border: 1px solid var(--line);
@@ -247,8 +297,8 @@ button:disabled {
   background: transparent;
   border-color: transparent;
   color: var(--muted);
-  flex: 0 0 auto;
-  min-width: 88px;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 .tab-button.active {
@@ -375,6 +425,171 @@ button:disabled {
   justify-content: space-between;
   min-height: 38px;
   padding: 8px 10px;
+}
+
+.situation-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.situation-map {
+  min-width: 0;
+}
+
+.war-map-card {
+  background: #101317;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.war-map-title {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.war-map {
+  background: #0d1014;
+  border: 1px solid #2a3038;
+  border-radius: 8px;
+  min-height: 260px;
+  overflow: hidden;
+  position: relative;
+}
+
+.civil-war-map {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.land-border {
+  fill: none;
+  stroke: rgb(238 232 210 / 0.84);
+  stroke-width: 3;
+}
+
+.province-line {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.22);
+  stroke-dasharray: 9 8;
+  stroke-width: 1.4;
+}
+
+.frontline {
+  fill: none;
+  stroke: rgb(255 245 200 / 0.92);
+  stroke-dasharray: 7 8;
+  stroke-linecap: round;
+  stroke-width: 4;
+}
+
+.frontline-glow {
+  fill: none;
+  stroke: rgb(255 245 200 / 0.28);
+  stroke-width: 14;
+}
+
+.map-water-line {
+  fill: none;
+  stroke: rgb(150 185 210 / 0.22);
+  stroke-width: 2;
+}
+
+.map-city circle {
+  fill: #f1e4b7;
+  stroke: #17120d;
+  stroke-width: 2;
+}
+
+.map-city text {
+  fill: rgb(242 239 231 / 0.78);
+  font-size: 13px;
+}
+
+.map-label text {
+  fill: #fff6e4;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: rgb(0 0 0 / 0.42);
+  stroke-width: 3px;
+}
+
+.map-label text:first-child {
+  font-size: 18px;
+}
+
+.map-label text:last-child {
+  font-size: 32px;
+}
+
+.map-minor-label text {
+  fill: #fff6e4;
+  font-size: 13px;
+  font-weight: 800;
+  paint-order: stroke;
+  stroke: rgb(0 0 0 / 0.5);
+  stroke-width: 3px;
+}
+
+.situation-relations {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.relation-axis-card {
+  background: #101317;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.relation-axis-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.relation-axis-bar {
+  background: #07090c;
+  border: 1px solid #252a31;
+  border-radius: 999px;
+  display: flex;
+  height: 18px;
+  overflow: hidden;
+}
+
+.relation-axis-segment {
+  background: var(--segment-color);
+  min-width: 2px;
+}
+
+.relation-axis-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.relation-axis-labels span {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12px;
+  gap: 5px;
+}
+
+.relation-axis-labels i {
+  border-radius: 999px;
+  display: inline-block;
+  height: 9px;
+  width: 9px;
 }
 
 .overview-row span {
@@ -2223,8 +2438,28 @@ select {
   }
 
   .base-status-grid,
+  .situation-relations,
   .settlement-summary-grid {
     grid-template-columns: 1fr;
+  }
+
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .side-nav {
+    position: static;
+  }
+
+  .tabbar {
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .tab-button {
+    flex: 0 0 auto;
+    min-width: 88px;
+    width: auto;
   }
 
   .base-status-toggle {

@@ -98,7 +98,7 @@ export function createInitialState() {
     organizationName: "Gun Core",
     introSeen: false,
     gold: economyConfig.initialState.gold,
-    supplies: economyConfig.initialState.supplies,
+    debtReliefUsed: false,
     enhancementPoints: 0,
     reputation: 0,
     unpaidSecrecy: { base: 0, mercenaries: {} },
@@ -112,9 +112,40 @@ export function createInitialState() {
     inventorySeeded: true,
     wealth: { owned: {} },
     factions: [],
+    factionBalance: createInitialFactionBalance(),
     lastSettlement: null,
     log: ["事务所挂牌营业。目标：把战争财搬进私人收藏室，同时别让隐秘值归零。"],
   };
+}
+
+function createInitialFactionBalance() {
+  return {
+    war: { SSS: 70, FOF: 24, 天人残余: 5, 锈蚀部队: 1 },
+    economy: { 黑市商会: 50, 企业财团: 50 },
+    order: { 民生秩序: 90, 地方暴力: 10 },
+    xenotech: { 纯净社区: 34, 科研机构: 33, 异源教会: 33 },
+  };
+}
+
+function normalizeFactionBalance(balance) {
+  balance.war ??= { SSS: 70, FOF: 24, 天人残余: 5, 锈蚀部队: 1 };
+  if (balance.war.错误信号 != null) {
+    balance.war.锈蚀部队 = balance.war.锈蚀部队 ?? balance.war.错误信号;
+    delete balance.war.错误信号;
+  }
+  balance.war.天人残余 ??= balance.commonThreat?.天人残余 ?? 5;
+  balance.war.锈蚀部队 ??= balance.commonThreat?.错误信号 ?? 1;
+  balance.economy ??= { 黑市商会: 50, 企业财团: 50 };
+  balance.order ??= { 民生秩序: 90, 地方暴力: 10 };
+  if (balance.order.地方政府 != null || balance.order.割据武装 != null || balance.order.响马强人 != null) {
+    balance.order = {
+      民生秩序: balance.order.民生秩序 ?? balance.order.地方政府 ?? 90,
+      地方暴力: balance.order.地方暴力 ?? (balance.order.割据武装 ?? 5) + (balance.order.响马强人 ?? 5),
+    };
+  }
+  balance.xenotech ??= { 纯净社区: 34, 科研机构: 33, 异源教会: 33 };
+  delete balance.commonThreat;
+  delete balance.hidden;
 }
 
 function notify() {
@@ -151,7 +182,8 @@ function normalizeState(savedState) {
   savedState.organizationName ??= "Gun Core";
   savedState.introSeen ??= false;
   savedState.gold ??= economyConfig.initialState.gold;
-  savedState.supplies ??= economyConfig.initialState.supplies;
+  savedState.debtReliefUsed ??= false;
+  delete savedState.supplies;
   savedState.enhancementPoints ??= 0;
   savedState.reputation ??= 0;
   savedState.unpaidSecrecy ??= { base: 0, mercenaries: {} };
@@ -167,6 +199,8 @@ function normalizeState(savedState) {
   savedState.inventory ??= sampleItems.map((item) => ({ ...item }));
   savedState.wealth ??= { owned: {} };
   savedState.wealth.owned ??= {};
+  savedState.factionBalance ??= createInitialFactionBalance();
+  normalizeFactionBalance(savedState.factionBalance);
   savedState.lastSettlement ??= null;
   normalizeWealthState(savedState);
   if (!savedState.inventorySeeded) {
@@ -223,7 +257,7 @@ function createInitialMission() {
   const expiresDay = issueDay + randomNumber(2, 4) + Math.floor(difficulty / 2);
   const powerRequirement = calculateInitialPowerRequirement(difficulty, 0);
   const recommendedTeamSize = createInitialRecommendedTeamSize(difficulty);
-  const requirements = createInitialMissionRequirements();
+  const requirements = createInitialMissionRequirements(difficulty);
   const reward = createInitialMissionReward(difficulty);
   return {
     id: createId(),
@@ -311,10 +345,11 @@ function normalizeMissionState(mission) {
   mission.powerRequirement ??= calculateInitialPowerRequirement(mission.difficulty ?? 2, 0);
   mission.powerIntelLevel ??= Math.min(3, mission.revealedIntel?.length ?? 0);
   mission.recommendedTeamSize ??= createInitialRecommendedTeamSize(mission.difficulty ?? 2);
-  mission.requirements ??= createInitialMissionRequirements();
+  mission.requirements ??= createInitialMissionRequirements(mission.difficulty ?? 2);
   mission.requirements.weaponTypes ??= [];
   mission.requirements.damageTypes ??= [];
   mission.requirements.skillTags ??= mission.requirements.careerCategories ?? [];
+  mission.requirements.enemyMecha ??= false;
   delete mission.requirements.careerCategories;
   delete mission.requirements.tags;
   return mission;
@@ -324,6 +359,12 @@ function normalizeItemState(item) {
   item.id ??= createId();
   item.note ??= "";
   item.tags ??= [];
+  if (item.itemCategory === "mecha" || item.slot === "mecha") {
+    item.slot = "mecha";
+    item.itemCategory = "mecha";
+    item.damageType ??= randomItem(economyConfig.blackMarket.mechaDamageTypes ?? ["动能", "电磁", "爆风", "能量"]);
+    item.protectionType ??= randomItem(economyConfig.blackMarket.mechaProtectionTypes ?? ["动能", "电磁", "爆风", "能量"]);
+  }
   return item;
 }
 
@@ -348,8 +389,9 @@ function createEmptyEquipment() {
 
 function normalizeEquipmentSlots(equipment) {
   return {
-    weapon: equipment.weapon ?? null,
-    armor: equipment.armor ?? null,
+    weapon: equipment.weapon ? normalizeItemState(equipment.weapon) : null,
+    armor: equipment.armor ? normalizeItemState(equipment.armor) : null,
+    mecha: equipment.mecha ? normalizeItemState(equipment.mecha) : null,
   };
 }
 
@@ -399,7 +441,7 @@ function randomMissionSubject(type) {
     营救: ["被困工程师", "欠债线人", "伤员小队", "劫持目标"],
     防御: ["边境诊所", "补给站", "临时营地", "净水设施"],
     占领: ["转运站", "通讯楼", "矿区闸门", "列车站台"],
-    特殊: ["无名委托", "未知信号", "旧神经接口", "异常遗物"],
+    特殊: ["无名委托", "错误回波", "旧神经接口", "异常遗物"],
   };
   return randomItem(subjects[type.name] ?? ["未分类目标"]);
 }
@@ -450,11 +492,15 @@ function createInitialRecommendedTeamSize(difficulty) {
   return { min: 3, max: 4 };
 }
 
-function createInitialMissionRequirements() {
+function createInitialMissionRequirements(difficulty = 1) {
+  const mechaConfig = economyConfig.missions.mechaThreat ?? {};
+  const chanceTable = mechaConfig.enemyPresenceChanceByDifficulty ?? [];
+  const chance = chanceTable[Math.max(0, Math.min(chanceTable.length - 1, difficulty))] ?? 0;
   return {
     weaponTypes: drawInitialRequirements(missionRequirementPool.weaponTypes, randomNumber(1, 2)),
     damageTypes: drawInitialRequirements(missionRequirementPool.damageTypes, randomNumber(1, 2)),
     skillTags: drawInitialRequirements(missionRequirementPool.skillTags, randomNumber(1, 100) <= 35 ? 2 : 1),
+    enemyMecha: randomNumber(1, 100) <= chance,
   };
 }
 

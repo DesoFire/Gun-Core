@@ -4,6 +4,8 @@ import { economyConfig } from "../data/economyConfig.js";
 import {
   getMissionRiskTag,
   getMissionPowerRange,
+  getMissionRank,
+  getMissionAveragePowerRequirement,
   getMissions,
   getTeamCombatPower,
   investigateMission,
@@ -61,6 +63,7 @@ function renderMissionCard(mission, state) {
   const powerRange = getMissionPowerRange(mission);
   const risk = getMissionRiskTag(mission);
   const canAct = state.gameStatus === "active";
+  const rank = getMissionRank(mission);
   return `
     <article class="card mission-card mission-summary-card" data-open-mission="${mission.id}">
       <div class="card-header">
@@ -68,10 +71,11 @@ function renderMissionCard(mission, state) {
           <p class="card-title">${mission.name}</p>
           <p class="muted">${mission.issuer} / ${mission.type} / ${formatDeadline(mission)}</p>
         </div>
-        <span class="badge">${isActive ? `剩余 ${mission.remaining} 天` : "可接取"}</span>
+        <span class="rank-pill rank-${rank}">${rank}</span>
       </div>
       <div class="mission-public">
         <span>战力 ${powerRange.low}-${powerRange.high}</span>
+        <span>人均 ${getMissionAveragePowerRequirement(mission)}</span>
         <span>${risk.label}</span>
         <span>${mission.duration} 天</span>
         <span>${mission.reward.gold} 金</span>
@@ -156,7 +160,8 @@ function renderMissionDossier(id) {
         <div class="field-list">
           <div class="field"><span>截止</span><strong>${daysUntilExpires === 0 ? "今天截止" : `${daysUntilExpires} 天后截止`}</strong></div>
           <div class="field"><span>执行时间</span><strong>${mission.duration} 天</strong></div>
-          <div class="field"><span>难度</span><strong>${renderDifficultyBadge(mission.difficulty)}</strong></div>
+          <div class="field"><span>等级</span><strong>${renderDifficultyBadge(mission)}</strong></div>
+          <div class="field"><span>人均需求</span><strong>${getMissionAveragePowerRequirement(mission)}</strong></div>
           <div class="field"><span>战力区间</span><strong>${powerRange.low}-${powerRange.high}</strong></div>
           <div class="field"><span>区间精度</span><strong>${powerRange.level}/3</strong></div>
           <div class="field"><span>报酬</span><strong>${mission.reward.gold} 金 / ${mission.reward.reputation} 声望池</strong></div>
@@ -217,6 +222,7 @@ function isIntelRevealed(mission, key) {
 function renderMissionSummaryIntel(mission) {
   const chips = [];
   if (isIntelRevealed(mission, "damageTypes")) chips.push(`敌伤：${formatRequirementValue(mission, "damageTypes")}`);
+  if (isIntelRevealed(mission, "enemyMecha")) chips.push(`机动兵器：${formatRequirementValue(mission, "enemyMecha")}`);
   if (isIntelRevealed(mission, "skillTags")) chips.push(`能力：${formatRequirementValue(mission, "skillTags")}`);
   if (isIntelRevealed(mission, "weaponTypes")) chips.push(`武器：${formatRequirementValue(mission, "weaponTypes")}`);
   if (isIntelRevealed(mission, "teamSize")) chips.push(`人数：${formatRequirementValue(mission, "teamSize")}`);
@@ -237,15 +243,15 @@ function renderIntelAction(mission, field, canAct) {
   `;
 }
 
-function renderDifficultyBadge(difficulty = 1) {
-  const ranks = ["F", "F", "E", "D", "C", "B", "A", "S"];
-  const rank = ranks[Math.max(0, Math.min(ranks.length - 1, difficulty))] || "F";
+function renderDifficultyBadge(mission) {
+  const rank = getMissionRank(mission);
   return `<span class="rank-pill rank-${rank}">${rank}</span>`;
 }
 
 function formatRequirementValue(mission, key) {
   const requirements = mission.requirements || {};
   if (key === "damageTypes") return (requirements.damageTypes || []).join(" / ") || "未知";
+  if (key === "enemyMecha") return requirements.enemyMecha ? "确认存在" : "未发现";
   if (key === "skillTags") return formatSkillTagRequirements(requirements.skillTags);
   if (key === "weaponTypes") return (requirements.weaponTypes || []).join(" / ") || "未知";
   if (key === "teamSize") {
@@ -263,6 +269,7 @@ function formatSkillTagRequirements(tags = []) {
 function getIntelHint(key) {
   const hints = {
     damageTypes: "敌方伤害类型。携带对应防具可降低风险。",
+    enemyMecha: "敌方是否部署机动兵器。若我方没有对应机体，成功率与伤亡率都会很难看。",
     skillTags: "推荐小队拥有的训练技能标签。",
     weaponTypes: "推荐武器或伤害方向。",
     teamSize: "推荐小队人数区间。",
