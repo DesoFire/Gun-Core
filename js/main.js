@@ -58,15 +58,11 @@ function bindGlobalActions() {
   document.querySelector("#organization-name").addEventListener("click", editOrganizationName);
   initGlobalLogSidebar();
   initBaseStatusSidebar();
-  initHelpSidebar();
   document.querySelector("#global-log-close").addEventListener("click", () => {
     closeGlobalLogSidebar();
   });
   document.querySelector("#base-status-close").addEventListener("click", () => {
     closeBaseStatusSidebar();
-  });
-  document.querySelector("#help-close").addEventListener("click", () => {
-    closeHelpSidebar();
   });
   document.querySelector("#settlement-close").addEventListener("click", closeSettlementDialog);
   document.querySelector("#expense-approval-close").addEventListener("click", closeExpenseApprovalDialog);
@@ -113,6 +109,7 @@ function renderApp() {
   renderGlobalLog();
   renderSettlementDialog();
   renderOverview();
+  renderSituation();
   renderFacilities();
   renderExpenses();
   renderWealth();
@@ -138,7 +135,6 @@ function initGlobalLogSidebar() {
     toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
     if (isOpen) {
       closeBaseStatusSidebar();
-      closeHelpSidebar();
     }
   });
 }
@@ -159,7 +155,6 @@ function initBaseStatusSidebar() {
     toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
     if (isOpen) {
       closeGlobalLogSidebar();
-      closeHelpSidebar();
     }
   });
 }
@@ -169,27 +164,6 @@ function closeBaseStatusSidebar() {
   sidebar?.classList.remove("open");
   if (sidebar) sidebar.hidden = true;
   document.querySelector("#base-status-toggle")?.setAttribute("aria-expanded", "false");
-}
-
-function initHelpSidebar() {
-  const toggle = document.querySelector("#help-toggle");
-  toggle?.addEventListener("click", () => {
-    const sidebar = document.querySelector("#help-sidebar");
-    const isOpen = sidebar?.classList.toggle("open");
-    if (sidebar) sidebar.hidden = !isOpen;
-    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
-    if (isOpen) {
-      closeGlobalLogSidebar();
-      closeBaseStatusSidebar();
-    }
-  });
-}
-
-function closeHelpSidebar() {
-  const sidebar = document.querySelector("#help-sidebar");
-  sidebar?.classList.remove("open");
-  if (sidebar) sidebar.hidden = true;
-  document.querySelector("#help-toggle")?.setAttribute("aria-expanded", "false");
 }
 
 function renderGlobalLog() {
@@ -742,6 +716,176 @@ function renderOverview() {
     </div>
   `;
 
+}
+
+function renderSituation() {
+  const state = getState();
+  const balance = state.factionBalance ?? {};
+  const war = normalizePercentGroup(balance.war ?? { SSS: 70, FOF: 24, 天人残余: 5, 锈蚀部队: 1 });
+  const map = document.querySelector("#situation-map");
+  const relations = document.querySelector("#situation-relations");
+  const badge = document.querySelector("#situation-badge");
+  if (!map || !relations || !badge) return;
+
+  badge.textContent = `SSS ${war.SSS}% / FOF ${war.FOF}% / 天人 ${war.天人残余}% / 锈蚀 ${war.锈蚀部队}%`;
+  map.innerHTML = `
+    <div class="war-map-card">
+      <div class="war-map-title">
+        <strong>SSS 内战控制图</strong>
+        <span class="muted">红色 SSS / 蓝色 FOF / 褐色天人 / 粉色锈蚀</span>
+      </div>
+      ${renderCivilWarMap(war)}
+    </div>
+  `;
+
+  relations.innerHTML = [
+    renderRelationAxis("内战主轴", normalizePercentGroup(balance.war ?? { SSS: 70, FOF: 24, 天人残余: 5, 锈蚀部队: 1 }), [
+      { key: "SSS", label: "SSS", color: "#c84b4b" },
+      { key: "FOF", label: "FOF", color: "#4b8fd8" },
+      { key: "天人残余", label: "天人残余", color: "#f4f1df" },
+      { key: "锈蚀部队", label: "锈蚀部队", color: "#8f3328" },
+    ]),
+    renderRelationAxis("战争经济", normalizePercentGroup(balance.economy ?? { 黑市商会: 50, 企业财团: 50 }), [
+      { key: "黑市商会", label: "黑市商会", color: "#d4a64a" },
+      { key: "企业财团", label: "企业财团", color: "#6f89a8" },
+    ]),
+    renderRelationAxis("基层秩序", normalizePercentGroup(balance.order ?? { 民生秩序: 90, 地方暴力: 10 }), [
+      { key: "民生秩序", label: "民生秩序", color: "#72a06a" },
+      { key: "地方暴力", label: "地方暴力", color: "#9c6b4a" },
+    ]),
+    renderRelationAxis("异源态度", normalizePercentGroup(balance.xenotech ?? { 纯净社区: 34, 科研机构: 33, 异源教会: 33 }), [
+      { key: "纯净社区", label: "纯净社区", color: "#e7e4d5" },
+      { key: "科研机构", label: "科研机构", color: "#66a7aa" },
+      { key: "异源教会", label: "异源教会", color: "#9b6bd3" },
+    ]),
+  ].join("");
+}
+
+function renderCivilWarMap(war) {
+  const sssShare = Math.max(0, Math.min(100, war.SSS ?? 70));
+  const fofShare = Math.max(0, Math.min(100, war.FOF ?? 24));
+  const heavenShare = Math.max(0, Math.min(100, war.天人残余 ?? 5));
+  const rustShare = Math.max(0, Math.min(100, war.锈蚀部队 ?? 1));
+  const sssWidth = Math.round(sssShare * 7.6);
+  const fofWidth = Math.round(fofShare * 7.6);
+  const heavenRadius = Math.max(18, Math.round(heavenShare * 8));
+  const rustRadius = Math.max(12, Math.round(rustShare * 9));
+  const splitX = Math.max(150, Math.min(620, sssWidth));
+  const frontPath = `M ${splitX - 12} 58 C ${splitX + 20} 98 ${splitX - 34} 132 ${splitX + 8} 176 C ${splitX + 42} 214 ${splitX - 26} 258 ${splitX + 12} 314 C ${splitX + 34} 348 ${splitX - 8} 382 ${splitX + 18} 426`;
+  return `
+    <div class="war-map">
+      <svg class="civil-war-map" viewBox="0 0 760 470" role="img" aria-label="SSS 和 FOF 战场控制地图">
+        <defs>
+          <clipPath id="sss-land-clip">
+            <path d="M86 58 L194 30 L310 42 L408 24 L528 70 L646 62 L704 130 L682 220 L722 302 L654 390 L520 420 L398 396 L286 438 L168 398 L92 318 L48 210 Z" />
+          </clipPath>
+          <pattern id="province-lines" width="52" height="52" patternUnits="userSpaceOnUse">
+            <path d="M0 26 H52 M26 0 V52" stroke="rgba(255,255,255,0.1)" stroke-width="1" />
+          </pattern>
+          <filter id="map-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000" flood-opacity="0.35" />
+          </filter>
+          <filter id="heaven-glow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="9" result="blur" />
+            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.98  0 1 0 0 0.96  0 0 1 0 0.86  0 0 0 0.7 0" result="glow" />
+            <feMerge>
+              <feMergeNode in="glow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="ember-glow" x="-70%" y="-70%" width="240%" height="240%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.52  0 1 0 0 0.12  0 0 1 0 0.07  0 0 0 0.55 0" result="glow" />
+            <feMerge>
+              <feMergeNode in="glow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <rect width="760" height="470" fill="#0b1015" />
+        <path class="map-water-line" d="M34 112 C88 84 126 96 166 76 M38 330 C92 356 130 352 174 394 M612 28 C654 44 694 72 734 112" />
+        <g clip-path="url(#sss-land-clip)" filter="url(#map-shadow)">
+          <rect x="0" y="0" width="${sssWidth}" height="470" fill="#a93f43" />
+          <rect x="${sssWidth}" y="0" width="${fofWidth + 80}" height="470" fill="#2f75b7" />
+          <g filter="url(#heaven-glow)">
+            <circle cx="514" cy="342" r="${heavenRadius + 22}" fill="#f7f1dc" opacity="0.12" />
+            <circle cx="514" cy="342" r="${heavenRadius + 8}" fill="#fffaf0" opacity="0.34" />
+            <circle cx="514" cy="342" r="${Math.max(8, Math.round(heavenRadius * 0.42))}" fill="#ffffff" opacity="0.76" />
+          </g>
+          <g filter="url(#ember-glow)">
+            <path d="M582 150 C604 132 638 138 652 164 C666 194 640 214 612 208 C584 202 562 172 582 150 Z" fill="#351915" opacity="0.92" />
+            <ellipse cx="618" cy="176" rx="${rustRadius}" ry="${Math.max(8, Math.round(rustRadius * 0.65))}" fill="#7f2b22" opacity="0.92" />
+            <ellipse cx="618" cy="176" rx="${Math.max(5, Math.round(rustRadius * 0.45))}" ry="${Math.max(4, Math.round(rustRadius * 0.28))}" fill="#b44932" opacity="0.62" />
+          </g>
+          <rect x="0" y="0" width="760" height="470" fill="url(#province-lines)" opacity="0.7" />
+          <path class="province-line" d="M156 82 C186 142 178 204 116 268" />
+          <path class="province-line" d="M274 56 C290 118 264 176 304 230 C336 274 318 334 274 414" />
+          <path class="province-line" d="M432 42 C400 118 434 174 404 238 C374 302 420 354 402 404" />
+          <path class="province-line" d="M552 74 C520 142 548 196 594 238 C650 290 608 346 536 414" />
+          <path class="province-line" d="M80 206 C188 198 250 236 360 216 C464 198 560 196 698 220" />
+          <path class="province-line" d="M110 324 C222 302 318 328 430 310 C538 294 612 318 680 364" />
+          <path class="frontline" d="${frontPath}" />
+          <path class="frontline-glow" d="${frontPath}" />
+        </g>
+        <path class="land-border" d="M86 58 L194 30 L310 42 L408 24 L528 70 L646 62 L704 130 L682 220 L722 302 L654 390 L520 420 L398 396 L286 438 L168 398 L92 318 L48 210 Z" />
+        <g class="map-city">
+          <circle cx="196" cy="156" r="5" /><text x="208" y="160">北部工带</text>
+          <circle cx="354" cy="286" r="5" /><text x="366" y="290">中央节点</text>
+          <circle cx="584" cy="178" r="5" /><text x="596" y="182">东岸港区</text>
+          <circle cx="510" cy="356" r="5" /><text x="522" y="360">南部矿区</text>
+        </g>
+        <g class="map-label map-label-sss">
+          <text x="162" y="126">SSS 控制区</text>
+          <text x="162" y="158">${war.SSS}%</text>
+        </g>
+        <g class="map-label map-label-fof">
+          <text x="560" y="118">FOF 活动区</text>
+          <text x="560" y="150">${war.FOF}%</text>
+        </g>
+        <g class="map-minor-label">
+          <text x="458" y="356">天人 ${war.天人残余}%</text>
+          <text x="604" y="224">锈蚀 ${war.锈蚀部队}%</text>
+        </g>
+      </svg>
+    </div>
+  `;
+}
+
+function renderRelationAxis(title, values, factions) {
+  return `
+    <article class="relation-axis-card">
+      <div class="relation-axis-header">
+        <strong>${title}</strong>
+        <span class="muted">总计 100%</span>
+      </div>
+      <div class="relation-axis-bar">
+        ${factions
+          .map((faction) => {
+            const value = values[faction.key] ?? 0;
+            return `<div class="relation-axis-segment" style="--segment-color:${faction.color}; width:${value}%;" title="${faction.label} ${value}%"></div>`;
+          })
+          .join("")}
+      </div>
+      <div class="relation-axis-labels">
+        ${factions
+          .map((faction) => `<span><i style="background:${faction.color};"></i>${faction.label} <strong>${values[faction.key] ?? 0}%</strong></span>`)
+          .join("")}
+      </div>
+    </article>
+  `;
+}
+
+function normalizePercentGroup(group) {
+  const entries = Object.entries(group ?? {});
+  const total = entries.reduce((sum, [, value]) => sum + Math.max(0, Number(value) || 0), 0) || 1;
+  let remaining = 100;
+  return Object.fromEntries(
+    entries.map(([key, value], index) => {
+      const normalized = index === entries.length - 1 ? remaining : Math.round((Math.max(0, Number(value) || 0) / total) * 100);
+      remaining -= normalized;
+      return [key, Math.max(0, normalized)];
+    })
+  );
 }
 
 function renderFacilities() {

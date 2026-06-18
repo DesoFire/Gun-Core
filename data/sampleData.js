@@ -78,11 +78,10 @@ export const missionTemplates = [
   { name: "突袭走私仓库", tags: ["战斗", "潜入"], difficulty: 4, duration: 3, reward: { gold: 110, reputation: 16 } },
 ];
 
-export const missionIssuers = ["SSS", "FOF自由邦联"];
+export const missionIssuers = ["SSS", "FOF"];
 
 export const otherMissionIssuers = [
-  "未知信号",
-  "流亡组织",
+  "锈蚀部队",
   "割据武装",
   "企业财团",
   "科研机构",
@@ -95,12 +94,12 @@ export const otherMissionIssuers = [
   "黑市商会",
   "佣兵工会",
   "个人委托",
-  "突发事件",
+  "国际组织",
   "天人残余",
   "响马强人",
-  "天人残余",
-  "天人残余",
-  "天人残余",
+  "匿名雇主",
+  "二次转包",
+  "异源教会",
 ];
 
 export const missionTypes = [
