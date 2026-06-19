@@ -90,6 +90,7 @@ export function normalizeCharacterAvatars(draft = state) {
 export function createInitialState() {
   return {
     gameStatus: "active",
+    ending: null,
     objective: {
       title: "填满私人收藏室",
       targetReputation: 60,
@@ -113,6 +114,7 @@ export function createInitialState() {
     wealth: { owned: {} },
     factions: [],
     factionBalance: createInitialFactionBalance(),
+    storyRoutes: createInitialStoryRoutes(),
     lastSettlement: null,
     log: ["事务所挂牌营业。目标：把战争财搬进私人收藏室，同时别让隐秘值归零。"],
   };
@@ -125,6 +127,43 @@ function createInitialFactionBalance() {
     order: { 民生秩序: 90, 地方暴力: 10 },
     xenotech: { 纯净社区: 34, 科研机构: 33, 异源教会: 33 },
   };
+}
+
+function createInitialStoryRoutes() {
+  return {
+    // lockedRoute：主线锁定。null 表示尚未站队；SSS/FOF/rust/heaven 表示对应路线已锁定。
+    lockedRoute: null,
+    // progress：四条主线已完成的阶段数。达到各路线配置的 endingStage 后触发结局。
+    progress: { SSS: 0, FOF: 0, rust: 0, heaven: 0 },
+    // exposure/attention：锈蚀路线的灰色接触变量。attention 高了才更容易出现锈蚀接触任务。
+    exposure: { rust: 0 },
+    attention: { rust: 0 },
+    // matrixDamage：锈蚀路线造成的矩阵破坏度。后续可用于影响机甲、通信、医疗、设施等系统。
+    matrixDamage: 0,
+    // alienSupport：天人路线积累的异源支援等级。当前用于提高天人契约收益与调查折扣。
+    alienSupport: 0,
+    // heavenPact：是否公开接受过天人残余契约。触发后永久切断其他明确人类势力契约。
+    heavenPact: false,
+  };
+}
+
+function normalizeStoryRoutes(routes) {
+  const defaults = createInitialStoryRoutes();
+  routes ??= {};
+  routes.lockedRoute ??= defaults.lockedRoute;
+  routes.progress ??= {};
+  routes.progress.SSS ??= 0;
+  routes.progress.FOF ??= 0;
+  routes.progress.rust ??= 0;
+  routes.progress.heaven ??= 0;
+  routes.exposure ??= {};
+  routes.exposure.rust ??= 0;
+  routes.attention ??= {};
+  routes.attention.rust ??= 0;
+  routes.matrixDamage ??= 0;
+  routes.alienSupport ??= 0;
+  routes.heavenPact ??= false;
+  return routes;
 }
 
 function normalizeFactionBalance(balance) {
@@ -174,6 +213,7 @@ function getStorage() {
 
 function normalizeState(savedState) {
   savedState.gameStatus ??= "active";
+  savedState.ending ??= null;
   savedState.objective ??= { title: "填满私人收藏室", targetReputation: 60 };
   savedState.objective.title ??= "填满私人收藏室";
   savedState.objective.targetReputation ??= 60;
@@ -201,6 +241,7 @@ function normalizeState(savedState) {
   savedState.wealth.owned ??= {};
   savedState.factionBalance ??= createInitialFactionBalance();
   normalizeFactionBalance(savedState.factionBalance);
+  savedState.storyRoutes = normalizeStoryRoutes(savedState.storyRoutes);
   savedState.lastSettlement ??= null;
   normalizeWealthState(savedState);
   if (!savedState.inventorySeeded) {
@@ -251,6 +292,7 @@ function createInitialMercenary(customName = "") {
 function createInitialMission() {
   const type = randomItem(missionTypes);
   const issuer = randomIssuer();
+  const routeInfo = createInitialMissionRouteInfo(issuer, type);
   const difficulty = randomNumber(1, 3);
   const duration = randomNumber(1, 3 + Math.floor(difficulty / 2));
   const issueDay = 1;
@@ -263,6 +305,11 @@ function createInitialMission() {
     id: createId(),
     name: `${type.name}契约：${randomMissionSubject(type)}`,
     issuer,
+    storyRoute: routeInfo.storyRoute,
+    isStoryMission: routeInfo.isStoryMission,
+    storyStage: routeInfo.storyStage,
+    routeLocking: routeInfo.routeLocking,
+    moralBrief: routeInfo.moralBrief,
     type: type.name,
     typeCode: type.code,
     actionType: type.actionType,
@@ -352,7 +399,19 @@ function normalizeMissionState(mission) {
   mission.requirements.enemyMecha ??= false;
   delete mission.requirements.careerCategories;
   delete mission.requirements.tags;
+  mission.storyRoute ??= null;
+  mission.isStoryMission ??= false;
+  mission.storyStage ??= null;
+  mission.routeLocking ??= false;
+  mission.moralBrief ??= createMissionMoralBrief(mission);
   return mission;
+}
+
+function createMissionMoralBrief(mission) {
+  return {
+    visible: mission?.moralBrief?.visible ?? "明面上，这仍是一份可以结算的契约。",
+    hiddenCost: mission?.moralBrief?.hiddenCost ?? "暗地里，它会把一些人的名字从公开记录里擦掉。",
+  };
 }
 
 function normalizeItemState(item) {
@@ -424,7 +483,49 @@ function normalizeCharacterStatus(status) {
 
 function randomIssuer() {
   if (randomNumber(1, 100) <= 35) return randomItem(missionIssuers);
-  return randomItem(otherMissionIssuers);
+  return randomItem(otherMissionIssuers.filter((issuer) => issuer !== "锈蚀部队"));
+}
+
+function createInitialMissionRouteInfo(issuer, type) {
+  const storyRoute =
+    issuer === "SSS" ? "SSS" :
+    issuer === "FOF" ? "FOF" :
+    issuer === "天人残余" ? "heaven" :
+    null;
+  return {
+    storyRoute,
+    isStoryMission: storyRoute === "heaven" || ((storyRoute === "SSS" || storyRoute === "FOF") && randomNumber(1, 100) <= 18),
+    storyStage: storyRoute ? 1 : null,
+    routeLocking: storyRoute === "heaven" && issuer === "天人残余",
+    moralBrief: createInitialMissionMoralBrief(storyRoute, type),
+  };
+}
+
+function createInitialMissionMoralBrief(route, type) {
+  const briefs = {
+    SSS: {
+      visible: "恢复秩序、供电和调度，让红色系统重新把失控地区接回账本。",
+      hiddenCost: "审查和清洗会跟着后勤车一起抵达，部分证词会在秩序恢复前消失。",
+    },
+    FOF: {
+      visible: "保护证词、联络地方力量，让蓝色改革派获得继续作战的理由。",
+      hiddenCost: "革命也需要诱饵、保密名单和不会被写进宣言的外包处决。",
+    },
+    heaven: {
+      visible: "接受天人残余的异常支援，处理人类技术无法解释的问题。",
+      hiddenCost: "从这一刻起，人类社会会把你的组织视为异源代理。",
+    },
+  };
+  if (type?.name === "破坏") {
+    return {
+      visible: "破坏目标设施，让某套战争机器暂时停摆。",
+      hiddenCost: "同一条线路也可能连着医院、净水泵和普通人的明天。",
+    };
+  }
+  return briefs[route] ?? {
+    visible: "明面上，这仍是一份可以结算的契约。",
+    hiddenCost: "暗地里，它会把一些人的名字从公开记录里擦掉。",
+  };
 }
 
 

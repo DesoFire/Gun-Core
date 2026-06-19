@@ -436,6 +436,154 @@ button:disabled {
   min-width: 0;
 }
 
+.route-status-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.route-status-grid article {
+  background: #101317;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.route-status-grid span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+}
+
+.route-status-grid strong {
+  display: block;
+  font-size: 18px;
+  margin-top: 3px;
+}
+
+.story-route-stage-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+}
+
+.story-route-stage-card {
+  background: #101317;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.story-route-stage-card.story-route-SSS {
+  border-left-color: #c84b4b;
+}
+
+.story-route-stage-card.story-route-FOF {
+  border-left-color: #4b8fd8;
+}
+
+.story-route-stage-card.story-route-rust {
+  border-left-color: #8f3328;
+}
+
+.story-route-stage-card.story-route-heaven {
+  border-left-color: #f4f1df;
+}
+
+.story-route-stage-card strong,
+.story-route-stage-card span {
+  display: block;
+}
+
+.story-route-stage-card span {
+  color: var(--accent);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.story-route-stage-card p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.ending-panel {
+  background: #101317;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--good);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 14px;
+}
+
+.ending-panel.ending-lost {
+  border-left-color: var(--danger);
+}
+
+.ending-panel span,
+.ending-panel em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.ending-panel strong {
+  font-size: 22px;
+}
+
+.ending-panel p {
+  color: var(--text);
+  line-height: 1.65;
+  margin: 4px 0 0;
+}
+
+.faction-background-panel {
+  background: #101317;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.faction-background-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.faction-background-card {
+  background: #14171b;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.faction-background-card strong,
+.faction-background-card span {
+  display: block;
+}
+
+.faction-background-card span {
+  color: var(--accent);
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.faction-background-card p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 8px 0 0;
+}
+
 .war-map-card {
   background: #101317;
   border: 1px solid var(--line);
@@ -1191,6 +1339,63 @@ h3 {
   gap: 10px;
 }
 
+.mission-route-sss {
+  border-left: 4px solid #c84b4b;
+}
+
+.mission-route-fof {
+  border-left: 4px solid #4b8fd8;
+}
+
+.mission-route-rust {
+  border-left: 4px solid #8f3328;
+}
+
+.mission-route-heaven {
+  border-left: 4px solid #f4f1df;
+}
+
+.mission-card-badges {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.route-pill {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.route-sss {
+  background: rgb(200 75 75 / 0.16);
+  border-color: rgb(200 75 75 / 0.5);
+  color: #f0aaa7;
+}
+
+.route-fof {
+  background: rgb(75 143 216 / 0.16);
+  border-color: rgb(75 143 216 / 0.5);
+  color: #a8cce9;
+}
+
+.route-rust {
+  background: rgb(143 51 40 / 0.18);
+  border-color: rgb(143 51 40 / 0.58);
+  color: #d48c7f;
+}
+
+.route-heaven {
+  background: rgb(244 241 223 / 0.14);
+  border-color: rgb(244 241 223 / 0.58);
+  color: #f7f2dd;
+}
+
 .mission-summary-card {
   cursor: pointer;
 }
@@ -1236,6 +1441,52 @@ h3 {
   color: var(--text);
   font-size: 12px;
   padding: 5px 8px;
+}
+
+.route-impact {
+  border-left: 4px solid var(--line);
+}
+
+.route-impact-sss {
+  border-left-color: #c84b4b;
+}
+
+.route-impact-fof {
+  border-left-color: #4b8fd8;
+}
+
+.route-impact-rust {
+  border-left-color: #8f3328;
+}
+
+.route-impact-heaven {
+  border-left-color: #f4f1df;
+}
+
+.route-impact-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.route-impact-grid div {
+  background: #14171b;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.route-impact-grid span {
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.route-impact-grid strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .intel-action-grid {
@@ -2438,6 +2689,10 @@ select {
   }
 
   .base-status-grid,
+  .faction-background-grid,
+  .route-impact-grid,
+  .route-status-grid,
+  .story-route-stage-grid,
   .situation-relations,
   .settlement-summary-grid {
     grid-template-columns: 1fr;

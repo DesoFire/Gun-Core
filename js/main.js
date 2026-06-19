@@ -32,6 +32,7 @@ import { initWeaponUI } from "../ui/weaponUI.js";
 import { buyWealthItem, getWealthCollections, getWealthProgress } from "../modules/wealth.js";
 import { confirmResourceSpend, showInsufficientFunds, showSpendFailure, showSpendSuccess, showToast } from "./notifications.js";
 import { economyConfig } from "../data/economyConfig.js";
+import { getStoryRouteConfig, storyRouteOrder } from "../data/storyRoutes.js";
 import { calculateCharacterCombatPower, getInjuryState, getPressureState } from "../modules/combatPower.js";
 
 let router = null;
@@ -721,6 +722,7 @@ function renderOverview() {
 function renderSituation() {
   const state = getState();
   const balance = state.factionBalance ?? {};
+  const routes = state.storyRoutes ?? {};
   const war = normalizePercentGroup(balance.war ?? { SSS: 70, FOF: 24, 天人残余: 5, 锈蚀部队: 1 });
   const map = document.querySelector("#situation-map");
   const relations = document.querySelector("#situation-relations");
@@ -736,6 +738,9 @@ function renderSituation() {
       </div>
       ${renderCivilWarMap(war)}
     </div>
+    ${renderEndingPanel(state)}
+    ${renderStoryRouteStatus(routes)}
+    ${renderFactionBackgrounds()}
   `;
 
   relations.innerHTML = [
@@ -759,6 +764,115 @@ function renderSituation() {
       { key: "异源教会", label: "异源教会", color: "#9b6bd3" },
     ]),
   ].join("");
+}
+
+function renderEndingPanel(state) {
+  if (!state.ending) return "";
+  return `
+    <section class="ending-panel ending-${state.gameStatus}">
+      <span>${state.gameStatus === "lost" ? "失败结局" : "结局达成"}</span>
+      <strong>${state.ending.title}</strong>
+      <em>${state.ending.subtitle ?? ""}</em>
+      <p>${state.ending.text ?? ""}</p>
+    </section>
+  `;
+}
+
+function renderStoryRouteStatus(routes) {
+  const locked = routes.lockedRoute ? formatStoryRouteName(routes.lockedRoute) : "未锁定";
+  return `
+    <div class="route-status-grid">
+      <article><span>当前路线</span><strong>${locked}</strong></article>
+      <article><span>SSS进度</span><strong>${routes.progress?.SSS ?? 0}</strong></article>
+      <article><span>FOF进度</span><strong>${routes.progress?.FOF ?? 0}</strong></article>
+      <article><span>锈蚀进度</span><strong>${routes.progress?.rust ?? 0}</strong></article>
+      <article><span>天人进度</span><strong>${routes.progress?.heaven ?? 0}</strong></article>
+      <article><span>锈蚀关注</span><strong>${routes.attention?.rust ?? 0}</strong></article>
+      <article><span>矩阵破坏度</span><strong>${routes.matrixDamage ?? 0}</strong></article>
+      <article><span>天人协定</span><strong>${routes.heavenPact ? "已触发" : "未触发"}</strong></article>
+    </div>
+    <div class="story-route-stage-grid">
+      ${storyRouteOrder.map((route) => renderStoryRouteStageCard(route, routes)).join("")}
+    </div>
+  `;
+}
+
+function renderStoryRouteStageCard(route, routes) {
+  const config = getStoryRouteConfig(route);
+  const progress = routes.progress?.[route] ?? 0;
+  const next = config?.stageMissions.find((stage) => stage.stage === progress + 1);
+  const complete = config && progress >= config.endingStage;
+  const lockedOut = routes.lockedRoute && routes.lockedRoute !== route;
+  return `
+    <article class="story-route-stage-card story-route-${route}">
+      <div>
+        <strong>${config?.displayName ?? route}</strong>
+        <span>${config?.theme ?? ""}</span>
+      </div>
+      <p>${config?.effects?.description ?? ""}</p>
+      <div class="field-list">
+        <div class="field"><span>当前阶段</span><strong>${progress}/${config?.endingStage ?? 5}</strong></div>
+        <div class="field"><span>下一契约</span><strong>${complete ? "结局已达成" : lockedOut ? "路线已关闭" : next?.title ?? "待触发"}</strong></div>
+      </div>
+    </article>
+  `;
+}
+
+
+function renderFactionBackgrounds() {
+  const factions = [
+    {
+      name: "SSS",
+      role: "秩序回收线",
+      text: "旧秩序、中央军、元老院和矩阵基础设施的集合体。它能恢复供电、医院、工厂和安全体系，也会把审查、清洗和合法脏活一起带回来。",
+    },
+    {
+      name: "FOF",
+      role: "改革战争线",
+      text: "反元老院、支持后翼遗产与联合审计的改革派。它能揭露腐败、保护证词和争取地方支持，也会在战争中制造宣传、诱饵和临时军政府。",
+    },
+    {
+      name: "锈蚀部队",
+      role: "矩阵熄灭线",
+      text: "以抹杀异源技术为目标的焦土组织。它能削弱机动兵器和异源战争机器，也会破坏能源、通信、净水、医疗和生产网络。",
+    },
+    {
+      name: "天人残余",
+      role: "异源代理线",
+      text: "曾经统治或压迫地球的外星势力残余。它能提供超越人类技术的支援，但公开接受其契约会让玩家永久站到人类共同记忆的敌人一侧。",
+    },
+    {
+      name: "黑市商会 / 企业财团",
+      role: "战争经济支线",
+      text: "一边从混乱里榨出利润，一边害怕混乱毁掉交易本身。它们不直接决定结局，但能改变装备、资金、维护和特殊资源的获取方式。",
+    },
+    {
+      name: "纯净社区 / 科研机构 / 异源教会",
+      role: "异源态度支线",
+      text: "围绕异源技术的拒绝、研究与崇拜形成的三角关系。它们会影响玩家如何理解天人遗产，以及如何处理异源装备和异常事件。",
+    },
+  ];
+  return `
+    <section class="faction-background-panel">
+      <div class="war-map-title">
+        <strong>势力背景</strong>
+        <span class="muted">每条路线都有收益，也有代价。</span>
+      </div>
+      <div class="faction-background-grid">
+        ${factions.map((faction) => `
+          <article class="faction-background-card">
+            <strong>${faction.name}</strong>
+            <span>${faction.role}</span>
+            <p>${faction.text}</p>
+          </article>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function formatStoryRouteName(route) {
+  return { SSS: "SSS", FOF: "FOF", rust: "锈蚀部队", heaven: "天人残余" }[route] ?? "未知路线";
 }
 
 function renderCivilWarMap(war) {

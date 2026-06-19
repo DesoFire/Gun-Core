@@ -15,6 +15,7 @@ import {
   promotionChances,
 } from "../data/sampleData.js";
 import { getAllTrainingSkills } from "../data/trainingPools.js";
+import { getNextStoryStageConfig, getStoryRouteConfig } from "../data/storyRoutes.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { getState, updateState } from "../js/state.js";
 import { calculateUnpaidSecrecyReputation, createRankedMecha, identityFee, payDailyUpkeep } from "./faction.js";
@@ -43,9 +44,12 @@ export function getMissions() {
 }
 
 export function createMission(options = {}) {
+  const storyMission = options.storyMission ?? chooseStoryMissionForState(getState());
+  if (storyMission) options = createStoryMissionOptions(storyMission, options);
   const state = getState();
   const type = options.type ?? randomItem(missionTypes);
-  const issuer = options.issuer ?? randomIssuer();
+  const issuer = options.issuer ?? randomIssuerForState(state);
+  const routeInfo = createMissionRouteInfo({ state, issuer, type, options });
   const difficultyConfig = economyConfig.missions.difficulty;
   const reputationTier = Math.floor((state.reputation ?? 0) / difficultyConfig.reputationTierStep);
   const difficulty = options.difficulty ?? clamp(randomNumber(difficultyConfig.baseMin, difficultyConfig.baseMax) + reputationTier, difficultyConfig.min, difficultyConfig.max);
@@ -55,7 +59,8 @@ export function createMission(options = {}) {
   const rewardConfig = economyConfig.missions.reward;
   const rewardGold = Math.round(
     (rewardConfig.baseGold + difficulty * randomNumber(rewardConfig.goldPerDifficultyMin, rewardConfig.goldPerDifficultyMax)) *
-      (options.rewardMultiplier ?? 1)
+      (options.rewardMultiplier ?? 1) *
+      getStoryRouteRewardMultiplier(state, routeInfo.storyRoute)
   );
   const rewardReputation = Math.max(
     rewardConfig.minReputation,
@@ -64,7 +69,7 @@ export function createMission(options = {}) {
         randomNumber(rewardConfig.reputationRandomMin, rewardConfig.reputationRandomMax)
     )
   );
-  const name = `${type.name}契约：${randomMissionSubject(type)}`;
+  const name = options.name ?? `${type.name}契约：${randomMissionSubject(type)}`;
   const powerRequirement = options.powerRequirement ?? calculateMissionPowerRequirement(difficulty, state.reputation ?? 0);
   const recommendedTeamSize = options.recommendedTeamSize ?? createRecommendedTeamSize(difficulty);
   const requirements = options.requirements ?? createMissionRequirements(difficulty);
@@ -73,6 +78,11 @@ export function createMission(options = {}) {
     id: createId(),
     name,
     issuer,
+    storyRoute: routeInfo.storyRoute,
+    isStoryMission: routeInfo.isStoryMission,
+    storyStage: routeInfo.storyStage,
+    routeLocking: routeInfo.routeLocking,
+    moralBrief: routeInfo.moralBrief,
     type: type.name,
     typeCode: type.code,
     actionType: type.actionType,
@@ -86,7 +96,7 @@ export function createMission(options = {}) {
     issueDay,
     expiresDay,
     reward: { gold: rewardGold, reputation: rewardReputation },
-    description: `${randomItem(type.verbs)}目标。${randomItem(missionBriefFragments)}`,
+    description: options.description ?? `${randomItem(type.verbs)}目标。${randomItem(missionBriefFragments)}`,
     intel: createMissionIntel(),
     revealedIntel: options.freeIntel ? [randomItem(missionIntelFields).key] : [],
     hidden: { twist: randomMissionHiddenTwist() },
@@ -156,6 +166,11 @@ export function startMission(id, memberIds) {
     if (draft.gameStatus !== "active") return;
     const mission = draft.missions.find((item) => item.id === id);
     if (!mission || mission.status !== "available") return;
+    normalizeStoryMissionFields(mission);
+    if (!canStartMissionForStoryRoute(draft, mission)) {
+      draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」因路线冲突无法接取。`);
+      return;
+    }
     const validMemberIds = [...new Set(memberIds)].filter((memberId) =>
       draft.roster.some((character) => character.id === memberId && character.status === "待命")
     );
@@ -165,6 +180,7 @@ export function startMission(id, memberIds) {
       return;
     }
 
+    applyStoryRouteStartDraft(draft, mission);
     mission.status = "active";
     mission.assigned = [...validMemberIds];
     mission.remaining = mission.duration;
@@ -328,6 +344,7 @@ function resolveMissionDraft(draft, mission) {
     draft.log.push(`第 ${draft.day} 天：契约「${mission.name}」失败。队伍战斗力 ${teamPower} / 需求 ${mission.powerRequirement}，伤亡风险上升。${outcome.text}${mechaMismatch ? " 敌方机动兵器把现场变成了账单粉碎机。" : ""}`);
   }
 
+  applyStoryRouteResolutionDraft(draft, mission, success);
   settleReturningWagesDraft(draft, mission, team.filter((character) => character.status !== "阵亡"));
   const finalBaseReputation = draft.reputation ?? 0;
   const memberReputationDelta = team.reduce((sum, character) => {
@@ -751,8 +768,324 @@ function countMatchingEquipmentTags(team, wantedTags) {
 }
 
 function randomIssuer() {
+  return randomIssuerForState(getState());
+}
+
+function chooseStoryMissionForState(state = getState()) {
+  if (state.gameStatus !== "active") return null;
+  const routes = state.storyRoutes ?? {};
+  const locked = routes.lockedRoute;
+  if (locked) {
+    const next = getNextStoryStageConfig(locked, routes.progress?.[locked] ?? 0);
+    return next && randomNumber(1, 100) <= 45 ? { route: locked, stage: next } : null;
+  }
+
+  const candidates = [];
+  if (getNextStoryStageConfig("SSS", routes.progress?.SSS ?? 0)) candidates.push(["SSS", 12]);
+  if (getNextStoryStageConfig("FOF", routes.progress?.FOF ?? 0)) candidates.push(["FOF", 12]);
+  if ((routes.attention?.rust ?? 0) >= 3 && getNextStoryStageConfig("rust", routes.progress?.rust ?? 0)) candidates.push(["rust", 10]);
+  if (getNextStoryStageConfig("heaven", routes.progress?.heaven ?? 0)) candidates.push(["heaven", 4]);
+  const total = candidates.reduce((sum, [, weight]) => sum + weight, 0);
+  if (total <= 0 || randomNumber(1, 100) > 24) return null;
+  let roll = randomNumber(1, total);
+  for (const [route, weight] of candidates) {
+    roll -= weight;
+    if (roll <= 0) return { route, stage: getNextStoryStageConfig(route, routes.progress?.[route] ?? 0) };
+  }
+  return null;
+}
+
+function createStoryMissionOptions(storyMission, options = {}) {
+  const config = getStoryRouteConfig(storyMission.route);
+  const stage = storyMission.stage;
+  const type = missionTypes.find((item) => item.name === stage.typeName) ?? randomItem(missionTypes);
+  const issuer = storyMission.route === "rust" && stage.stage === 1
+    ? "匿名雇主"
+    : storyMission.route === "heaven"
+      ? "天人残余"
+      : config.displayName;
+  const difficultyConfig = economyConfig.missions.difficulty;
+  const baseDifficulty = options.difficulty ?? randomNumber(difficultyConfig.baseMin, difficultyConfig.baseMax);
+  const difficulty = clamp(baseDifficulty + (stage.difficultyBonus ?? 0), difficultyConfig.min, difficultyConfig.max);
+  return {
+    ...options,
+    type,
+    issuer,
+    difficulty,
+    storyRoute: storyMission.route,
+    isStoryMission: true,
+    storyStage: stage.stage,
+    routeLocking: Boolean(stage.routeLocking) || stage.stage >= config.lockStage,
+    rewardMultiplier: (options.rewardMultiplier ?? 1) * (stage.rewardMultiplier ?? 1),
+    requirements: createStoryMissionRequirements(difficulty, stage),
+    name: `${stage.title}：${stage.subject}`,
+    description: stage.visible,
+    moralBrief: {
+      visible: stage.visible,
+      hiddenCost: stage.hiddenCost,
+    },
+  };
+}
+
+function createStoryMissionRequirements(difficulty, stage) {
+  const requirements = createMissionRequirements(difficulty);
+  requirements.skillTags = [...new Set([...(stage.requirementTags ?? []), ...(requirements.skillTags ?? [])])].slice(0, 3);
+  if (stage.enemyMecha != null) requirements.enemyMecha = Boolean(stage.enemyMecha);
+  return requirements;
+}
+
+function randomIssuerForState(state = getState()) {
+  const routes = state.storyRoutes ?? {};
+  if (routes.heavenPact || routes.lockedRoute === "heaven") {
+    return randomNumber(1, 100) <= 55 ? "天人残余" : randomItem(["匿名雇主", "二次转包"]);
+  }
+  if (routes.lockedRoute === "SSS") {
+    return randomNumber(1, 100) <= 70 ? "SSS" : randomItem(["企业财团", "科研机构", "匿名雇主", "二次转包"]);
+  }
+  if (routes.lockedRoute === "FOF") {
+    return randomNumber(1, 100) <= 70 ? "FOF" : randomItem(["黑市商会", "匿名雇主", "二次转包"]);
+  }
+  if (routes.lockedRoute === "rust") {
+    return randomNumber(1, 100) <= 65 ? "锈蚀部队" : randomItem(["匿名雇主", "二次转包", "纯净社区"]);
+  }
   if (randomNumber(1, 100) <= 35) return randomItem(missionIssuers);
-  return randomItem(otherMissionIssuers);
+  return randomItem(otherMissionIssuers.filter((issuer) => issuer !== "锈蚀部队"));
+}
+
+function createMissionRouteInfo({ state, issuer, type, options }) {
+  const explicitRoute = options.storyRoute ?? null;
+  let storyRoute = explicitRoute;
+  let isStoryMission = Boolean(options.isStoryMission);
+  let routeLocking = Boolean(options.routeLocking);
+  let storyStage = options.storyStage ?? null;
+
+  if (!storyRoute) {
+    if (issuer === "SSS") storyRoute = "SSS";
+    if (issuer === "FOF") storyRoute = "FOF";
+    if (issuer === "天人残余") storyRoute = "heaven";
+    if (issuer === "锈蚀部队") storyRoute = "rust";
+  }
+
+  if (!storyRoute && isRustCoverMission(type, issuer)) {
+    storyRoute = "rust";
+    isStoryMission = true;
+    storyStage ??= Math.max(1, Math.min(2, Math.floor(((state.storyRoutes?.attention?.rust ?? 0) + 2) / 3)));
+  }
+
+  if (storyRoute === "heaven" && issuer === "天人残余") {
+    isStoryMission = true;
+    routeLocking = true;
+    storyStage ??= Math.max(1, (state.storyRoutes?.progress?.heaven ?? 0) + 1);
+  }
+
+  if ((storyRoute === "SSS" || storyRoute === "FOF") && randomNumber(1, 100) <= 18) {
+    isStoryMission = true;
+    storyStage ??= Math.max(1, (state.storyRoutes?.progress?.[storyRoute] ?? 0) + 1);
+    routeLocking = storyStage >= 3;
+  }
+
+  if (storyRoute === "rust" && issuer === "锈蚀部队") {
+    isStoryMission = true;
+    storyStage ??= Math.max(1, (state.storyRoutes?.progress?.rust ?? 0) + 1);
+    routeLocking = storyStage >= 3;
+  }
+
+  return {
+    storyRoute,
+    isStoryMission,
+    storyStage,
+    routeLocking,
+    moralBrief: options.moralBrief ?? createRouteMoralBrief(storyRoute, type),
+  };
+}
+
+function getStoryRouteRewardMultiplier(state, route) {
+  const progress = state.storyRoutes?.progress?.[route] ?? 0;
+  if (route === "SSS") return 1 + progress * 0.03;
+  if (route === "FOF") return 1 + progress * 0.04;
+  if (route === "rust") return 1 + progress * 0.05;
+  if (route === "heaven") return 1 + (state.storyRoutes?.alienSupport ?? 0) * 0.04;
+  return 1;
+}
+
+function isRustCoverMission(type, issuer) {
+  if (!["匿名雇主", "二次转包", "纯净社区"].includes(issuer)) return false;
+  if (!["破坏", "突袭", "回收", "特殊"].includes(type.name)) return false;
+  return randomNumber(1, 100) <= 14;
+}
+
+function createRouteMoralBrief(route, type) {
+  const fallback = {
+    visible: "明面上，这仍是一份可以结算的契约。",
+    hiddenCost: "暗地里，它会把一些人的名字从公开记录里擦掉。",
+  };
+  const briefs = {
+    SSS: {
+      visible: "恢复秩序、供电和调度，让红色系统重新把失控地区接回账本。",
+      hiddenCost: "审查和清洗会跟着后勤车一起抵达，部分证词会在秩序恢复前消失。",
+    },
+    FOF: {
+      visible: "保护证词、联络地方力量，让蓝色改革派获得继续作战的理由。",
+      hiddenCost: "革命也需要诱饵、保密名单和不会被写进宣言的外包处决。",
+    },
+    rust: {
+      visible: "破坏矩阵节点、战争工厂或异源技术链条，让战争机器降温。",
+      hiddenCost: "同一条线路也可能连着医院、净水泵和普通人的明天。",
+    },
+    heaven: {
+      visible: "接受天人残余的异常支援，处理人类技术无法解释的问题。",
+      hiddenCost: "从这一刻起，人类社会会把你的组织视为异源代理。",
+    },
+  };
+  if (route === "rust" && type?.name === "破坏") return briefs.rust;
+  return briefs[route] ?? fallback;
+}
+
+function normalizeStoryMissionFields(mission) {
+  mission.storyRoute ??= inferMissionRoute(mission);
+  mission.isStoryMission ??= Boolean(mission.storyRoute && ["天人残余", "锈蚀部队"].includes(mission.issuer));
+  mission.storyStage ??= null;
+  mission.routeLocking ??= mission.storyRoute === "heaven" && mission.issuer === "天人残余";
+  mission.moralBrief ??= createRouteMoralBrief(mission.storyRoute, mission);
+}
+
+function inferMissionRoute(mission) {
+  if (mission.issuer === "SSS") return "SSS";
+  if (mission.issuer === "FOF") return "FOF";
+  if (mission.issuer === "天人残余") return "heaven";
+  if (mission.issuer === "锈蚀部队") return "rust";
+  return null;
+}
+
+function canStartMissionForStoryRoute(draft, mission) {
+  const routes = draft.storyRoutes ?? {};
+  const route = mission.storyRoute;
+  if ((routes.heavenPact || routes.lockedRoute === "heaven") && mission.issuer !== "天人残余" && !["匿名雇主", "二次转包"].includes(mission.issuer)) {
+    return false;
+  }
+  if (!route || !routes.lockedRoute) return true;
+  if (routes.lockedRoute === route) return true;
+  return ["匿名雇主", "二次转包"].includes(mission.issuer);
+}
+
+function applyStoryRouteStartDraft(draft, mission) {
+  draft.storyRoutes ??= {};
+  draft.storyRoutes.progress ??= { SSS: 0, FOF: 0, rust: 0, heaven: 0 };
+  if (mission.storyRoute === "heaven" && mission.issuer === "天人残余") {
+    draft.storyRoutes.heavenPact = true;
+    draft.storyRoutes.lockedRoute = "heaven";
+    draft.log.push(`第 ${draft.day} 天：接受天人残余契约后，组织被永久标记为异源代理。`);
+  }
+  if (mission.routeLocking && mission.storyRoute && mission.storyRoute !== "heaven") {
+    draft.storyRoutes.lockedRoute = mission.storyRoute;
+    draft.log.push(`第 ${draft.day} 天：组织路线锁定为 ${formatStoryRouteName(mission.storyRoute)}。`);
+  }
+}
+
+function applyStoryRouteResolutionDraft(draft, mission, success) {
+  normalizeStoryMissionFields(mission);
+  draft.storyRoutes ??= {};
+  draft.storyRoutes.progress ??= { SSS: 0, FOF: 0, rust: 0, heaven: 0 };
+  draft.storyRoutes.attention ??= { rust: 0 };
+  draft.storyRoutes.exposure ??= { rust: 0 };
+  draft.storyRoutes.alienSupport ??= 0;
+  const route = mission.storyRoute;
+  if (!route) return;
+
+  if (success && mission.isStoryMission) {
+    const previous = draft.storyRoutes.progress[route] ?? 0;
+    const next = Math.max(previous, mission.storyStage ?? (previous + 1));
+    draft.storyRoutes.progress[route] = next;
+    applyStoryStageRewardDraft(draft, mission);
+    draft.log.push(`第 ${draft.day} 天：${formatStoryRouteName(route)}主线推进到第 ${next} 阶段。`);
+    const config = getStoryRouteConfig(route);
+    if (mission.routeLocking || (config && next >= config.lockStage)) {
+      draft.storyRoutes.lockedRoute ??= route;
+    }
+  }
+
+  if (route === "rust") {
+    const gain = mission.type === "破坏" || mission.requirements?.enemyMecha ? 2 : 1;
+    draft.storyRoutes.attention.rust = Math.min(100, (draft.storyRoutes.attention.rust ?? 0) + gain);
+    if (success) draft.storyRoutes.matrixDamage = Math.min(100, (draft.storyRoutes.matrixDamage ?? 0) + (mission.isStoryMission ? 3 : 1));
+  }
+
+  if (success) applyFactionBalanceForRouteDraft(draft, route, mission);
+}
+
+function applyStoryStageRewardDraft(draft, mission) {
+  const config = getStoryRouteConfig(mission.storyRoute);
+  const stage = config?.stageMissions.find((item) => item.stage === mission.storyStage);
+  const reward = stage?.reward;
+  if (!reward) return;
+  const parts = [];
+  if (reward.gold) {
+    draft.gold += reward.gold;
+    parts.push(`${reward.gold} 金`);
+  }
+  if (reward.enhancementPoints) {
+    draft.enhancementPoints = (draft.enhancementPoints ?? 0) + reward.enhancementPoints;
+    parts.push(`${reward.enhancementPoints} 强化点`);
+  }
+  if (reward.reputation) {
+    draft.reputation = (draft.reputation ?? 0) + reward.reputation;
+    parts.push(`${reward.reputation} 基地声望`);
+  }
+  if (reward.stealth) {
+    draft.stealth = clamp((draft.stealth ?? 0) + reward.stealth, 0, 100);
+    parts.push(`${reward.stealth > 0 ? "+" : ""}${reward.stealth} 隐秘`);
+  }
+  if (reward.matrixDamage) {
+    draft.storyRoutes.matrixDamage = Math.min(100, (draft.storyRoutes.matrixDamage ?? 0) + reward.matrixDamage);
+    parts.push(`${reward.matrixDamage} 矩阵破坏度`);
+  }
+  if (reward.alienSupport) {
+    draft.storyRoutes.alienSupport = (draft.storyRoutes.alienSupport ?? 0) + reward.alienSupport;
+    parts.push(`${reward.alienSupport} 天人支援`);
+  }
+  if (parts.length > 0) {
+    draft.log.push(`第 ${draft.day} 天：完成主线阶段奖励，获得 ${parts.join("、")}。`);
+  }
+}
+
+function applyFactionBalanceForRouteDraft(draft, route, mission) {
+  draft.factionBalance ??= {};
+  draft.factionBalance.war ??= { SSS: 70, FOF: 24, 天人残余: 5, 锈蚀部队: 1 };
+  draft.factionBalance.order ??= { 民生秩序: 90, 地方暴力: 10 };
+  const war = draft.factionBalance.war;
+  const order = draft.factionBalance.order;
+  const major = mission.isStoryMission ? 3 : 1;
+  if (route === "SSS") {
+    shiftWarShare(war, "SSS", major, ["FOF", "锈蚀部队"]);
+    order.民生秩序 = clamp((order.民生秩序 ?? 90) + 1, 0, 100);
+    order.地方暴力 = clamp((order.地方暴力 ?? 10) - 1, 0, 100);
+  } else if (route === "FOF") {
+    shiftWarShare(war, "FOF", major, ["SSS"]);
+    order.民生秩序 = clamp((order.民生秩序 ?? 90) + (mission.type === "营救" ? 1 : 0), 0, 100);
+    order.地方暴力 = clamp((order.地方暴力 ?? 10) + (mission.type === "突袭" ? 1 : 0), 0, 100);
+  } else if (route === "rust") {
+    shiftWarShare(war, "锈蚀部队", major, ["SSS", "FOF"]);
+    order.民生秩序 = clamp((order.民生秩序 ?? 90) - 1, 0, 100);
+    order.地方暴力 = clamp((order.地方暴力 ?? 10) + 1, 0, 100);
+  } else if (route === "heaven") {
+    shiftWarShare(war, "天人残余", major, ["SSS", "FOF", "锈蚀部队"]);
+  }
+}
+
+function shiftWarShare(war, target, amount, donors) {
+  war[target] = clamp((war[target] ?? 0) + amount, 0, 100);
+  let remaining = amount;
+  donors.forEach((donor, index) => {
+    if (remaining <= 0) return;
+    const loss = index === donors.length - 1 ? remaining : Math.ceil(amount / donors.length);
+    const actual = Math.min(war[donor] ?? 0, loss);
+    war[donor] = Math.max(0, (war[donor] ?? 0) - actual);
+    remaining -= actual;
+  });
+}
+
+function formatStoryRouteName(route) {
+  return { SSS: "SSS", FOF: "FOF", rust: "锈蚀部队", heaven: "天人残余" }[route] ?? "未知路线";
 }
 
 function randomMissionSubject(type) {
@@ -888,7 +1221,8 @@ function calculateMissionAdvancePayment(mission, team = []) {
   if (mission.advancePaid) return mission.advancePaid;
   const range = economyConfig.missions.advancePaymentRates[mission.typeCode] ?? economyConfig.missions.advancePaymentRates.fallback;
   const [minRate, maxRate] = range;
-  const rate = Math.min(0.95, minRate + Math.random() * (maxRate - minRate) + getAdvancePaymentRateBonus(team));
+  const fofBonus = mission.storyRoute === "FOF" ? (getState().storyRoutes?.progress?.FOF ?? 0) * 0.02 : 0;
+  const rate = Math.min(0.95, minRate + Math.random() * (maxRate - minRate) + getAdvancePaymentRateBonus(team) + fofBonus);
   return Math.max(0, Math.floor((mission.reward?.gold ?? 0) * rate));
 }
 
@@ -909,7 +1243,8 @@ function calculateDiscountedInvestigateCost(draft, mission, mode = "targeted") {
     mode === "random" ? config.randomInvestigationMultiplier : mode === "power" ? config.powerInvestigationMultiplier : 1;
   const facilityDiscount = (draft.facilities?.intel ?? 0) * economyConfig.facilities.intelInvestigationDiscountPerLevel;
   const skillDiscount = getInvestigationSkillDiscount(draft, mode);
-  const discount = Math.min(config.maxInvestigationDiscount, facilityDiscount + skillDiscount);
+  const heavenDiscount = mission.storyRoute === "heaven" ? (draft.storyRoutes?.alienSupport ?? 0) * 0.02 : 0;
+  const discount = Math.min(config.maxInvestigationDiscount, facilityDiscount + skillDiscount + heavenDiscount);
   return Math.max(1, Math.round(baseCost * modeMultiplier * (1 - discount)));
 }
 
@@ -1108,26 +1443,29 @@ function applyHiddenTwistDraft(draft, mission, team, success) {
 }
 
 function normalizeLegacyMission(mission) {
-  if (mission.issuer && mission.type && mission.intel && mission.hidden) return mission;
+  const alreadyCoreComplete = mission.issuer && mission.type && mission.intel && mission.hidden;
 
-  const fallbackTemplate = missionTemplates.find((template) => template.name === mission.name) ?? randomItem(missionTemplates);
+  const fallbackTemplate = alreadyCoreComplete ? null : missionTemplates.find((template) => template.name === mission.name) ?? randomItem(missionTemplates);
   const fallbackType =
     missionTypes.find((type) => type.name === mission.type || type.code === mission.typeCode) ??
     randomItem(missionTypes);
-  mission.issuer ??= randomIssuer();
-  mission.type ??= fallbackType.name;
-  mission.typeCode ??= fallbackType.code;
-  mission.actionType ??= fallbackType.actionType ?? "logistics";
-  mission.acquisition ??= "旧合同转录";
-  mission.description ??= `${randomItem(fallbackType.verbs)}目标。${randomItem(missionBriefFragments)}`;
-  mission.intel ??= createMissionIntel();
-  mission.revealedIntel ??= [];
-  mission.hidden ??= { twist: randomMissionHiddenTwist() };
+  if (!alreadyCoreComplete) {
+    mission.issuer ??= randomIssuer();
+    mission.type ??= fallbackType.name;
+    mission.typeCode ??= fallbackType.code;
+    mission.actionType ??= fallbackType.actionType ?? "logistics";
+    mission.acquisition ??= "旧合同转录";
+    mission.description ??= `${randomItem(fallbackType.verbs)}目标。${randomItem(missionBriefFragments)}`;
+    mission.intel ??= createMissionIntel();
+    mission.revealedIntel ??= [];
+    mission.hidden ??= { twist: randomMissionHiddenTwist() };
+  }
   normalizeMissionPlanningFields(mission);
-  mission.refreshCost ??= calculateRefreshCost(mission.difficulty ?? fallbackTemplate.difficulty ?? 2);
-  mission.investigateCost ??= calculateInvestigateCost({ rewardGold: mission.reward?.gold, difficulty: mission.difficulty ?? fallbackTemplate.difficulty ?? 2 });
+  mission.refreshCost ??= calculateRefreshCost(mission.difficulty ?? fallbackTemplate?.difficulty ?? 2);
+  mission.investigateCost ??= calculateInvestigateCost({ rewardGold: mission.reward?.gold, difficulty: mission.difficulty ?? fallbackTemplate?.difficulty ?? 2 });
   mission.issueDay ??= 1;
   mission.expiresDay ??= mission.issueDay + 4;
+  normalizeStoryMissionFields(mission);
   return mission;
 }
 

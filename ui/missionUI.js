@@ -1,5 +1,6 @@
 import { getState } from "../js/state.js";
 import { missionIntelFields } from "../data/sampleData.js";
+import { getStoryRouteConfig } from "../data/storyRoutes.js";
 import { economyConfig } from "../data/economyConfig.js";
 import {
   getMissionRiskTag,
@@ -64,14 +65,20 @@ function renderMissionCard(mission, state) {
   const risk = getMissionRiskTag(mission);
   const canAct = state.gameStatus === "active";
   const rank = getMissionRank(mission);
+  const route = getMissionRouteMeta(mission);
+  const routeConfig = getStoryRouteConfig(mission.storyRoute);
+  const isEndingMission = routeConfig && mission.isStoryMission && mission.storyStage >= routeConfig.endingStage;
   return `
-    <article class="card mission-card mission-summary-card" data-open-mission="${mission.id}">
+    <article class="card mission-card mission-summary-card mission-route-${route.key}" data-open-mission="${mission.id}">
       <div class="card-header">
         <div>
           <p class="card-title">${mission.name}</p>
           <p class="muted">${mission.issuer} / ${mission.type} / ${formatDeadline(mission)}</p>
         </div>
-        <span class="rank-pill rank-${rank}">${rank}</span>
+        <div class="mission-card-badges">
+          ${route.label ? `<span class="route-pill route-${route.key}">${route.label}</span>` : ""}
+          <span class="rank-pill rank-${rank}">${rank}</span>
+        </div>
       </div>
       <div class="mission-public">
         <span>战力 ${powerRange.low}-${powerRange.high}</span>
@@ -143,6 +150,7 @@ function renderMissionDossier(id) {
   const lockedIntelFields = getLockedIntelFields(mission);
   const canAct = state.gameStatus === "active" && !isActive;
   const daysUntilExpires = Math.max(0, mission.expiresDay - state.day);
+  const route = getMissionRouteMeta(mission);
 
   const dossier = document.querySelector("#mission-dossier");
   dossier.innerHTML = `
@@ -170,6 +178,20 @@ function renderMissionDossier(id) {
       <section class="dossier-section wide">
         <h3>简报</h3>
         <p class="mission-brief">${mission.description}</p>
+      </section>
+      <section class="dossier-section wide route-impact route-impact-${route.key}">
+        <div class="card-header">
+          <div>
+            <h3>路线影响</h3>
+            <p class="muted">${route.label ? `${route.label} / ${mission.isStoryMission ? "主线契约" : "普通契约"}` : "普通契约 / 暂无明确路线"}</p>
+          </div>
+          ${isEndingMission ? `<span class="badge danger">结局契约</span>` : mission.routeLocking ? `<span class="badge danger">路线锁定</span>` : ""}
+        </div>
+        <div class="route-impact-grid">
+          <div><span>阶段</span><strong>${mission.isStoryMission ? `第 ${mission.storyStage ?? "?"} 阶段` : "普通契约"}</strong></div>
+          <div><span>明账</span><strong>${mission.moralBrief?.visible ?? "这是一份可以结算的契约。"}</strong></div>
+          <div><span>暗账</span><strong>${mission.moralBrief?.hiddenCost ?? "有人会替这份报酬支付另一种价格。"}</strong></div>
+        </div>
       </section>
       <section class="dossier-section wide">
         <div class="card-header">
@@ -368,6 +390,7 @@ function bindMissionEvents(mission) {
 
   dossier.querySelectorAll("[data-confirm-dispatch]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!confirmStoryRouteDispatch(mission)) return;
       startMission(button.dataset.confirmDispatch, [...dispatchSelection]);
       dispatchMissionId = null;
       dispatchSelection.clear();
@@ -375,6 +398,32 @@ function bindMissionEvents(mission) {
       openMissionId = null;
     });
   });
+}
+
+function confirmStoryRouteDispatch(mission) {
+  if (mission.storyRoute !== "heaven" || mission.issuer !== "天人残余") return true;
+  return window.confirm(
+    "该契约发布方为：天人残余。\n\n一旦接受，所有人类势力将永久终止与你的合作。GMS 将继续提供操作界面，但不会为你的道德、人身安全、现实身份或物种分类承担责任。\n\n是否接受？"
+  );
+}
+
+function getMissionRouteMeta(mission) {
+  const route = mission.storyRoute ?? inferMissionRoute(mission);
+  const data = {
+    SSS: { key: "sss", label: "SSS路线" },
+    FOF: { key: "fof", label: "FOF路线" },
+    rust: { key: "rust", label: "锈蚀路线" },
+    heaven: { key: "heaven", label: "天人路线" },
+  };
+  return data[route] ?? { key: "none", label: "" };
+}
+
+function inferMissionRoute(mission) {
+  if (mission.issuer === "SSS") return "SSS";
+  if (mission.issuer === "FOF") return "FOF";
+  if (mission.issuer === "锈蚀部队") return "rust";
+  if (mission.issuer === "天人残余") return "heaven";
+  return null;
 }
 
 function handleInvestigate(button, mission) {
