@@ -44,11 +44,11 @@ export function getMissions() {
 }
 
 export function createMission(options = {}) {
-  const storyMission = options.storyMission ?? chooseStoryMissionForState(getState());
+  const storyMission = options.allowStoryMission === false ? null : options.storyMission ?? chooseStoryMissionForState(getState());
   if (storyMission) options = createStoryMissionOptions(storyMission, options);
   const state = getState();
   const type = options.type ?? randomItem(missionTypes);
-  const issuer = options.issuer ?? randomIssuerForState(state);
+  const issuer = options.issuer ?? randomIssuerForState(state, { allowStoryMission: options.allowStoryMission !== false });
   const routeInfo = createMissionRouteInfo({ state, issuer, type, options });
   const difficultyConfig = economyConfig.missions.difficulty;
   const reputationTier = Math.floor((state.reputation ?? 0) / difficultyConfig.reputationTierStep);
@@ -128,7 +128,7 @@ export function refreshMission(id) {
     if (draft.gold < cost) return;
 
     draft.gold -= cost;
-    draft.missions[index] = createMission();
+    draft.missions[index] = createMission({ allowStoryMission: false });
     draft.log.push(`第 ${draft.day} 天：支付 ${cost} 金刷新了一份契约。`);
   });
 }
@@ -638,11 +638,30 @@ function calculateMissionChanceFromRoster(roster, facilities, memberIds, mission
 }
 
 function refillAvailableMissionsDraft(draft) {
-  while (draft.missions.filter((mission) => mission.status === "available").length < economyConfig.missions.missionBoard.availableLimit) {
-    draft.missions.push(createMission({ issueDay: draft.day }));
+  while (countAvailableBoardMissions(draft) < economyConfig.missions.missionBoard.availableLimit) {
+    draft.missions.push(createMission({ issueDay: draft.day, allowStoryMission: false }));
   }
+  refillStoryMissionsDraft(draft);
 }
 
+function countAvailableBoardMissions(draft) {
+  return draft.missions.filter((mission) => mission.status === "available" && !mission.isStoryMission).length;
+}
+
+function refillStoryMissionsDraft(draft) {
+  const routesWithAvailableStoryMission = new Set(
+    draft.missions
+      .filter((mission) => mission.status === "available" && mission.isStoryMission && mission.storyRoute)
+      .map((mission) => mission.storyRoute)
+  );
+  const storyMission = chooseStoryMissionForState(draft);
+  if (!storyMission || routesWithAvailableStoryMission.has(storyMission.route)) return;
+  draft.missions.push(createMission({
+    issueDay: draft.day,
+    storyMission,
+    allowStoryMission: true,
+  }));
+}
 function evaluateMissionFitFromRoster(roster, facilities, memberIds, mission, options = {}) {
   if (memberIds.length === 0) {
     return {
@@ -834,7 +853,7 @@ function createStoryMissionRequirements(difficulty, stage) {
   return requirements;
 }
 
-function randomIssuerForState(state = getState()) {
+function randomIssuerForState(state = getState(), options = {}) {
   const routes = state.storyRoutes ?? {};
   if (routes.heavenPact || routes.lockedRoute === "heaven") {
     return randomNumber(1, 100) <= 55 ? "天人残余" : randomItem(["匿名雇主", "二次转包"]);
@@ -849,10 +868,20 @@ function randomIssuerForState(state = getState()) {
     return randomNumber(1, 100) <= 65 ? "锈蚀部队" : randomItem(["匿名雇主", "二次转包", "纯净社区"]);
   }
   if (randomNumber(1, 100) <= 35) return randomItem(missionIssuers);
-  return randomItem(otherMissionIssuers.filter((issuer) => issuer !== "锈蚀部队"));
+  const excluded = options.allowStoryMission === false ? ["\u9508\u8680\u90e8\u961f", "\u5929\u4eba\u6b8b\u4f59"] : ["\u9508\u8680\u90e8\u961f"];
+  return randomItem(otherMissionIssuers.filter((issuer) => !excluded.includes(issuer)));
 }
 
 function createMissionRouteInfo({ state, issuer, type, options }) {
+  if (options.allowStoryMission === false) {
+    return {
+      storyRoute: inferIssuerRoute(issuer),
+      isStoryMission: false,
+      storyStage: null,
+      routeLocking: false,
+      moralBrief: options.moralBrief ?? createRouteMoralBrief(inferIssuerRoute(issuer), type),
+    };
+  }
   const explicitRoute = options.storyRoute ?? null;
   let storyRoute = explicitRoute;
   let isStoryMission = Boolean(options.isStoryMission);
@@ -906,6 +935,14 @@ function getStoryRouteRewardMultiplier(state, route) {
   if (route === "rust") return 1 + progress * 0.05;
   if (route === "heaven") return 1 + (state.storyRoutes?.alienSupport ?? 0) * 0.04;
   return 1;
+}
+
+function inferIssuerRoute(issuer) {
+  if (issuer === "SSS") return "SSS";
+  if (issuer === "FOF") return "FOF";
+  if (issuer === "\u5929\u4eba\u6b8b\u4f59") return "heaven";
+  if (issuer === "\u9508\u8680\u90e8\u961f") return "rust";
+  return null;
 }
 
 function isRustCoverMission(type, issuer) {
