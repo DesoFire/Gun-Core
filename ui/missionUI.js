@@ -32,10 +32,19 @@ export function renderMissionUI() {
   const container = document.querySelector("#mission-list");
   if (!container) return;
 
+<<<<<<< Updated upstream
   container.innerHTML = getMissions().map((mission) => renderMissionCard(mission, state)).join("");
 
   container.querySelectorAll("[data-open-mission]").forEach((card) => {
     card.addEventListener("click", () => openMissionCard(card.dataset.openMission));
+=======
+  container.querySelectorAll("[data-start-mission]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const memberIds = getSelectedCharacterIds();
+      clearSelectedCharacters();
+      startMission(button.dataset.startMission, memberIds);
+    });
+>>>>>>> Stashed changes
   });
 
   container.querySelectorAll("[data-view-mission]").forEach((button) => {
