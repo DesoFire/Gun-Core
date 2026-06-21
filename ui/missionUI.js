@@ -32,19 +32,10 @@ export function renderMissionUI() {
   const container = document.querySelector("#mission-list");
   if (!container) return;
 
-<<<<<<< Updated upstream
   container.innerHTML = getMissions().map((mission) => renderMissionCard(mission, state)).join("");
 
   container.querySelectorAll("[data-open-mission]").forEach((card) => {
     card.addEventListener("click", () => openMissionCard(card.dataset.openMission));
-=======
-  container.querySelectorAll("[data-start-mission]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const memberIds = getSelectedCharacterIds();
-      clearSelectedCharacters();
-      startMission(button.dataset.startMission, memberIds);
-    });
->>>>>>> Stashed changes
   });
 
   container.querySelectorAll("[data-view-mission]").forEach((button) => {
@@ -160,6 +151,8 @@ function renderMissionDossier(id) {
   const canAct = state.gameStatus === "active" && !isActive;
   const daysUntilExpires = Math.max(0, mission.expiresDay - state.day);
   const route = getMissionRouteMeta(mission);
+  const routeConfig = getStoryRouteConfig(mission.storyRoute);
+  const isEndingMission = routeConfig && mission.isStoryMission && mission.storyStage >= routeConfig.endingStage;
 
   const dossier = document.querySelector("#mission-dossier");
   dossier.innerHTML = `
