@@ -8,6 +8,7 @@ export const facilities = {
   tavern: { name: "酒馆", description: "提高招募池规模。", cost: 70, upkeep: 5, unlockCost: 70 },
   barracks: { name: "兵营", description: "提高可雇佣佣兵上限。每提升 1 级，佣兵上限 +1。", cost: 85, upkeep: 5, unlockCost: 85 },
   defenses: { name: "防御设施", description: "在基地遭遇突袭时提供额外基地战斗力。", cost: 100, upkeep: 8, unlockCost: 100 },
+  shelter: { name: "避难所", description: "收容战争中的难民。每修建 1 座，可收容 20 名难民。", cost: 120, upkeep: 2, unlockCost: 120, capacityPerBuild: 20 },
   blackMarket: { name: "黑市", description: "花钱购买当前评级的补给、武器、防具和机甲。", cost: 95, upkeep: 6, unlockCost: 95 },
   hospital: { name: "医疗中心", description: "花钱治疗伤病。", cost: 110, upkeep: 9, unlockCost: 110 },
   entertainmentCenter: { name: "娱乐中心", description: "通过赌博、成瘾性药物和军妓等方式缓解压力。", cost: 80, upkeep: 7, unlockCost: 80 },

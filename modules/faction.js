@@ -1,4 +1,4 @@
-﻿import {
+import {
   facilities,
   facilityRanks,
   mechaFrames,
@@ -147,7 +147,7 @@ export function calculateDailyExpenseBreakdownFromDraft(draft) {
       id,
       name: facilities[id]?.name ?? id,
       level,
-      rank: id === "defenses" ? `${level}座` : getFacilityRankLabel(level),
+      rank: isStackedFacility(id) ? `${level}座` : getFacilityRankLabel(level),
       cost: calculateFacilityUpkeep(id, level),
     }));
   const baseCost = economyConfig.dailyExpenses.baseUpkeep;
@@ -178,7 +178,7 @@ export function upgradeFacility(id) {
     const facility = facilities[id];
     if (!facility) return;
     const level = draft.facilities[id] ?? 0;
-    if (id !== "defenses" && level >= facilityRanks.length) {
+    if (!isStackedFacility(id) && level >= facilityRanks.length) {
       draft.log.push(`第 ${draft.day} 天：${facility.name} 已达到最高 S 级。`);
       return;
     }
@@ -187,7 +187,7 @@ export function upgradeFacility(id) {
     if (draft.gold < cost) return;
     draft.gold -= cost;
     draft.facilities[id] = nextLevel;
-    draft.log.push(id === "defenses"
+    draft.log.push(isStackedFacility(id)
       ? `第 ${draft.day} 天：修建了第 ${nextLevel} 座${facility.name}。`
       : `第 ${draft.day} 天：${facility.name} 升到了 ${getFacilityRankLabel(nextLevel)} 级。`);
   });
@@ -381,9 +381,13 @@ export function getFacilityUpgradeCost(id, level) {
   return level <= 0 ? facility.unlockCost ?? facility.cost : facility.cost + level * economyConfig.facilities.upgradePerCurrentLevel;
 }
 
+function isStackedFacility(id) {
+  return id === "defenses" || id === "shelter";
+}
+
 export function canUpgradeFacility(id) {
   const state = getState();
-  if (id === "defenses") return true;
+  if (isStackedFacility(id)) return true;
   const nextLevel = (state.facilities[id] ?? 0) + 1;
   return nextLevel <= facilityRanks.length;
 }
@@ -473,7 +477,9 @@ function getTreatmentConditionCost(condition, category, config) {
 
 function calculateFacilityUpkeep(id, level) {
   if (!level || level <= 0) return 0;
-  const rawCost = (facilities[id]?.upkeep ?? 0) * level * economyConfig.facilities.upkeepMultiplier;
+  const upkeep = facilities[id]?.upkeep ?? 0;
+  if (upkeep <= 0) return 0;
+  const rawCost = upkeep * level * economyConfig.facilities.upkeepMultiplier;
   return Math.max(1, Math.round(rawCost));
 }
 

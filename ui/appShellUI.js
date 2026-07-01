@@ -58,6 +58,7 @@ export function renderAppShell(root) {
 
     <main class="dashboard">
       <section class="tab-page active" data-tab-page="overview">
+        <button class="page-help-button" data-page-help="overview" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
         <div class="overview-layout">
           <section class="panel overview-panel">
             <div class="section-heading">
@@ -78,6 +79,7 @@ export function renderAppShell(root) {
       </section>
 
       <section class="tab-page" data-tab-page="personnel">
+        <button class="page-help-button" data-page-help="personnel" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
         <div class="tab-layout two-column">
           <section class="panel roster-panel">
             <div class="section-heading">
@@ -97,6 +99,7 @@ export function renderAppShell(root) {
       </section>
 
       <section class="tab-page" data-tab-page="mechs">
+        <button class="page-help-button" data-page-help="mechs" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
         <section class="panel">
           <div class="section-heading">
             <h2>机甲</h2>
@@ -107,10 +110,12 @@ export function renderAppShell(root) {
       </section>
 
       <section class="tab-page" data-tab-page="warehouse">
+        <button class="page-help-button" data-page-help="warehouse" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
         <div id="warehouse-list" class="stack"></div>
       </section>
 
       <section class="tab-page" data-tab-page="missions">
+        <button class="page-help-button" data-page-help="missions" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
         <section class="panel mission-panel">
           <div class="section-heading">
             <h2>契约</h2>
@@ -124,6 +129,7 @@ export function renderAppShell(root) {
       </section>
 
       <section class="tab-page" data-tab-page="situation">
+        <button class="page-help-button" data-page-help="situation" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
         <section class="panel situation-panel">
           <div class="section-heading">
             <div>
@@ -138,6 +144,7 @@ export function renderAppShell(root) {
       </section>
 
       <section class="tab-page" data-tab-page="facilities">
+        <button class="page-help-button" data-page-help="facilities" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
         <section class="panel facility-panel">
           <div class="section-heading">
             <h2>基础设施</h2>
@@ -148,6 +155,7 @@ export function renderAppShell(root) {
       </section>
 
       <section class="tab-page" data-tab-page="expenses">
+        <button class="page-help-button" data-page-help="expenses" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
         <section class="panel expense-panel">
           <div class="section-heading">
             <div>
@@ -162,6 +170,7 @@ export function renderAppShell(root) {
       </section>
 
       <section class="tab-page" data-tab-page="wealth">
+        <button class="page-help-button" data-page-help="wealth" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
         <section class="panel wealth-panel">
           <div class="section-heading">
             <div>
@@ -176,22 +185,23 @@ export function renderAppShell(root) {
 
 
     <section class="tab-page" data-tab-page="help">
+      <button class="page-help-button" data-page-help="help" aria-label="查看本页帮助" title="查看本页帮助" type="button">?</button>
       <section class="panel help-page-panel">
       <div class="global-log-header">
         <div>
           <strong>玩法帮助</strong>
-          <p class="muted">GMS 不保证胜利，只保证账单准时抵达。</p>
+          <p class="muted">GMS祝您工作顺利、身体健康。</p>
         </div>
       </div>
       <div class="help-content">
         <section class="help-section">
           <h3>核心目标</h3>
-          <p>你经营一个非法入境佣兵组织。短期目标是让资金为正、队伍能打、隐秘值别归零；长期目标是靠契约收益购买财富收藏，把内战变成私人资产负债表。</p>
+          <p>你经营一个非法入境的佣兵组织。短期目标是让资金为正、队伍能打、隐秘值别归零；长期目标是靠契约收益购买财富收藏，把内战变成私人资产负债表。</p>
         </section>
         <section class="help-section">
           <h3>每日循环</h3>
           <ol>
-            <li>在人员页招募或解雇佣兵，死者按钮会变成“收尸”。</li>
+            <li>在人员页招募或解雇佣兵，他们是为你挣钱的工具。</li>
             <li>在契约页查看契约，花钱调查情报，再派遣合适的小队。</li>
             <li>在支出页检查工资、生活补给、装备养护、设施维持和隐秘费用。</li>
             <li>点击推进一天，确认收支简报，等待契约返回、突发事件和基地遇袭判定。</li>
@@ -252,42 +262,54 @@ export function renderAppShell(root) {
       <div class="dossier" id="facility-dossier"></div>
     </dialog>
 
-    <dialog id="intro-dialog" class="dialog intro-dialog">
-      <div class="intro-card">
-        <p class="eyebrow">GMS 接入确认</p>
-        <h2>欢迎来到可控范围内</h2>
-        <div class="intro-copy">
-          <p>SSS 内战爆发后，所有新闻频道终于统一了口径：局势仍在可控范围内。</p>
-          <p>于是粮价上涨，军火脱销，边境关门，尸体开始影响交通。</p>
-          <p>你没有战斗力，不能亲自上战场。更准确地说，你从未认真考虑过亲自上战场。幸运的是，你有钱，有人脉，还有一套远程佣兵管理系统：GMS。</p>
-          <p>通过 GMS，你将在 SSS 境内招募被称为 Gun 的佣兵，建立隐秘基地，接取契约，购买装备，并从战争中获得一笔体面的收入。</p>
-          <p>这些 Gun 是非法入境的行动人员。为了确保他们在官方记录中继续保持“不存在”的良好状态，你需要按月缴纳隐秘费用。未支付的声望会降低隐秘值；隐秘值越低，基地越容易被找上门。</p>
+    <dialog id="page-help-dialog" class="dialog page-help-dialog">
+      <div class="page-help-card">
+        <div class="dossier-top">
+          <div>
+            <p id="page-help-eyebrow" class="eyebrow">PAGE BRIEF</p>
+            <h2 id="page-help-title" class="dossier-title">页面说明</h2>
+            <p id="page-help-summary" class="muted">等待说明。</p>
+          </div>
+          <button id="page-help-close" class="ghost-button dialog-close-button" aria-label="关闭" title="关闭" type="button">关闭</button>
         </div>
-        <div class="intro-steps">
-          <article>
-            <strong>1. 看总览</strong>
-            <span>资金、基地声望、隐秘值、日支出和人员状态会决定你今天能犯多大的错。</span>
-          </article>
-          <article>
-            <strong>2. 招募 Gun</strong>
-            <span>在人员页雇佣佣兵。便宜的人通常很便宜，贵的人通常会活着回来要求你付钱。</span>
-          </article>
-          <article>
-            <strong>3. 调查契约</strong>
-            <span>契约页只显示模糊风险。花钱调查敌方伤害、推荐武器、能力需求、人数和战力区间，再决定派谁去。</span>
-          </article>
-          <article>
-            <strong>4. 批准支出</strong>
-            <span>推进一天前需要在支出页确认开销。外出佣兵暂不支付日薪，平安归来后会一并补发。</span>
-          </article>
-          <article>
-            <strong>5. 花掉战争财</strong>
-            <span>财富页用于把 GMS 的利润变成私人收藏、体面工程和更容易入睡的借口。</span>
-          </article>
-        </div>
-        <div class="intro-footer">
-          <p class="muted">欢迎使用 GMS。愿战争早日结束，但不要太早。</p>
-          <button id="intro-confirm" class="primary-button" type="button">开始经营</button>
+        <div id="page-help-content" class="page-help-content"></div>
+      </div>
+    </dialog>
+    <dialog id="communication-dialog" class="dialog communication-dialog">
+      <div class="comm-panel">
+        <div class="comm-frame">
+          <div class="comm-header">
+            <div>
+              <p id="comm-channel" class="comm-channel">CODEC / ENCRYPTED</p>
+              <h2 id="comm-title" class="comm-title">加密通讯</h2>
+            </div>
+            <div class="comm-signal" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+          </div>
+          <div class="comm-body">
+            <aside class="comm-portrait" aria-label="通讯人物立绘区域">
+              <div id="comm-portrait-image" class="comm-portrait-image">
+                <div class="comm-portrait-placeholder">
+                  <span id="comm-portrait-initial">?</span>
+                </div>
+              </div>
+              <div class="comm-portrait-meta">
+                <strong id="comm-speaker">UNKNOWN</strong>
+                <span id="comm-speaker-role">身份未确认</span>
+              </div>
+            </aside>
+            <section class="comm-transcript">
+              <div class="comm-line-meta">
+                <span id="comm-frequency">140.85</span>
+                <span id="comm-security">SCRAMBLE: ON</span>
+              </div>
+              <p id="comm-text" class="comm-text">等待信号。</p>
+              <div id="comm-choices" class="comm-choices"></div>
+            </section>
+          </div>
         </div>
       </div>
     </dialog>

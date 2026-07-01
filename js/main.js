@@ -33,15 +33,127 @@ import { buyWealthItem, getWealthCollections, getWealthProgress } from "../modul
 import { confirmResourceSpend, showInsufficientFunds, showSpendFailure, showSpendSuccess, showToast } from "./notifications.js";
 import { economyConfig } from "../data/economyConfig.js";
 import { getStoryRouteConfig, storyRouteOrder } from "../data/storyRoutes.js";
+import { dialogues } from "../data/dialogues.js";
 import { calculateCharacterCombatPower, getInjuryState, getPressureState } from "../modules/combatPower.js";
 
 let router = null;
 let lastRenderedSettlementId = null;
 let lastDebtReliefNoticeId = null;
+let activeCommunication = null;
+
+const PAGE_HELP = {
+  overview: {
+    eyebrow: "OVERVIEW",
+    title: "总览页：先判断今天能不能活",
+    summary: "这里把最重要的运营状态压缩成一眼能看的清单。新玩家每天先看这里，再决定去招人、接契约还是处理支出。",
+    points: [
+      "契约执行会显示正在外勤的小队和剩余天数，没有执行中契约时就该去契约页找活。",
+      "人员状态会提示待命、伤病和压力情况。战力高但压力爆表的人不一定可靠。",
+      "右侧状态按钮能随时查看资金、隐秘、每日支出和执行中契约数量。",
+      "第一天的基本顺序是：看总览、招募或检查佣兵、调查契约、派遣、确认支出、推进一天。",
+    ],
+  },
+  personnel: {
+    eyebrow: "ROSTER",
+    title: "人员页：不是所有便宜佣兵都便宜",
+    summary: "这里负责招募、解雇、查看佣兵详情和调整装备。佣兵的真实价值取决于战力、技能、压力、伤势和日薪。",
+    points: [
+      "基础战力只是起点，伤势会固定扣战力，压力会按比例折损最终战力。",
+      "技能标签会影响契约匹配；契约推荐能力不是装饰，匹配越好越稳。",
+      "点开佣兵卡可以查看档案和装备。装备能提高战力，也会带来维护支出。",
+      "死人不会自动变成好消息，收尸和替换人员本身也是经营成本。",
+    ],
+  },
+  missions: {
+    eyebrow: "CONTRACTS",
+    title: "契约页：先调查，再派遣",
+    summary: "契约是主要收入来源，但公开情报故意不完整。调查花钱，盲接更贵。",
+    points: [
+      "战力区间越窄，越能判断小队是否够打。人均需求比总报酬更值得先看。",
+      "敌方伤害类型、推荐武器、推荐能力、人数和机动兵器都会影响成功率与伤亡。",
+      "点开契约后选择可派遣佣兵，再确认派遣。执行期间佣兵不算待命。",
+      "来自明确势力的契约可能影响路线。天人残余契约尤其是不可逆选择。",
+    ],
+  },
+  situation: {
+    eyebrow: "SITUATION",
+    title: "局势页：战争不是背景板",
+    summary: "这里展示各势力和社会状态的变化。它们会影响契约来源、路线倾向和之后的风险。",
+    points: [
+      "SSS、FOF、锈蚀部队和天人残余不只是名字，它们代表不同路线和后果。",
+      "局势数值变化会让某些类型契约更常出现，也可能关闭另一些合作。",
+      "如果你频繁服务同一阵营，要准备承担对应路线的政治和生存代价。",
+      "看不懂时先记一条：谁给钱不重要，谁被你得罪也会记账。",
+    ],
+  },
+  expenses: {
+    eyebrow: "EXPENSES",
+    title: "支出页：利润死在账单里",
+    summary: "这里显示每日和周期性支出。资金可以短期为负，隐秘归零才是真正失败。",
+    points: [
+      "待命佣兵要发日薪，执行契约时暂不发，回来后会补发。",
+      "装备、设施和生活补给都会吃掉现金流。高战力队伍不是免费资产。",
+      "隐秘费用和未支付声望会制造长期压力，月底前最好提前准备。",
+      "推进一天前先看支出页，可以避免明明打赢了契约却被账单拖死。",
+    ],
+  },
+  wealth: {
+    eyebrow: "WEALTH",
+    title: "财富页：把战争财变成胜利条件",
+    summary: "这里不是纯装饰。财富收藏代表你的长期目标，也会把短期现金转化成进度。",
+    points: [
+      "资金富余时购买财富项目，推动长期目标。",
+      "不要在现金流脆弱时硬买收藏；漂亮账本不能挡子弹，也不能付日薪。",
+      "财富目标让游戏不只是活下去，而是决定你要把这场战争变成什么。",
+    ],
+  },
+  facilities: {
+    eyebrow: "FACILITIES",
+    title: "基础设施页：升级前先想瓶颈",
+    summary: "设施是长期投资。它们会改变招募、调查、治疗、黑市、防御和隐秘压力。",
+    points: [
+      "酒馆影响招募，兵营提高人数上限，情报室降低调查成本。",
+      "医疗中心处理物理伤势，娱乐中心处理心理压力。不要等队伍全崩才升级。",
+      "黑市提供装备和机动兵器渠道，但装备越多维护越贵。",
+      "防御设施用于基地遇袭，隐秘越低越需要它兜底。",
+    ],
+  },
+  warehouse: {
+    eyebrow: "WAREHOUSE",
+    title: "仓库页：装备是战力，也是负担",
+    summary: "这里管理武器、防具和机动兵器。装备能救命，也会增加维护成本。",
+    points: [
+      "武器提供战力和伤害类型，防具提供防护类型和死亡率降低。",
+      "机动兵器很强，但需要合适佣兵和更高维护成本。",
+      "契约推荐武器和敌方伤害类型要一起看，别只追最高战力数字。",
+      "闲置装备仍可能产生维护压力，仓库不是免费垃圾桶。",
+    ],
+  },
+  mechs: {
+    eyebrow: "MECHS",
+    title: "机甲页：高风险高维护的战力跳跃",
+    summary: "机甲适合对抗机动兵器威胁，但不是所有队伍都能用，也不是每个契约都值得动用。",
+    points: [
+      "敌方存在机动兵器时，没有对应机体会让成功率和伤亡变难看。",
+      "机甲需要合适的佣兵能力标签，强行配置不一定划算。",
+      "机甲维护成本高，适合关键契约，不适合每次都拿来碾小任务。",
+    ],
+  },
+  help: {
+    eyebrow: "MANUAL",
+    title: "帮助页：忘了系统时来这里",
+    summary: "这里集中放完整规则说明。第一次玩不需要全背，遇到问题再查就行。",
+    points: [
+      "新玩家优先读每日循环、契约与情报、隐秘与遇袭。",
+      "如果资金老是崩，读支出和资金建议。",
+      "如果战斗结果看不懂，读佣兵状态、装备与机动兵器。",
+    ],
+  },
+};
 
 function init() {
   renderAppShell(document.querySelector("#root"));
-  router = initRouter();
+  router = initRouter({ onChange: handleTabChange });
   initCharacterUI({ onRenderNeeded: renderApp });
   initMissionUI();
   initMechaUI();
@@ -67,6 +179,10 @@ function bindGlobalActions() {
   });
   document.querySelector("#settlement-close").addEventListener("click", closeSettlementDialog);
   document.querySelector("#expense-approval-close").addEventListener("click", closeExpenseApprovalDialog);
+  document.querySelector("#page-help-close").addEventListener("click", closePageHelpDialog);
+  document.querySelectorAll("[data-page-help]").forEach((button) => {
+    button.addEventListener("click", () => openPageHelp(button.dataset.pageHelp, { markSeen: true }));
+  });
   document.querySelector("#save-game").addEventListener("click", () => {
     saveState();
     updateState((draft) => {
@@ -77,30 +193,132 @@ function bindGlobalActions() {
     resetState();
     showIntroIfNeeded();
   });
-  document.querySelector("#intro-confirm").addEventListener("click", closeIntro);
+}
+
+function handleTabChange(tabName) {
+  showTabHelpOnce(tabName);
+}
+
+function showTabHelpOnce(tabName) {
+  const state = getState();
+  if (!state.introSeen || !tabName || state.tabHelpSeen?.[tabName]) return;
+  openPageHelp(tabName, { markSeen: true });
+}
+
+function openPageHelp(tabName, { markSeen = false } = {}) {
+  const help = PAGE_HELP[tabName];
+  const dialog = document.querySelector("#page-help-dialog");
+  if (!help || !dialog) return;
+  document.querySelector("#page-help-eyebrow").textContent = help.eyebrow;
+  document.querySelector("#page-help-title").textContent = help.title;
+  document.querySelector("#page-help-summary").textContent = help.summary;
+  document.querySelector("#page-help-content").innerHTML = `
+    <ul>
+      ${help.points.map((point) => `<li>${point}</li>`).join("")}
+    </ul>
+  `;
+  if (markSeen && !getState().tabHelpSeen?.[tabName]) {
+    updateState((draft) => {
+      draft.tabHelpSeen ??= {};
+      draft.tabHelpSeen[tabName] = true;
+    }, { notify: false });
+  }
+  try {
+    if (typeof dialog.showModal === "function") {
+      if (!dialog.open) dialog.showModal();
+    } else {
+      dialog.setAttribute("open", "");
+    }
+  } catch (error) {
+    console.warn("Page help dialog could not be opened.", error);
+  }
+}
+
+function closePageHelpDialog() {
+  document.querySelector("#page-help-dialog")?.close();
+}
+function openCommunication(dialogueId, { onComplete = null } = {}) {
+  const dialogue = dialogues[dialogueId];
+  const dialog = document.querySelector("#communication-dialog");
+  if (!dialogue || !dialog) return;
+  activeCommunication = {
+    dialogueId,
+    nodeId: dialogue.start ?? Object.keys(dialogue.nodes ?? {})[0],
+    onComplete,
+  };
+  renderCommunicationNode();
+  try {
+    if (typeof dialog.showModal === "function") {
+      if (!dialog.open) dialog.showModal();
+    } else {
+      dialog.setAttribute("open", "");
+    }
+  } catch (error) {
+    console.warn("Communication dialog could not be opened.", error);
+  }
+}
+
+function renderCommunicationNode() {
+  if (!activeCommunication) return;
+  const dialogue = dialogues[activeCommunication.dialogueId];
+  const node = dialogue?.nodes?.[activeCommunication.nodeId];
+  if (!dialogue || !node) return;
+  const speaker = node.speaker ?? dialogue.speaker ?? {};
+  const portrait = speaker.portrait ?? dialogue.speaker?.portrait;
+  document.querySelector("#comm-channel").textContent = dialogue.channel ?? "CODEC / ENCRYPTED";
+  document.querySelector("#comm-title").textContent = node.title ?? dialogue.title ?? "加密通讯";
+  document.querySelector("#comm-frequency").textContent = node.frequency ?? dialogue.frequency ?? "140.85";
+  document.querySelector("#comm-security").textContent = node.security ?? dialogue.security ?? "SCRAMBLE: ON";
+  document.querySelector("#comm-speaker").textContent = speaker.name ?? "UNKNOWN";
+  document.querySelector("#comm-speaker-role").textContent = speaker.role ?? "身份未确认";
+  document.querySelector("#comm-text").textContent = node.text ?? "...";
+
+  const portraitImage = document.querySelector("#comm-portrait-image");
+  const portraitInitial = document.querySelector("#comm-portrait-initial");
+  portraitImage.style.backgroundImage = portrait ? `url("${portrait}")` : "";
+  portraitImage.classList.toggle("has-portrait", Boolean(portrait));
+  portraitInitial.textContent = speaker.initial ?? speaker.name?.slice(0, 1) ?? "?";
+
+  const choices = document.querySelector("#comm-choices");
+  choices.innerHTML = "";
+  (node.choices ?? []).forEach((choice, index) => {
+    const button = document.createElement("button");
+    button.className = index === 0 ? "primary-button comm-choice" : "ghost-button comm-choice";
+    button.type = "button";
+    button.textContent = choice.text;
+    button.addEventListener("click", () => advanceCommunication(choice));
+    choices.append(button);
+  });
+}
+
+function advanceCommunication(choice) {
+  if (!activeCommunication || !choice) return;
+  if (choice.action === "complete") {
+    const onComplete = activeCommunication.onComplete;
+    activeCommunication = null;
+    document.querySelector("#communication-dialog")?.close();
+    if (typeof onComplete === "function") onComplete();
+    return;
+  }
+  if (choice.next) {
+    activeCommunication.nodeId = choice.next;
+    renderCommunicationNode();
+  }
 }
 
 function showIntroIfNeeded() {
   const state = getState();
   if (state.introSeen) return;
-  const dialog = document.querySelector("#intro-dialog");
+  const dialog = document.querySelector("#communication-dialog");
   if (!dialog || dialog.open) return;
-  try {
-    if (typeof dialog.showModal === "function") {
-      dialog.showModal();
-    } else {
-      dialog.setAttribute("open", "");
-    }
-  } catch (error) {
-    console.warn("Intro dialog could not be opened.", error);
-  }
+  openCommunication("intro", { onComplete: closeIntro });
 }
 
 function closeIntro() {
   updateState((draft) => {
     draft.introSeen = true;
   });
-  document.querySelector("#intro-dialog")?.close();
+  showTabHelpOnce("overview");
 }
 
 function renderApp() {
@@ -731,13 +949,6 @@ function renderSituation() {
 
   badge.textContent = `SSS ${war.SSS}% / FOF ${war.FOF}% / 天人 ${war.天人残余}% / 锈蚀 ${war.锈蚀部队}%`;
   map.innerHTML = `
-    <div class="war-map-card">
-      <div class="war-map-title">
-        <strong>SSS 内战控制图</strong>
-        <span class="muted">红色 SSS / 蓝色 FOF / 褐色天人 / 粉色锈蚀</span>
-      </div>
-      ${renderCivilWarMap(war)}
-    </div>
     ${renderEndingPanel(state)}
     ${renderStoryRouteStatus(routes)}
     ${renderFactionBackgrounds()}
@@ -854,7 +1065,7 @@ function renderFactionBackgrounds() {
   ];
   return `
     <section class="faction-background-panel">
-      <div class="war-map-title">
+      <div class="situation-section-title">
         <strong>势力背景</strong>
         <span class="muted">每条路线都有收益，也有代价。</span>
       </div>
@@ -873,96 +1084,6 @@ function renderFactionBackgrounds() {
 
 function formatStoryRouteName(route) {
   return { SSS: "SSS", FOF: "FOF", rust: "锈蚀部队", heaven: "天人残余" }[route] ?? "未知路线";
-}
-
-function renderCivilWarMap(war) {
-  const sssShare = Math.max(0, Math.min(100, war.SSS ?? 70));
-  const fofShare = Math.max(0, Math.min(100, war.FOF ?? 24));
-  const heavenShare = Math.max(0, Math.min(100, war.天人残余 ?? 5));
-  const rustShare = Math.max(0, Math.min(100, war.锈蚀部队 ?? 1));
-  const sssWidth = Math.round(sssShare * 7.6);
-  const fofWidth = Math.round(fofShare * 7.6);
-  const heavenRadius = Math.max(18, Math.round(heavenShare * 8));
-  const rustRadius = Math.max(12, Math.round(rustShare * 9));
-  const splitX = Math.max(150, Math.min(620, sssWidth));
-  const frontPath = `M ${splitX - 12} 58 C ${splitX + 20} 98 ${splitX - 34} 132 ${splitX + 8} 176 C ${splitX + 42} 214 ${splitX - 26} 258 ${splitX + 12} 314 C ${splitX + 34} 348 ${splitX - 8} 382 ${splitX + 18} 426`;
-  return `
-    <div class="war-map">
-      <svg class="civil-war-map" viewBox="0 0 760 470" role="img" aria-label="SSS 和 FOF 战场控制地图">
-        <defs>
-          <clipPath id="sss-land-clip">
-            <path d="M86 58 L194 30 L310 42 L408 24 L528 70 L646 62 L704 130 L682 220 L722 302 L654 390 L520 420 L398 396 L286 438 L168 398 L92 318 L48 210 Z" />
-          </clipPath>
-          <pattern id="province-lines" width="52" height="52" patternUnits="userSpaceOnUse">
-            <path d="M0 26 H52 M26 0 V52" stroke="rgba(255,255,255,0.1)" stroke-width="1" />
-          </pattern>
-          <filter id="map-shadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000" flood-opacity="0.35" />
-          </filter>
-          <filter id="heaven-glow" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="9" result="blur" />
-            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.98  0 1 0 0 0.96  0 0 1 0 0.86  0 0 0 0.7 0" result="glow" />
-            <feMerge>
-              <feMergeNode in="glow" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-          <filter id="ember-glow" x="-70%" y="-70%" width="240%" height="240%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feColorMatrix in="blur" type="matrix" values="1 0 0 0 0.52  0 1 0 0 0.12  0 0 1 0 0.07  0 0 0 0.55 0" result="glow" />
-            <feMerge>
-              <feMergeNode in="glow" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        <rect width="760" height="470" fill="#0b1015" />
-        <path class="map-water-line" d="M34 112 C88 84 126 96 166 76 M38 330 C92 356 130 352 174 394 M612 28 C654 44 694 72 734 112" />
-        <g clip-path="url(#sss-land-clip)" filter="url(#map-shadow)">
-          <rect x="0" y="0" width="${sssWidth}" height="470" fill="#a93f43" />
-          <rect x="${sssWidth}" y="0" width="${fofWidth + 80}" height="470" fill="#2f75b7" />
-          <g filter="url(#heaven-glow)">
-            <circle cx="514" cy="342" r="${heavenRadius + 22}" fill="#f7f1dc" opacity="0.12" />
-            <circle cx="514" cy="342" r="${heavenRadius + 8}" fill="#fffaf0" opacity="0.34" />
-            <circle cx="514" cy="342" r="${Math.max(8, Math.round(heavenRadius * 0.42))}" fill="#ffffff" opacity="0.76" />
-          </g>
-          <g filter="url(#ember-glow)">
-            <path d="M582 150 C604 132 638 138 652 164 C666 194 640 214 612 208 C584 202 562 172 582 150 Z" fill="#351915" opacity="0.92" />
-            <ellipse cx="618" cy="176" rx="${rustRadius}" ry="${Math.max(8, Math.round(rustRadius * 0.65))}" fill="#7f2b22" opacity="0.92" />
-            <ellipse cx="618" cy="176" rx="${Math.max(5, Math.round(rustRadius * 0.45))}" ry="${Math.max(4, Math.round(rustRadius * 0.28))}" fill="#b44932" opacity="0.62" />
-          </g>
-          <rect x="0" y="0" width="760" height="470" fill="url(#province-lines)" opacity="0.7" />
-          <path class="province-line" d="M156 82 C186 142 178 204 116 268" />
-          <path class="province-line" d="M274 56 C290 118 264 176 304 230 C336 274 318 334 274 414" />
-          <path class="province-line" d="M432 42 C400 118 434 174 404 238 C374 302 420 354 402 404" />
-          <path class="province-line" d="M552 74 C520 142 548 196 594 238 C650 290 608 346 536 414" />
-          <path class="province-line" d="M80 206 C188 198 250 236 360 216 C464 198 560 196 698 220" />
-          <path class="province-line" d="M110 324 C222 302 318 328 430 310 C538 294 612 318 680 364" />
-          <path class="frontline" d="${frontPath}" />
-          <path class="frontline-glow" d="${frontPath}" />
-        </g>
-        <path class="land-border" d="M86 58 L194 30 L310 42 L408 24 L528 70 L646 62 L704 130 L682 220 L722 302 L654 390 L520 420 L398 396 L286 438 L168 398 L92 318 L48 210 Z" />
-        <g class="map-city">
-          <circle cx="196" cy="156" r="5" /><text x="208" y="160">北部工带</text>
-          <circle cx="354" cy="286" r="5" /><text x="366" y="290">中央节点</text>
-          <circle cx="584" cy="178" r="5" /><text x="596" y="182">东岸港区</text>
-          <circle cx="510" cy="356" r="5" /><text x="522" y="360">南部矿区</text>
-        </g>
-        <g class="map-label map-label-sss">
-          <text x="162" y="126">SSS 控制区</text>
-          <text x="162" y="158">${war.SSS}%</text>
-        </g>
-        <g class="map-label map-label-fof">
-          <text x="560" y="118">FOF 活动区</text>
-          <text x="560" y="150">${war.FOF}%</text>
-        </g>
-        <g class="map-minor-label">
-          <text x="458" y="356">天人 ${war.天人残余}%</text>
-          <text x="604" y="224">锈蚀 ${war.锈蚀部队}%</text>
-        </g>
-      </svg>
-    </div>
-  `;
 }
 
 function renderRelationAxis(title, values, factions) {
@@ -1011,18 +1132,12 @@ function renderFacilities() {
       const isUnlocked = level > 0;
       const rank = getFacilityRankLabel(level);
       const cost = getFacilityUpgradeCost(id, level);
-      const isStackedDefense = id === "defenses";
-      const canUpgrade = (isStackedDefense || level < 7) && canUpgradeFacility(id);
+      const isStacked = isStackedFacilityCard(id);
+      const canUpgrade = (isStacked || level < 7) && canUpgradeFacility(id);
       const disabled = state.gameStatus !== "active" || !canUpgrade ? "disabled" : "";
       const nextRank = getFacilityRankLabel(Math.min(level + 1, 7));
-      const statusText = isStackedDefense
-        ? isUnlocked
-          ? `${level} 座 · 基地战斗力 +${level * economyConfig.facilities.defensePowerPerLevel}`
-          : "未修建"
-        : isUnlocked
-          ? `${rank}级 · 维护费 ${facility.upkeep * level}/天`
-          : "未解锁";
-      const badgeText = isStackedDefense ? `${level} 座` : isUnlocked ? rank : "未解锁";
+      const statusText = getFacilityStatusText(id, facility, level, isUnlocked, rank);
+      const badgeText = isStacked ? `${level} 座` : isUnlocked ? rank : "未解锁";
       return `
         <article class="card facility-card ${isUnlocked ? "" : "locked"}" data-open-facility="${id}">
           <div class="card-header">
@@ -1033,13 +1148,7 @@ function renderFacilities() {
             <span class="badge">${badgeText}</span>
           </div>
           <p class="muted">${facility.description}</p>
-          ${
-            isStackedDefense
-              ? `<p class="muted">继续修建：防御战斗力 +${economyConfig.facilities.defensePowerPerLevel} · 费用 ${cost} 金</p>`
-              : level < 7
-                ? `<p class="muted">下一阶段：${nextRank}级 · 费用 ${cost} 金</p>`
-                : `<p class="muted">已达到最高等级。</p>`
-          }
+          ${renderFacilityProgressText(id, level, cost, nextRank)}
           <div class="button-row">
             ${renderFacilityAction(id, level, cost, disabled)}
           </div>
@@ -1077,9 +1186,39 @@ function renderFacilities() {
   });
 }
 
+function isStackedFacilityCard(id) {
+  return id === "defenses" || id === "shelter";
+}
+
+function getShelterCapacity(level) {
+  return level * economyConfig.facilities.shelterCapacityPerBuild;
+}
+
+function getFacilityStatusText(id, facility, level, isUnlocked, rank) {
+  if (id === "defenses") {
+    return isUnlocked ? `${level} 座 · 基地战斗力 +${level * economyConfig.facilities.defensePowerPerLevel}` : "未修建";
+  }
+  if (id === "shelter") {
+    return isUnlocked ? `${level} 座 · 可收容 ${getShelterCapacity(level)} 名难民` : "未修建";
+  }
+  return isUnlocked ? `${rank}级 · 维护费 ${facility.upkeep * level}/天` : "未解锁";
+}
+
+function renderFacilityProgressText(id, level, cost, nextRank) {
+  if (id === "defenses") {
+    return `<p class="muted">继续修建：防御战斗力 +${economyConfig.facilities.defensePowerPerLevel} · 费用 ${cost} 金</p>`;
+  }
+  if (id === "shelter") {
+    return `<p class="muted">继续修建：难民容量 +${economyConfig.facilities.shelterCapacityPerBuild} · 费用 ${cost} 金</p>`;
+  }
+  if (level < 7) return `<p class="muted">下一阶段：${nextRank}级 · 费用 ${cost} 金</p>`;
+  return `<p class="muted">已达到最高等级。</p>`;
+}
+
 function renderFacilityAction(id, level, cost, disabled) {
   const state = getState();
   if (id === "defenses") return `<button class="primary-button" data-upgrade="${id}" ${disabled}>修建防御设施 · ${cost} 金</button>`;
+  if (id === "shelter") return `<button class="primary-button" data-upgrade="${id}" ${disabled}>修建避难所 · ${cost} 金</button>`;
   if (level <= 0) return `<button class="primary-button" data-upgrade="${id}" ${disabled}>解锁 F级 · ${cost} 金</button>`;
   const upgradeButton = renderFacilityUpgradeButton(id, level, cost, disabled);
   if (id === "blackMarket") {
@@ -1112,6 +1251,7 @@ function renderFacilityAction(id, level, cost, disabled) {
 
 function renderFacilityUpgradeButton(id, level, cost, disabled) {
   if (id === "defenses") return `<button class="ghost-button" data-upgrade="${id}" ${disabled}>继续修建 · ${cost} 金</button>`;
+  if (id === "shelter") return `<button class="ghost-button" data-upgrade="${id}" ${disabled}>继续修建 · ${cost} 金</button>`;
   if (level >= 7) return `<button class="ghost-button" disabled>最高 S级</button>`;
   return `<button class="ghost-button" data-upgrade="${id}" ${disabled}>升级到 ${getFacilityRankLabel(level + 1)}级 · ${cost} 金</button>`;
 }
@@ -1125,8 +1265,8 @@ function openFacilityDialog(id) {
   const isUnlocked = level > 0;
   const rank = getFacilityRankLabel(level);
   const nextCost = getFacilityUpgradeCost(id, level);
-  const isStackedDefense = id === "defenses";
-  const canUpgrade = (isStackedDefense || level < 7) && canUpgradeFacility(id);
+  const isStacked = isStackedFacilityCard(id);
+  const canUpgrade = (isStacked || level < 7) && canUpgradeFacility(id);
   const nextRank = getFacilityRankLabel(Math.min(level + 1, 7));
   const specialText = {
     blackMarket: (() => {
@@ -1137,13 +1277,14 @@ function openFacilityDialog(id) {
     })(),
     hospital: (() => {
       const plan = calculateHospitalTreatmentPlan(state);
-      return `按单个佣兵身上的单个物理负面状态收费。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点伤势标签。`;
+      return `按单个佣兵身上的单个物理负面状态收费并尝试移除。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点伤势标签。`;
     })(),
     entertainmentCenter: (() => {
       const plan = calculateEntertainmentCenterTreatmentPlan(state);
-      return `按单个佣兵身上的单个心理负面状态收费。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点压力标签。`;
+      return `按单个佣兵身上的单个心理负面状态收费并尝试移除。当前可处理 ${plan.entries.length} 个标签，总费用 ${plan.cost} 金，成功率 ${plan.successChance}%，最高可处理 ${plan.maxPoints} 点压力标签。`;
     })(),
     defenses: `基地遭遇突袭时提供额外战斗力。当前已建 ${level} 座，防御战斗力 +${(state.facilities.defenses ?? 0) * economyConfig.facilities.defensePowerPerLevel}。`,
+    shelter: `每座避难所可收容 ${economyConfig.facilities.shelterCapacityPerBuild} 名战争难民。当前已建 ${level} 座，可收容 ${getShelterCapacity(level)} 名难民。`,
     tavern: "提高招募池规模，便于寻找更多候选佣兵。",
     barracks: `提高可雇佣佣兵上限。当前上限 ${economyConfig.facilities.baseMercenaryLimit + (state.facilities.barracks ?? 0) * economyConfig.facilities.barracksMercenaryLimitPerLevel} 人，每升 1 级 +${economyConfig.facilities.barracksMercenaryLimitPerLevel}。`,
     intel: `每级降低调查契约情报费用 ${Math.round(economyConfig.facilities.intelInvestigationDiscountPerLevel * 100)}%，总折扣仍受调查折扣上限限制。`,
@@ -1154,11 +1295,7 @@ function openFacilityDialog(id) {
       <div>
         <div class="dossier-code">基础设施 / ${id.toUpperCase()}</div>
         <h2 class="dossier-title">${facility.name}</h2>
-        <p class="muted">${
-          isStackedDefense
-            ? `${level} 座 · 防御战斗力 +${level * economyConfig.facilities.defensePowerPerLevel}`
-            : `${isUnlocked ? `${rank}级` : "未解锁"} · 维护费 ${facility.upkeep * level}/天`
-        }</p>
+        <p class="muted">${getFacilityStatusText(id, facility, level, isUnlocked, rank)}</p>
       </div>
       <button class="ghost-button dialog-close-button" data-close-facility aria-label="关闭" title="关闭" type="button">关闭</button>
     </div>
@@ -1166,24 +1303,7 @@ function openFacilityDialog(id) {
       <section class="dossier-section">
         <h3>状态</h3>
         <div class="field-list">
-          ${
-            isStackedDefense
-              ? `
-                <div class="field"><span>已建数量</span><strong>${level} 座</strong></div>
-                <div class="field"><span>防御战斗力</span><strong>+${level * economyConfig.facilities.defensePowerPerLevel}</strong></div>
-                <div class="field"><span>维护费</span><strong>${facility.upkeep * level} 金/天</strong></div>
-                <div class="field"><span>继续修建</span><strong>${nextCost} 金</strong></div>
-                <div class="field"><span>单座加成</span><strong>+${economyConfig.facilities.defensePowerPerLevel}</strong></div>
-              `
-              : `
-                <div class="field"><span>当前状态</span><strong>${isUnlocked ? "已解锁" : "未解锁"}</strong></div>
-                <div class="field"><span>评级</span><strong>${rank}</strong></div>
-                <div class="field"><span>维护费</span><strong>${facility.upkeep * level} 金/天</strong></div>
-                <div class="field"><span>${isUnlocked ? "升级费用" : "解锁费用"}</span><strong>${level >= 7 ? "已满级" : `${nextCost} 金`}</strong></div>
-                <div class="field"><span>下一评级</span><strong>${level >= 7 ? "S级" : `${nextRank}级`}</strong></div>
-                <div class="field"><span>升级条件</span><strong>${level >= 7 ? "已完成" : "支付费用"}</strong></div>
-              `
-          }
+          ${renderFacilityStatusFields(id, facility, level, isUnlocked, rank, nextCost, nextRank)}
         </div>
       </section>
       <section class="dossier-section">
@@ -1225,6 +1345,34 @@ function openFacilityDialog(id) {
   });
 }
 
+function renderFacilityStatusFields(id, facility, level, isUnlocked, rank, nextCost, nextRank) {
+  if (id === "defenses") {
+    return `
+      <div class="field"><span>已建数量</span><strong>${level} 座</strong></div>
+      <div class="field"><span>防御战斗力</span><strong>+${level * economyConfig.facilities.defensePowerPerLevel}</strong></div>
+      <div class="field"><span>维护费</span><strong>${facility.upkeep * level} 金/天</strong></div>
+      <div class="field"><span>继续修建</span><strong>${nextCost} 金</strong></div>
+      <div class="field"><span>单座加成</span><strong>+${economyConfig.facilities.defensePowerPerLevel}</strong></div>
+    `;
+  }
+  if (id === "shelter") {
+    return `
+      <div class="field"><span>已建数量</span><strong>${level} 座</strong></div>
+      <div class="field"><span>收容容量</span><strong>${getShelterCapacity(level)} 名</strong></div>
+      <div class="field"><span>维护费</span><strong>${facility.upkeep * level} 金/天</strong></div>
+      <div class="field"><span>继续修建</span><strong>${nextCost} 金</strong></div>
+      <div class="field"><span>单座容量</span><strong>+${economyConfig.facilities.shelterCapacityPerBuild} 名</strong></div>
+    `;
+  }
+  return `
+    <div class="field"><span>当前状态</span><strong>${isUnlocked ? "已解锁" : "未解锁"}</strong></div>
+    <div class="field"><span>评级</span><strong>${rank}</strong></div>
+    <div class="field"><span>维护费</span><strong>${facility.upkeep * level} 金/天</strong></div>
+    <div class="field"><span>${isUnlocked ? "升级费用" : "解锁费用"}</span><strong>${level >= 7 ? "已满级" : `${nextCost} 金`}</strong></div>
+    <div class="field"><span>下一评级</span><strong>${level >= 7 ? "S级" : `${nextRank}级`}</strong></div>
+    <div class="field"><span>升级条件</span><strong>${level >= 7 ? "已完成" : "支付费用"}</strong></div>
+  `;
+}
 function confirmGoldSpend(action, cost) {
   const state = getState();
   if (state.gold < cost) {
@@ -1242,7 +1390,7 @@ function getGoldFailureReason(currentGold, cost) {
 function handleFacilityUpgradeSpend(button) {
   const id = button.dataset.upgrade;
   const facility = facilities[id];
-  const action = id === "defenses" ? "修建防御设施" : `${facility?.name ?? "设施"}升级`;
+  const action = id === "defenses" ? "修建防御设施" : id === "shelter" ? "修建避难所" : `${facility?.name ?? "设施"}升级`;
   const cost = getCostFromText(button.textContent);
   if (!confirmGoldSpend(action, cost)) return false;
   const beforeGold = getState().gold;

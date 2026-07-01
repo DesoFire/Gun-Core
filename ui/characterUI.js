@@ -44,6 +44,22 @@ let selectedEquipmentSlot = "weapon";
 let trainingDialogCharacterId = null;
 let selectedTrainingPoolId = null;
 const CONTRACT_SKILL_TAGS = new Set(["战斗", "后勤", "情报", "生存", "机师"]);
+const CAREER_SKILL_TAGS = [
+  { tag: "战斗", key: "combat", label: "战斗", color: "#e34d4d", points: "50,6 59,37 50,50 41,37" },
+  { tag: "情报", key: "intel", label: "情报", color: "#4d8dff", points: "59,37 96,37 65,59 50,50" },
+  { tag: "后勤", key: "logistics", label: "后勤", color: "#e0bd4f", points: "65,59 79,94 50,72 50,50" },
+  { tag: "生存", key: "survival", label: "生存", color: "#65c981", points: "50,72 21,94 35,59 50,50" },
+  { tag: "机师", key: "pilot", label: "机师", color: "#a878ff", points: "35,59 4,37 41,37 50,50" },
+];
+const SKILL_TAG_CLASS = {
+  战斗: "combat",
+  情报: "intel",
+  后勤: "logistics",
+  生存: "survival",
+  机师: "pilot",
+  通用: "common",
+  特殊: "special",
+};
 
 export function initCharacterUI({ onRenderNeeded }) {
   requestRender = onRenderNeeded;
@@ -94,6 +110,7 @@ export function renderCharacterCard(character, options = {}) {
       <div class="card-header">
         <div class="identity-line">
           ${renderMercenaryAvatar(character)}
+          ${renderCareerSkillStar(character)}
           <div>
             <p class="card-title">${character.name}</p>
             <p class="muted">${rankLabel}</p>
@@ -143,6 +160,7 @@ function renderRecruits() {
           <div class="card-header">
             <div class="identity-line">
               ${renderMercenaryAvatar(character)}
+              ${renderCareerSkillStar(character)}
               <div>
                 <p class="card-title">${character.name}</p>
                 <p class="muted">${formatRank(character.rank)}</p>
@@ -193,11 +211,11 @@ export function renderCharacterTagRow(character) {
   const tags = [
     ...(character.skills ?? []).slice(0, 4).map((skill) => ({
       label: skill.name,
-      className: "badge skill-badge",
+      className: `badge skill-badge ${getSkillTagClass(skill)}`,
     })),
     ...getContractSkillTags(character).slice(0, 5).map((tag) => ({
       label: tag,
-      className: "badge skill-tag",
+      className: `badge skill-tag skill-tag-${SKILL_TAG_CLASS[tag] ?? "common"}`,
     })),
     ...(character.conditions ?? []).slice(0, 4).map((condition) => ({
       label: condition.name,
@@ -212,6 +230,28 @@ export function renderCharacterTagRow(character) {
   if (mecha?.damageType) tags.push({ label: `机动：${mecha.damageType}`, className: "badge equipment-tag mecha-tag" });
   if (mecha?.protectionType) tags.push({ label: `机动防护：${mecha.protectionType}`, className: "badge equipment-tag mecha-tag" });
   return `<div class="badge-row character-tag-row">${tags.map((tag) => `<span class="${tag.className}">${tag.label}</span>`).join("")}</div>`;
+}
+
+function renderCareerSkillStar(character) {
+  const ownedTags = new Set(getContractSkillTags(character));
+  const activeLabels = CAREER_SKILL_TAGS.filter((item) => ownedTags.has(item.tag)).map((item) => item.label);
+  const title = activeLabels.length > 0 ? `职业适性：${activeLabels.join(" / ")}` : "职业适性：暂无五大职业技能";
+  return `
+    <span class="career-star" title="${title}" aria-label="${title}">
+      <svg viewBox="0 0 100 100" focusable="false" aria-hidden="true">
+        ${CAREER_SKILL_TAGS.map((item) => {
+          const active = ownedTags.has(item.tag);
+          return `<polygon class="career-star-point ${active ? "active" : ""}" points="${item.points}" fill="${active ? item.color : "#252a32"}"><title>${item.label}${active ? "已具备" : "未具备"}</title></polygon>`;
+        }).join("")}
+        <path class="career-star-outline" d="M50 6 L61 37 L96 37 L65 59 L79 94 L50 72 L21 94 L35 59 L4 37 L41 37 Z" />
+      </svg>
+    </span>
+  `;
+}
+
+function getSkillTagClass(skill) {
+  const tag = (skill.tags ?? []).find((item) => SKILL_TAG_CLASS[item]) ?? "通用";
+  return `skill-tag-${SKILL_TAG_CLASS[tag] ?? "common"}`;
 }
 
 function handleRefreshRecruits() {

@@ -98,6 +98,7 @@ export function createInitialState() {
     day: 1,
     organizationName: "Gun Core",
     introSeen: false,
+    tabHelpSeen: {},
     gold: economyConfig.initialState.gold,
     debtReliefUsed: false,
     enhancementPoints: 0,
@@ -107,7 +108,7 @@ export function createInitialState() {
     roster: [createInitialMercenary(), createInitialMercenary()],
     recruitPool: [createInitialMercenary(), createInitialMercenary(), createInitialMercenary()],
     missions: Array.from({ length: economyConfig.missions.missionBoard.availableLimit }, () => createInitialMission()),
-    facilities: { tavern: 1, barracks: 0, defenses: 0, entertainmentCenter: 0, intel: 0 },
+    facilities: { tavern: 1, barracks: 0, defenses: 0, shelter: 0, entertainmentCenter: 0, intel: 0 },
     mechs: [],
     inventory: sampleItems.map((item) => ({ ...item })),
     inventorySeeded: true,
@@ -221,6 +222,7 @@ function normalizeState(savedState) {
   savedState.day ??= 1;
   savedState.organizationName ??= "Gun Core";
   savedState.introSeen ??= false;
+  savedState.tabHelpSeen ??= {};
   savedState.gold ??= economyConfig.initialState.gold;
   savedState.debtReliefUsed ??= false;
   delete savedState.supplies;

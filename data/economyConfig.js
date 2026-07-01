@@ -257,6 +257,7 @@ export const economyConfig = {
       entertainmentCenter: [80, 125, 195, 305, 480, 760, 1200],
       intel: [90, 150, 245, 395, 635, 1020, 1640],
       defenses: [100, 145, 210, 305, 445, 650, 950],
+      shelter: [120],
     },
     // 基础设施日维护费全局倍率。用于整体压低设施维护压力。
     upkeepMultiplier: 0.35,
@@ -319,6 +320,7 @@ export const economyConfig = {
     },
     // 防御设施在基地遇袭时提供固定基地战斗力。
     defensePowerPerLevel: 18,
+    shelterCapacityPerBuild: 20,
   },
 
   blackMarket: {
